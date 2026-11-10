@@ -1,0 +1,19 @@
+{
+  "name": "pixel-world",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Pixel World — action real-time pixel-art game built with Phaser 4 and TypeScript.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "typescript": "~7.0.2",
+    "vite": "^8.3.6"
+  },
+  "dependencies": {
+    "phaser": "4.2.1"
+  }
+}
