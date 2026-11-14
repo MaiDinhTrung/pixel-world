@@ -27,6 +27,18 @@ interface PropSpec {
   scale: number;
   obstacleWidth?: number;
   obstacleHeight?: number;
+  /** Nghiêng (độ) quanh chân vật, tạo cảm giác cũ kỹ/đổ nghiêng. */
+  angle?: number;
+  /** true = không phát sáng dù là nguồn sáng (đèn hỏng). */
+  unlit?: boolean;
+}
+
+/** Vật trang trí thuần hình ảnh (không vật cản), đặt để làng có vẻ cũ kỹ nhưng vẫn có người ở. */
+interface DecorSpec {
+  asset: VillageAssetKey;
+  x: number;
+  y: number;
+  angle?: number;
 }
 
 export interface TownInfo {
@@ -52,6 +64,15 @@ const BUILDINGS: readonly BuildingSpec[] = [
   { asset: 'market', x: 2360, baseY: 1560, scale: 2 },
   { asset: 'well', x: 1920, baseY: 1230, scale: 2 },
 ];
+
+/**
+ * Asset TẠM ẨN (không dựng): dữ liệu trong PROPS/DECOR vẫn giữ nguyên để bật lại bằng cách bỏ khỏi tập này.
+ * Hiện ẩn hàng rào gãy và xe đẩy theo yêu cầu.
+ */
+const TEMPORARILY_HIDDEN: ReadonlySet<VillageAssetKey> = new Set<VillageAssetKey>([
+  'fence',
+  'cart',
+]);
 
 const TREES: readonly { x: number; y: number }[] = [
   { x: 1000, y: 400 },
@@ -79,8 +100,9 @@ const TREES: readonly { x: number; y: number }[] = [
 
 const PROPS: readonly PropSpec[] = [
   { asset: 'lamppost', x: 1400, y: 980, scale: 2 },
-  { asset: 'lamppost', x: 2440, y: 980, scale: 2 },
-  { asset: 'lamppost', x: 1400, y: 1580, scale: 2 },
+  // Đèn hỏng: nghiêng nhẹ và không phát sáng (làng cũ kỹ, xuống cấp).
+  { asset: 'lamppost', x: 2440, y: 980, scale: 2, angle: 5, unlit: true },
+  { asset: 'lamppost', x: 1400, y: 1580, scale: 2, angle: -4, unlit: true },
   { asset: 'lamppost', x: 2440, y: 1580, scale: 2 },
   { asset: 'lamppost', x: 1880, y: 1120, scale: 2 },
   { asset: 'lamppost', x: 1960, y: 1500, scale: 2 },
@@ -89,21 +111,17 @@ const PROPS: readonly PropSpec[] = [
   { asset: 'bench', x: 1700, y: 1150, scale: 2 },
   { asset: 'barrel', x: 1640, y: 1360, scale: 2 },
   { asset: 'barrel', x: 2190, y: 1360, scale: 2 },
-  { asset: 'crate', x: 1660, y: 1390, scale: 2 },
+  { asset: 'crate', x: 1660, y: 1390, scale: 2, angle: -9 },
   { asset: 'crate', x: 2210, y: 1390, scale: 2 },
-  { asset: 'cart', x: 2400, y: 1660, scale: 2 },
+  { asset: 'cart', x: 2400, y: 1660, scale: 2, angle: 12 },
   { asset: 'sign', x: 1850, y: 1520, scale: 2 },
   { asset: 'flag', x: 1520, y: 1230, scale: 2 },
   { asset: 'flag', x: 2320, y: 1230, scale: 2 },
-  { asset: 'flower', x: 1800, y: 1300, scale: 2 },
-  { asset: 'flower', x: 2040, y: 1300, scale: 2 },
-  { asset: 'flower', x: 1800, y: 1450, scale: 2 },
-  { asset: 'flower', x: 2040, y: 1450, scale: 2 },
+  // Bớt bồn hoa: giữ 4 (cạnh giếng và hai bên khu chợ), bỏ 5 bồn trên quảng trường cho đỡ "sạch sẽ".
   { asset: 'flower', x: 1750, y: 1200, scale: 2 },
   { asset: 'flower', x: 1700, y: 1620, scale: 2 },
   { asset: 'flower', x: 2100, y: 1620, scale: 2 },
   { asset: 'flower', x: 1550, y: 1750, scale: 2 },
-  { asset: 'flower', x: 2300, y: 1750, scale: 2 },
   { asset: 'bush', x: 1420, y: 1100, scale: 2 },
   { asset: 'bush', x: 2420, y: 1120, scale: 2 },
   { asset: 'bush', x: 1250, y: 1750, scale: 2 },
@@ -112,6 +130,47 @@ const PROPS: readonly PropSpec[] = [
   { asset: 'scarecrow', x: 3200, y: 1870, scale: 2 },
   { asset: 'campfire', x: 600, y: 1500, scale: 2 },
   { asset: 'bucket', x: 1980, y: 1400, scale: 2 },
+];
+
+/**
+ * Trang trí thêm bằng asset có sẵn (không vật cản, không đổi spawn/vùng làng/NPC).
+ * Vị trí đã kiểm tra không chồng nhà, cây, prop, NPC, đường, hồ, ruộng cây trồng, tường.
+ */
+const DECOR: readonly DecorSpec[] = [
+  // Hàng rào gãy quanh ruộng: đứt quãng, vài đoạn nghiêng.
+  { asset: 'fence', x: 2840, y: 1990, angle: -6 },
+  { asset: 'fence', x: 2844, y: 2090 },
+  { asset: 'fence', x: 2838, y: 2230, angle: 8 },
+  { asset: 'fence', x: 2950, y: 2300 },
+  { asset: 'fence', x: 3030, y: 2302, angle: 5 },
+  { asset: 'fence', x: 3210, y: 2298 },
+  { asset: 'fence', x: 3340, y: 2302, angle: -8 },
+  { asset: 'fence', x: 3416, y: 2000, angle: 7 },
+  { asset: 'fence', x: 3412, y: 2150 },
+  // Bụi um tùm ven đường và bên bờ hồ (không ai cắt tỉa).
+  { asset: 'hedge', x: 560, y: 1236 },
+  { asset: 'hedge', x: 624, y: 1236 },
+  { asset: 'hedge', x: 688, y: 1236, angle: 3 },
+  { asset: 'hedge', x: 600, y: 1372 },
+  { asset: 'hedge', x: 664, y: 1372 },
+  { asset: 'hedge', x: 2980, y: 1236 },
+  { asset: 'hedge', x: 3044, y: 1236, angle: -3 },
+  { asset: 'hedge', x: 3020, y: 1372 },
+  { asset: 'hedge', x: 3084, y: 1372 },
+  { asset: 'hedge', x: 300, y: 790 },
+  { asset: 'hedge', x: 364, y: 792 },
+  { asset: 'hedge', x: 428, y: 790 },
+  // Dấu hiệu có người ở: hàng hóa quanh chợ và lò rèn, lửa trại ngoài hai cổng.
+  { asset: 'barrel', x: 1556, y: 1566 },
+  { asset: 'crate', x: 1600, y: 1570 },
+  { asset: 'barrel', x: 2300, y: 1566 },
+  { asset: 'bucket', x: 2262, y: 1568 },
+  { asset: 'barrel', x: 1424, y: 1716 },
+  { asset: 'crate', x: 1476, y: 1720 },
+  { asset: 'campfire', x: 1190, y: 1350 },
+  { asset: 'crate', x: 1240, y: 1354 },
+  { asset: 'campfire', x: 2650, y: 1350 },
+  { asset: 'barrel', x: 2686, y: 1354 },
 ];
 
 const ENEMY_SPAWNS = [
@@ -227,7 +286,14 @@ function addProp(
     .setDepth(spec.y);
 
   applyEnvironmentTint(prop, spec.asset);
-  addPointLight(scene, spec.asset, spec.x, spec.y);
+
+  if (spec.angle) {
+    prop.setAngle(spec.angle);
+  }
+
+  if (!spec.unlit) {
+    addPointLight(scene, spec.asset, spec.x, spec.y);
+  }
 
   if (spec.obstacleWidth && spec.obstacleHeight) {
     addObstacle(
@@ -239,6 +305,23 @@ function addProp(
       spec.obstacleHeight,
     );
   }
+}
+
+/** Vật trang trí thuần hình ảnh: không vật cản, có thể nghiêng, vẫn được tint và phát sáng nếu là nguồn sáng. */
+function addDecor(scene: Phaser.Scene, spec: DecorSpec): void {
+  const decor = scene.add
+    .image(spec.x, spec.y, VILLAGE[spec.asset].key)
+    .setOrigin(0.5, 1)
+    .setScale(2)
+    .setDepth(spec.y);
+
+  applyEnvironmentTint(decor, spec.asset);
+
+  if (spec.angle) {
+    decor.setAngle(spec.angle);
+  }
+
+  addPointLight(scene, spec.asset, spec.x, spec.y);
 }
 
 /** Viền vùng làng an toàn + biển tên, để người chơi biết đâu quái không vào được. */
@@ -370,7 +453,18 @@ export function buildTown(
   }
 
   for (const prop of PROPS) {
-    addProp(scene, obstacles, prop);
+    if (!TEMPORARILY_HIDDEN.has(prop.asset)) {
+      addProp(scene, obstacles, prop);
+    }
+  }
+
+  // Sàn gỗ trước quán (dấu hiệu có người ở), nằm trên nền lát đá và dưới mọi vật thể.
+  addGround(scene, VILLAGE.wood.key, 1456, 1424, 128, 32, 1.5);
+
+  for (const decor of DECOR) {
+    if (!TEMPORARILY_HIDDEN.has(decor.asset)) {
+      addDecor(scene, decor);
+    }
   }
 
   addVillageMarkers(scene);

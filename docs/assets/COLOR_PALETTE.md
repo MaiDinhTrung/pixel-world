@@ -4,7 +4,7 @@
 
 Tài liệu này chỉ ghi **quyết định đã được người dùng duyệt** (mục 1–3) và **quyết định đã duyệt nhưng chưa triển khai** (mục 4). Mọi đề xuất chưa duyệt nằm ở mục 5 và **không phải** quy chuẩn.
 
-Trạng thái: Giai đoạn 1 (chuẩn hóa bảng màu) và Giai đoạn 2 (ambient, vignette, ánh sáng, tint môi trường) đã triển khai và được người dùng duyệt. Giai đoạn 3–4 chưa bắt đầu.
+Trạng thái: Giai đoạn 1 (chuẩn hóa bảng màu) và Giai đoạn 2 (ambient, vignette, ánh sáng, tint môi trường) và Giai đoạn 3 (chu kỳ ngày/đêm, sương mù, bố trí lại làng) đã triển khai và được người dùng duyệt. Giai đoạn 4 chưa bắt đầu.
 
 ## 1. Nguồn màu duy nhất (đã triển khai)
 
@@ -59,7 +59,7 @@ Có thể tinh chỉnh sau khi xem trong game; mọi thay đổi phải qua phê
 
 Người dùng đã duyệt các giá trị đang triển khai. Chúng là giá trị khởi đầu, có thể tinh chỉnh sau nhưng mọi thay đổi phải qua phê duyệt. Lưu ý: người dùng chỉ duyệt kết quả tổng thể sau khi xem trong game; các số bên dưới là giá trị trong code.
 
-- **Ambient (MULTIPLY, depth 2700):** màu `#20283a`, alpha `0.25`. Chỉ tăng alpha khi có căn cứ từ kiểm tra khả năng nhìn rõ nhân vật, quái, địa hình, gameplay.
+- **Ambient (MULTIPLY, depth 2700):** màu `#20283a`, alpha `0.25` khi được duyệt. **Đã được thay thế ở Giai đoạn 3 theo yêu cầu người dùng:** ban ngày không phủ (alpha 0, sáng bình thường), ban đêm alpha `0.45` (xem mục "Chu kỳ ngày/đêm" bên dưới). Chỉ tăng alpha khi có căn cứ từ kiểm tra khả năng nhìn rõ nhân vật, quái, địa hình, gameplay.
 - **Vignette (depth 2705):** độ đen góc `0.5`, vùng giữa trong suốt tới `0.55` bán kính.
 - **Ánh sáng điểm (ADD nhấp nháy, depth 2702):** màu `#ff9a30`; `campfire` bán kính 190 px (alpha 0.5), `lamppost` ×6 bán kính 150 px (alpha 0.38). Chưa có ánh sáng cho lò rèn, quán.
 - **Tint môi trường (runtime, không sửa PNG):**
@@ -68,11 +68,36 @@ Người dùng đã duyệt các giá trị đang triển khai. Chúng là giá 
   - `market-stall`, `flower-bed`, `oak-tree` vẫn giữ, chỉ chỉnh màu.
 - Thử nhanh bằng URL: `?atmo=off` (tắt tất cả), `?ambient=…`, `?vignette=…`.
 
-## 4. Đã duyệt về nguyên tắc, chưa triển khai (Giai đoạn 3–4)
+### Giai đoạn 3a — chu kỳ ngày/đêm và sương mù (đã triển khai và được duyệt, giá trị khởi đầu)
+
+Yêu cầu của người dùng: sương phải "mù mịt" hơn nữa, **tầm nhìn bị giảm xuống một vòng quanh người**, ngọn lửa xua tan sương, và **phân ngày/đêm**: ngày sáng bình thường, đêm tối om với sương mù che phủ. Người dùng đã duyệt Giai đoạn 3 sau khi xem trong game; các giá trị cụ thể (thời lượng chu kỳ, độ tối, bán kính, màu sương) do AI chọn và được người dùng chỉnh theo phản hồi (đậm hơn, tầm nhìn giảm 15%). Chúng là giá trị khởi đầu, có thể tinh chỉnh sau nhưng mọi thay đổi phải qua phê duyệt. Cấu hình ở `src/config/atmosphereConfig.ts` (`DAY_NIGHT`, `AMBIENT`, `NIGHT`, `FOG`).
+
+- **Chu kỳ:** bắt đầu ban ngày → 150 s ngày → 20 s hoàng hôn → 90 s đêm → 20 s bình minh → lặp lại. Hệ số đêm `n` từ 0 đến 1, chuyển mượt (smoothstep).
+- **Ban ngày (n = 0):** không có ambient, không bóng tối/sương, vignette còn 35%, ánh sáng ấm của lửa/đèn chỉ còn 10% — cảnh sáng bình thường. Lớp tint/rửa màu môi trường (Giai đoạn 2) vẫn giữ.
+- **Ban đêm (n = 1):** ambient `#20283a` alpha `0.45`; lớp bóng tối `#040608` alpha `0.72` phủ toàn màn; 2 lớp sương xám xanh tối `#303c48` (alpha `0.55` và `0.4`, độ phủ khoảng 88%) trôi chậm; vignette đầy đủ.
+- **Tầm nhìn:** quanh người chơi một vòng bán kính `238` px (giảm 15% so với `280` ban đầu theo yêu cầu người dùng) được xóa mềm hết bóng tối và sương (giữa trong suốt hoàn toàn, rìa mờ dần); quanh ngọn lửa cũng xóa (`LIGHT_SOURCES.fogClearRadius`: lửa trại 260 px, đèn sáng 180 px; đèn hỏng không phát sáng nên không xóa). Tối đa 12 lỗ cùng lúc, chỉ vẽ lỗ trong màn hình.
+- **Độ sáng tính được ban đêm (công thức, chưa thấy trong game):** ngoài tầm nhìn mọi thứ chỉ còn khoảng 14–20% độ sáng và ngả xám đồng nhất; trong tầm nhìn nhân vật khoảng 50%, nền khoảng 19–34%.
+- **Còn nằm trên lớp tối (vẫn sáng ban đêm):** đạn quái (depth 2702), VFX (3000+), số sát thương, HUD — nên đạn bay tới vẫn thấy được dù ngoài tầm nhìn.
+- **Cơ chế:** lớp tối + sương vẽ vào một `RenderTexture` mỗi frame (chỉ khi n > 0.01) rồi khoét lỗ; thiết bị cảm ứng chỉ dùng lớp sương đầu. Cơ chế `RenderTexture`/erase của Phaser 4 chưa được chạy thử trong game; nếu lỗi, dùng `?fog=off`.
+- **Thử nhanh bằng URL:** `?time=day`, `?time=night`, `?fog=off`, `?fog=1.5`, `?ambient=0.5` (ambient ban đêm), `?vignette=…`, `?atmo=off`.
+- **Nút thử trong game:** nút ở góc phải màn hình (dưới cụm thông tin vũ khí) và phím `N` xoay vòng TỰ ĐỘNG → ÉP NGÀY → ÉP ĐÊM; đổi chế độ chuyển mượt trong 1,5 s (`DAY_NIGHT.manualEaseSeconds`). Nút dùng để kiểm tra; chưa có quyết định giữ hay bỏ nút này trong bản chính thức (`ui/DayNightToggle.ts`).
+- **Ảnh hưởng gameplay:** chỉ hiển thị; không đổi sát thương, spawn, vật cản. Quái ngoài tầm nhìn ban đêm vẫn tồn tại nhưng khó thấy.
+
+### Giai đoạn 3b — bố trí lại làng (đã triển khai và được duyệt; người dùng chọn cả 4 gói)
+
+Chỉ dùng asset có sẵn, chỉ thêm/bớt vật trang trí; **không đổi** vật cản va chạm, điểm spawn, vùng làng an toàn, NPC. Vị trí đã được kiểm tra bằng script hình học (không chồng nhà, cây, prop, NPC, đường, hồ, ruộng, tường); chưa xem bằng mắt trong game.
+
+- **Dọn bớt bồn hoa:** 9 → 4 (giữ cạnh giếng và hai bên khu chợ), bỏ 5 bồn trên quảng trường.
+- **Hàng rào gãy + bụi um tùm:** 9 đoạn `fence` quanh ruộng (đứt quãng, vài đoạn nghiêng 5–8°), 12 đoạn `hedge` ven đường ngoài làng và bờ hồ. **Hàng rào đang TẠM ẨN** theo yêu cầu người dùng (dữ liệu còn trong `DECOR`; bật lại bằng cách bỏ `fence` khỏi `TEMPORARILY_HIDDEN` trong `src/world/town.ts`).
+- **Xe đẩy (`cart`, prop gốc ở 2400,1660) cũng TẠM ẨN** theo yêu cầu (không có vật cản; cùng cơ chế `TEMPORARILY_HIDDEN`).
+- **Dấu hiệu có người ở:** thùng, thùng gỗ, xô quanh hai sạp chợ và lò rèn; sàn gỗ 128×32 trước quán; 2 đống lửa trại (có ánh sáng) ngoài hai cổng làng.
+- **Suy tàn nhẹ:** 2/6 cột đèn hỏng (nghiêng 4–5°, không phát sáng); một thùng nghiêng -9°, xe đẩy nghiêng 12°.
+- Dữ liệu: `PROPS`, `DECOR` trong `src/world/town.ts`. Chưa thêm cây khô, nghĩa địa, xương (không có asset; để Giai đoạn 4).
+
+## 4. Đã duyệt về nguyên tắc, chưa triển khai (Giai đoạn 4)
 
 Chưa có thay đổi code nào cho các mục này.
 
-- **Giai đoạn 3:** sương mù, bố trí lại môi trường.
 - **Giai đoạn 4:** mở rộng asset.
 - **Biến đổi màu môi trường:** ưu tiên tint runtime; không sửa hay ghi đè PNG gốc; chỉ xét xuất lại PNG palette-shift sau khi phong cách đã được kiểm chứng.
 - **Asset làng:** tạm giữ `market-stall`, `flower-bed`, `oak-tree`; ưu tiên bố trí lại và chỉnh màu; xét thay thế ở giai đoạn nâng cấp môi trường.

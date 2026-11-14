@@ -83,13 +83,14 @@ Bản đồ nhanh `CharacterPanelScene.ts`: `renderSkills`, `renderStats`, `rend
 | `gemConfig.ts` | 7 loại ngọc (`GEM_INFO`: hút máu, sát thương, hút ki, phản đòn, sinh lực, giáp, né đòn), `MAX_SOCKETS`, `computeGemBonuses` |
 | `assets.ts` | Đường dẫn asset village, key texture player |
 | `palette.ts` | Màu hiệu ứng (đạn, heal…); màu nguyên tố nằm ở `ELEMENT_PALETTE` trong `damageTypeConfig.ts` |
-| `atmosphereConfig.ts` | Không khí Grim Dark (GĐ2): bật/tắt, ambient (màu + alpha thử nghiệm 0.25), vignette, ánh sáng điểm (`LIGHT_SOURCES`), tint môi trường (`GROUND_WASH`, `TINT_BY_ASSET`), depth các lớp. Dùng bởi `vfx/atmosphere.ts` và `world/town.ts` |
+| `atmosphereConfig.ts` | Không khí Grim Dark (GĐ2–3): bật/tắt, chu kỳ ngày/đêm (`DAY_NIGHT`, `NIGHT`), ambient (ngày 0, đêm 0.45), sương (`FOG`), vignette, ánh sáng điểm (`LIGHT_SOURCES`), tint môi trường (`GROUND_WASH`, `TINT_BY_ASSET`), depth các lớp. Dùng bởi `vfx/atmosphere.ts` và `world/town.ts` |
 | `controlsConfig.ts` | Bố cục nút Combat HUD (gốc + override theo nhân vật), joystick, ngưỡng ngắm, key lưu cấu hình. Được `CombatHUD`, `ControlLayoutStore`, `ControlLayoutEditor`, `VirtualJoystick`, `SkillAimingController`, `Hud` import. |
 
 ### Input & UI — `src/systems/`, `src/ui/`
 - `systems/CorpseManager.ts` — xác chết (pool 8, hết hạn 8 s, `consumeNearest`); WorldScene thêm xác khi quái thường/minion chết. Chưa skill nào dùng.
 - `systems/InputController.ts` — bàn phím/chuột/chạm, phát yêu cầu đổi vũ khí; dùng `ui/TouchControls`.
 - `ui/Hud.ts` — HUD (level + XP, skill bar, boss text, vàng).
+- `ui/DayNightToggle.ts` — nút thử chuyển ngày/đêm (góc phải, dưới cụm thông tin vũ khí) + phím N: xoay vòng tự động → ép ngày → ép đêm; gọi `setTimeMode` của `vfx/atmosphere.ts`. Chỉ để kiểm tra, không ảnh hưởng gameplay.
 - `ui/PlayerBars.ts` — thanh trên đầu nhân vật: một thanh chung máu (đỏ) + máu ảo (trắng xám = giáp, trừ trước) và thanh mana (xanh) nhỏ hơn bên dưới.
 - `ui/SkillQuickAssign.ts` — chọn nhanh skill vào ô (giữ để mở picker).
 - `ui/TouchControls.ts` — cầu nối cảm ứng cho `InputController`: gắn `VirtualJoystick` + `ui/combat/CombatHUD`.
@@ -107,12 +108,12 @@ Bản đồ nhanh `CharacterPanelScene.ts`: `renderSkills`, `renderStats`, `rend
 - `VFXPool.ts` — pool sprite có trần (`VFX_MAX_SPRITES`), không tạo/hủy khi chơi.
 - `vfxTextures.ts` — sinh texture/anim pixel (slash 6 frame, ring, crack, aura, đạn quái hình trụ, mỗi hệ một texture màu `enemyBullet-<hệ>` qua `enemyBulletTextureKey`; kích thước ở `config/vfxConfig.ts` `ENEMY_BULLET_VISUAL`); gọi từ `PreloadScene`.
 - `vfxTypes.ts` — `VFXId`, `VFXPlayOptions`, `VFXHandle`. Số liệu: `config/vfxConfig.ts`.
-- `atmosphere.ts` — `createAtmosphere(scene)`: lớp ambient MULTIPLY + vignette (texture canvas sinh runtime), cố định theo camera, depth 2700–2705 (trên thực thể y-sort, dưới VFX 3000+). Gọi từ `WorldScene.create` sau `buildTown`. Cũng có `addPointLight` (vầng sáng ADD nhấp nháy cho campfire/lamppost), `applyEnvironmentTint` (tint nhân theo asset), `addGroundWash` (lớp rửa nền cỏ), gọi từ `world/town.ts`. Thử nhanh bằng URL: `?atmo=off` (tắt tất cả), `?ambient=0.35`, `?vignette=0.6`. Số liệu: `config/atmosphereConfig.ts`.
+- `atmosphere.ts` — `createAtmosphere(scene)`: lớp ambient MULTIPLY + vignette (texture canvas sinh runtime), cố định theo camera, depth 2700–2705 (trên thực thể y-sort, dưới VFX 3000+). Gọi từ `WorldScene.create` sau `buildTown` và sau khi tạo người chơi (`createAtmosphere(scene, player)`). Có chu kỳ ngày/đêm (`nightFactor`: ngày → hoàng hôn → đêm → bình minh): ban ngày sáng bình thường, ban đêm ambient + lớp bóng tối + sương mù vẽ vào một `RenderTexture` mỗi frame (depth 2701) rồi khoét lỗ tầm nhìn quanh người chơi và quanh các nguồn sáng. Cũng có `addPointLight` (vầng sáng ADD nhấp nháy cho campfire/lamppost, đăng ký nguồn sáng, sáng yếu ban ngày), `applyEnvironmentTint` (tint nhân theo asset), `addGroundWash` (lớp rửa nền cỏ), gọi từ `world/town.ts`. Thử nhanh bằng URL: `?atmo=off` (tắt tất cả), `?time=day`/`?time=night`, `?ambient=0.5` (ambient ban đêm), `?vignette=0.6`, `?fog=off`/`?fog=2`. Số liệu: `config/atmosphereConfig.ts`.
 - **Số sát thương (Damage Number):** `DamageNumberManager.ts` (pool BitmapText, tự `update` mỗi frame từ `WorldScene.update`, không tween; gộp đòn cùng mục tiêu+loại trong `DAMAGE_NUMBER_MERGE_MS`, DoT cộng dồn mỗi giây, trần slot, thu hồi theo ưu tiên DoT < thường < crit < người chơi), `damageNumberLayout.ts` (hàm thuần + test `damageNumberLayout.test.ts`), `damageNumberFont.ts` (font pixel 5×7 sinh runtime, 2 biến thể `normal`/`crit`, gọi từ `PreloadScene`). Số liệu/màu/bật tắt: `config/damageNumberConfig.ts` (`DAMAGE_NUMBERS_ENABLED`). Nguồn dữ liệu: `EnemyBase` phát `damage-dealt` (sát thương thực tế theo từng loại, đã sau giáp/kháng/dễ thương, cờ crit từ `hitModifier` → `HitModifierResult`) và `dot-damage`; `Player.onDamageTaken(type, giáp+HP mất)`; nối ở `WorldScene.watchEnemyHits` / `create`. Poison có màu riêng (không phải `DamageType`). Không đổi công thức sát thương.
 - Đã dùng trong 6 skill Warrior (`skills.ts`: `attachAura`, `slash.arc`, `ground.crack`). Mage/Assassin: dự kiến.
 
 ### World — `src/world/`
-- `town.ts` — `buildTown()` dựng làng (dùng asset `public/assets/village/`), viền khu an toàn và NPC.
+- `town.ts` — `buildTown()` dựng làng (dùng asset `public/assets/village/`), viền khu an toàn và NPC. Dữ liệu bố trí: `BUILDINGS`, `TREES`, `PROPS` (có `angle`/`unlit` cho vật nghiêng/đèn hỏng), `DECOR` (trang trí thuần hình ảnh, không vật cản: hàng rào gãy, bụi, hàng hóa, lửa trại ngoài cổng).
 - `castleWall.ts` — tường thành gạch bao quanh `VILLAGE_ZONE` (4 cổng ở đường lát đá, tháp góc + tháp cổng, răng cưa); vẽ bằng `vfx/brickBox.ts` (dùng chung với Bất Động Thành Lũy), nướng thành texture từng đoạn, chặn vật lý qua nhóm `obstacles`, trồi lên + bụi lúc vào scene. Số liệu `config/castleConfig.ts`.
 
 ### Làng & kinh tế

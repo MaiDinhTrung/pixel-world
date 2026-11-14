@@ -219,6 +219,7 @@ import { AimIndicator } from '../ui/combat/AimIndicator';
 import type { SkillCastRequest } from '../input/SkillAimingController';
 import { isTouchDevice } from '../utils/device';
 import { isPerfOverlayEnabled, PerfOverlay } from '../utils/perfOverlay';
+import { createDayNightToggle } from '../ui/DayNightToggle';
 import { createAtmosphere } from '../vfx/atmosphere';
 import { buildTown, type TownInfo } from '../world/town';
 import {
@@ -458,7 +459,6 @@ export class WorldScene extends Phaser.Scene {
 
     this.obstacles = this.physics.add.staticGroup();
     this.town = buildTown(this, this.obstacles);
-    createAtmosphere(this);
 
     this.physics.world.setBounds(
       WALL_THICKNESS,
@@ -487,6 +487,9 @@ export class WorldScene extends Phaser.Scene {
         this.character.dashCharges.rechargeMs,
       );
     }
+
+    // Sau buildTown (đã đăng ký các nguồn sáng) và sau khi có người chơi (tầm nhìn ban đêm đi theo người).
+    createAtmosphere(this, this.player);
 
     this.touchControls = isTouchDevice() ? new TouchControls(this, this.characterId) : null;
     this.aimIndicator = this.touchControls ? new AimIndicator(this) : null;
@@ -586,6 +589,7 @@ export class WorldScene extends Phaser.Scene {
     });
 
     this.hud.setGold(this.village.getGold());
+    createDayNightToggle(this);
     this.playerBars = new PlayerBars(this);
 
     this.events.on(Phaser.Scenes.Events.RESUME, () => {
