@@ -1,15 +1,17 @@
 import Phaser from 'phaser';
 
+import { SCENE_KEYS } from '../config/constants';
+
 /**
- * Scene khởi động: nơi tải asset dùng chung ở các giai đoạn sau.
- * Giai đoạn 0 chưa có asset nên chuyển thẳng vào GameScene.
+ * Scene khởi động: cấu hình ban đầu và chuyển ngay sang nạp tài nguyên.
+ * Ở các giai đoạn sau có thể bổ sung thiết lập dùng chung tại đây.
  */
 export class BootScene extends Phaser.Scene {
   constructor() {
-    super('BootScene');
+    super(SCENE_KEYS.boot);
   }
 
   create(): void {
-    this.scene.start('GameScene');
+    this.scene.start(SCENE_KEYS.preload);
   }
 }

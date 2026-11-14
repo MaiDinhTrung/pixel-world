@@ -1,0 +1,209 @@
+# PROJECT_MAP — Pixel World
+
+Bản đồ định vị file. Stack: Phaser 4.2.1 + TypeScript + Vite (`npm run dev` / `npm run build`). Mọi đường dẫn bên dưới đã được kiểm tra tồn tại (cập nhật lần cuối: 2026-11-12).
+Chi tiết gameplay/điều khiển/số liệu cho người chơi: xem `README.md` (không lặp lại ở đây). Thiết kế lớp/cơ động: `docs/CLASS_REDESIGN.md`.
+
+Không liệt kê chi tiết: `node_modules/`, `dist/`, `package-lock.json`, ảnh trong `public/assets/village/` (37 file, gồm PNG + LICENSE/README).
+
+## 1. Điểm vào & vòng đời scene
+
+`index.html` → `src/main.ts` → `src/config/gameConfig.ts` (danh sách scene đăng ký).
+
+Thứ tự: `BootScene` → `PreloadScene` → `MainMenuScene` → `CharacterSelectScene` → `WorldScene` (+ `CharacterPanelScene` và `VillageShopScene` chạy chồng lên World).
+Key scene: `SCENE_KEYS` trong `src/config/constants.ts`.
+
+## 2. Các hệ thống
+
+### Scenes — `src/scenes/`
+| File | Trách nhiệm |
+|---|---|
+| `BootScene.ts` | Khởi động, chuyển sang Preload |
+| `PreloadScene.ts` (~530 dòng) | Load asset + sinh texture runtime (gọi `utils/placeholderPlayer`, `utils/enemySprites`, `utils/pixelTexture`, `utils/weaponTextures`); art vũ khí không còn ở đây mà ở `utils/weaponArt.ts` |
+| `MainMenuScene.ts` | Menu chính |
+| `CharacterSelectScene.ts` | Chọn nhân vật, đọc save từ `progression/CharacterProgress` |
+| `WorldScene.ts` (~1673 dòng) | **Trung tâm game loop**: tạo map/town, player, spawn quái/boss, threat tier, XP, hòm, lưu tiến trình, và API cho panel (equip/stat/skill) |
+| `VillageShopScene.ts` | Cửa hàng làng (overlay, pause World): Thương nhân (tab MUA/BÁN/ĐỔI NGỌC) và Thợ rèn (nâng cấp, đục lỗ, khảm/tháo ngọc); chỉ gọi `WorldScene.getVillage()` (`VillageService`) |
+| `CharacterPanelScene.ts` (~1732 dòng) | Panel nhân vật (tab Skills/Stats/Inventory/Equipment); gọi ngược các method public của `WorldScene` |
+
+Bản đồ nhanh `WorldScene.ts` (theo tên method): spawn quái `spawnEnemy/updateEnemySpawning/getThreatTier`; boss `updateBoss/spawnBoss/handleBossSlam/summonBossMinions/handleBossDefeated/grantBossLoot`; XP `grantExperience`; lưu `saveProgress`; panel API `addStatPoint/equip*/unequip*/discard*/assignSkillToSlot/get*PanelState`; hòm `updateChests/maybeDropWeaponChest/openChest/pickUpChest`; tạo vũ khí `createWeaponById`; auto-aim `updateAutoAim`.
+Bản đồ nhanh `CharacterPanelScene.ts`: `renderSkills`, `renderStats`, `renderInventory`, `renderEquipment`, `renderEquipmentDetails`, `bindKeys`, `createTabs`.
+
+### Entities — `src/entities/`
+- `Player.ts` — người chơi (di chuyển, dash kỹ năng + **lượt lướt tích trữ** `configureDashCharges/tryConsumeDashCharge`, máu/giáp/năng lượng, anim). Dash chung chỉ chạy khi `GENERIC_DASH_ENABLED` (mặc định tắt).
+- `EnemyBase.ts` (abstract; có stun/slow và trạng thái `applyDot` burn/poison, `applyVulnerable` mark/curse; số liệu `STATUS_*` ở `combatConfig.ts`) → `Enemy.ts` (cận chiến), `RangedEnemy.ts` (bắn xa), `BossEnemy.ts` (boss: slam, nova đạn, quạt đạn, mưa thiên thạch, triệu hồi, cuồng nộ <50% HP).
+- `WeaponChest.ts` — hòm vũ khí/trang bị rơi trên map. Hòm vẽ 24×21 px ở scale 1 (art sinh code ở `utils/chestArt.ts`, `createChestTextures` gọi từ `PreloadScene`); đồ nổi trong hòm hiện 1:1 (mũ/giáp/giày ~20 px), icon dài hơn `CHEST_ICON_MAX_FULL_SIZE` thì thu 0.5; độ cao đồ `CHEST_ICON_REST_Y`.
+- `Npc.ts` — NPC làng (Thương nhân, Thợ rèn); spec ở `config/economyConfig.ts` (`VILLAGE_NPCS`), dựng trong `world/town.ts`.
+- `LootDrop.ts` — vàng/ngọc rơi trên đất (hút về người chơi, hết hạn 30 s).
+
+### Combat / vũ khí — `src/combat/`
+- **Lĩnh Vực Thần Minh** (node/skill id `living_fortress`, trước là Thành Trì Bất Diệt): logic kết giới ở `skills/divineDomain.ts` (kẹp vị trí mỗi POST_UPDATE, huỷ đạn băng qua ranh giới, hình ảnh Graphics + gợn sóng), trạng thái dùng chung `combat/domainBarrier.ts` (`isHitBlockedByDomain` được gọi đầu `EnemyBase.takeDamage` và `Player.takeDamage`), số liệu `DIVINE_DOMAIN` trong `config/treeSkillsConfig.ts`, khai báo skill `TREE_LIVING_FORTRESS` ở `skills/treeSkills.ts`. Mọi thực thể (kể cả boss, đồng minh) ở trong vùng lúc tung bị nhốt trong, ở ngoài thì không vào được.
+- `Weapon.ts` — interface `Weapon` + type `WeaponId` (mọi vũ khí implement).
+- `targeting.ts` — chọn mục tiêu dùng chung (`findNearestEnemy`, `findLowestHealthEnemy`, `selectTarget`) cho auto-aim cảm ứng và kỹ năng loại `target`.
+- Song Thủ Khiên (`dual_guard`, kỹ năng bật/tắt của Đấu sĩ, cờ `SkillDefinition.toggle`): logic ở `WorldScene` (`dualGuardActive`, `applyDualGuardState`, `updateDualGuard`, `stopDualGuard`; bấm lại ô skill để tắt trong `tryCastSkill`); cần có Khiên trong 2 ô vũ khí; sát thương nhận ×0.75 (`Player.setDamageTakenFactor`), tốc chạy ×0.6 hoặc ×0.5 khi vũ khí chính là Khiên (`Player.setMoveSpeedFactor`), khiên phụ hiển thị qua `ShieldWeapon.setOffHand`; EN trừ liên tục. Số liệu `DUAL_GUARD_*` ở `combatConfig.ts`.
+- **Bất Động Thành Lũy** (`fortress_stand`, kỹ năng bật/tắt của Đấu sĩ, cần đang cầm Khiên): logic chặn thuần + test ở `combat/fortressWall.ts` (`absorbHit`, `tryAbsorbHit`; `Player.takeDamage` gọi ngay sau cổng domain, trước mọi bước giảm/né; chỉ đòn từ phía trước trong ±`FORTRESS_ARC_HALF_DEGREES` (40°) trừ HP tường thay HP người; hai bên, sau lưng, DoT và đòn từ trên xuống (`source.overhead`: slam/thiên thạch boss) xuyên qua), bức tường gạch khối chiếu xiên (gạch so le, nứt + mờ dần theo HP, không thanh HP), dãy vật cản tĩnh chặn quái đi xuyên (collider với `enemies`) và nuốt đạn quái chạm thân tường, mảnh gạch vỡ ở `skills/fortressStand.ts`, vòng đời (tiêu EN, kết thúc khi vỡ/hết EN/chết/đổi vũ khí/vào làng) ở `WorldScene.startFortress/updateFortress/stopFortress`, khoá di chuyển `Player.setImmobilized` + kẹp vị trí POST_UPDATE + `FORTRESS_BLOCKED_SKILLS`, cắm khiên `ShieldWeapon.setPlanted`. Số liệu `FORTRESS_*` ở `combatConfig.ts`.
+- Khiên (`ShieldWeapon`): cầm khiên là luôn giơ khiên đỡ (`Player.setGuard` gọi mỗi frame từ `update`; `Player.takeDamage(..., source)`): đòn từ phía trước giảm `SHIELD_GUARD_REDUCTION` (60%), đòn boss giảm `SHIELD_GUARD_BOSS_REDUCTION` (35%; đạn boss gắn data `boss` qua `fireEnemyBullet(..., fromBoss)`). Nút đánh = đập khiên. Số liệu ở `combatConfig.ts`.
+- Mỗi vũ khí một file: `SwordWeapon` (combo 3 đòn Trảm Kích → Truy Kích → Liên Hoàn Trảm; số liệu `config/swordComboConfig.ts`, logic thuần + test ở `swordCombo.ts`, vệt lửa/sao nổ vẽ đa giác ở `swordFireVfx.ts`; sprite kiếm thép ở `utils/weaponArt.ts`; lửa cháy dọc vệt chém), `ShieldWeapon`, `BlasterWeapon`, `BowWeapon`, `StaffWeapon` (kèm config Staff/Wand; Trượng có sạc: bấm nhanh = orb thường bắn khi thả, giữ ≥ `STAFF_CHARGE_MS` rồi thả = một quả cầu lớn ×`STAFF_BIG_ORB_*`; Đũa phép `chargeMs: 0` vẫn bắn ngay khi bấm), `ScytheWeapon`, `ExcaliburWeapon`, `DragonBowWeapon`, `VoidStaffWeapon`, `DualBladesWeapon` (Song đao, art lưỡi hỗn mang đen–đồng, rune cam, cán đỏ ở `weaponArt.ts` `DUAL_BLADE`: combo 3 nhát — dao chính, dao phụ ngược chiều, đòn kết hai dao chém chéo 2 lượt; vệt đa giác thuôn nhọn riêng từng dao, mỗi nhát một hitbox gây sát thương một lần lúc dao quét qua giữa vệt, chạy theo thời gian trong `update` không tween; logic thuần + test `dualBladesCombo.ts`; số liệu `DUAL_BLADES_*`), `HammerWeapon` (Búa, Đấu sĩ: nâng búa → giáng xuống → kéo về vai, máy trạng thái theo thời gian; sát thương vùng tròn một lần ở cuối pha giáng, đẩy lùi, bụi/nứt đất/rung màn hình qua `VFXManager`; số liệu `HAMMER_*`, art `utils/weaponArt.ts` `HAMMER`). `BowWeapon` có thêm vệt đuôi ngắn (một Graphics dùng chung, trần `BOW_TRAIL_MAX_TRACKED`), tia lửa khi tên trúng/xuyên và cung giật lùi lúc buông dây — chỉ đọc trạng thái đạn, không đổi sát thương.
+- Khởi tạo vũ khí: `WorldScene.createWeaponById`.
+- **Excalibur (`ExcaliburWeapon`)** — ngoại hình thương vàng (art `weaponArt.ts` `EXCALIBUR`, dùng chung hàm vẽ giáo `spearFill(true)` với liềm). Giữ nút để TÍCH LỰC (`tryAttack` bắt đầu, `releaseAttack` bắn như cung): thả trước `EXCALIBUR_MIN_CHARGE_MS` (0,5 s) = hủy; tích 0,5–2 s thì sát thương, tầm, bề rộng và lực đẩy lui tăng tuyến tính (cặp hằng `EXCALIBUR_*_MIN/MAX` ở `combatConfig.ts`). Đòn là đường thương xuyên thấu, đẩy lui kẻ địch dọc đường thương bằng `EnemyBase.applyPush` + `applyStun`. Có vòng tiến độ tích lực (vạch mốc tối thiểu, đầy thì nhấp nháy), thương kéo lùi dần, rung màn hình theo mức tích lực.
+- **Liềm (`ScytheWeapon`)** — ngoại hình hiện là ngọn giáo dài (art `utils/weaponArt.ts` `SCYTHE`, id/tên/cơ chế vẫn là liềm): đòn tung khi THẢ nút (như cung: `tryAttack` chỉ ghi nhận giữ, `releaseAttack` tung đòn). Chạm = combo 4 nhát: nhát 1 chém bên TRÁI (cung lệch trái `SCYTHE_SLASH_OFFSET_DEGREES`, lưỡi quay ngược chiều kim đồng hồ), nhát 2 chém bên PHẢI (lệch phải, lưỡi lật `setWeaponMirror` và quay cùng chiều để mép sắc dẫn đầu), nhát 3 ĐÂM: cầm giáo đâm thẳng và phi người một đoạn (`Player.startSkillDash`, dừng trước kẻ địch đầu tiên, giáo giật lùi rồi đâm qua tween `thrust.offset`, vùng trúng là dải hẹp dọc hướng đâm, hiệu ứng mũi nhọn sáng nhiều lớp; số liệu `SCYTHE_THRUST_*`), nhát 4 xoay một vòng (reset sau `SCYTHE_COMBO_WINDOW_MS`); giữ ≥ `SCYTHE_CHARGE_MS` (2 s) rồi thả = lốc xoáy `SCYTHE_WHIRL_MS` (sát thương theo nhịp `SCYTHE_WHIRL_TICK_MS`, vệt gió + vòng phạm vi). Có vòng tiến độ sạc quanh người, đầy thì nhấp nháy. Khi xoay, cả thân người quay theo lưỡi qua `Player.setFacingOverride/clearFacingOverride` (ép hướng nhìn + anim attack mỗi frame, ghi đè hướng theo aim/di chuyển; `ScytheWeapon` tự gỡ khi kết thúc/đổi vũ khí). Vệt chém nhiều lớp blend ADD + chớp sáng. Số liệu `SCYTHE_*` ở `combatConfig.ts`.
+- **Sprite vũ khí cầm tay (art 1 texel = 1 px, scale 1, không phóng đại):**
+  - Art: `utils/weaponArt.ts` (không import Phaser). Mỗi vũ khí chỉ vẽ phần fill bằng ký tự; bộ dựng `buildArt` tự đổ bóng (mép trên sáng/mép dưới tối theo `ramps`) và thêm viền 1 px. Vẽ chỉ về +x vì sprite xoay theo hướng ngắm. Sinh texture: `utils/weaponTextures.ts` (`createWeaponTextures`, gọi từ `PreloadScene`).
+  - Gắn vào tay: `config/weaponSpriteConfig.ts` (`WEAPON_SPRITE_SPEC`: `grip` = tâm xoay/chỗ khớp bàn tay theo toạ độ fill, `forward`, `muzzle` = khoảng cách điểm bắn tính từ tâm người chơi; `WEAPON_DEPTH_*`) + helper `combat/weaponSprite.ts` (`createWeaponImage`, `placeWeaponImage`, `getMuzzlePoint`, `setWeaponMirror`). Lật khi ngắm trái dùng scale âm (`setWeaponMirror`), KHÔNG dùng `setFlipY`: Phaser lật quanh tâm ảnh nên vũ khí có grip lệch tâm (liềm) sẽ nhảy khỏi tay.
+  - Cung/Cung Rồng có thêm frame kéo dây (`WEAPON_DRAW_ART`, texture `<key>-draw-N`, `utils/weaponTextures.ts` `getDrawTextureKey`): dây chữ V + mũi tên lắp sẵn, `BowWeapon` đổi frame theo mức sạc, `DragonBowWeapon` chớp frame khi buông dây. Art cung có chừa 6 px bên trái dây để kéo ra sau (grip x = 6 + 8).
+  - Test cấu trúc art/spec: `utils/weaponArt.test.ts` (id nào cũng có art + spec, hàng đều nhau, màu có trong palette, grip trong ảnh, ≤ 60 px).
+
+- **Kháng của người chơi (GĐ6 xong, trừ ngọc):** `GearBonuses.resist` (cộng cố định, +1 điểm mỗi 10 cấp đồ tối đa +5, trần 25/món — không ×1.25/cấp), `CharacterDefinition.baseResist` (Mage 10% hỏa/băng/sét, Necro 15% bóng tối), gom ở `WorldScene.applyPlayerStatistics` → `CombatStats.resist`; hiển thị ở tab Stats (`getStatPanelState().resistPercent`, `CharacterPanelScene.renderStats`) và dòng chỉ số đồ (`getGearBonusLines`). Test `config/gearResist.test.ts`. Chưa có ngọc kháng.
+- **Quái & boss nguyên tố (GĐ5 xong):** số liệu cuối `config/damageTypeConfig.ts` (`ELEMENTAL_ENEMIES_ENABLED` bật/tắt toàn bộ). `RangedEnemy` từ tier ≥ 2 có 50% mang nguyên tố (fire/ice/lightning/dark, đạn ×0.7, kháng 50% nguyên tố đó, vòng báo trước + đạn nhuộm màu); boss: thiên thạch Fire, nova Dark, quạt Ice, slam vẫn vật lý. `fireEnemyBullet(..., fromBoss, type?)` gán `dmgType`; `BossSlam.type`. Hiệu ứng lên người chơi (đóng băng, thiêu, đẩy) chưa có; người chơi chưa có nguồn kháng (GĐ6).
+- **Gắn loại cho Mage (GĐ4 xong):** `SkillDefinition.damageParts` (+ `damageNoProc`) → `SkillContext.parts/noProc` (WorldScene.tryCastSkill) → `skillHitInfo(context)` trong `damageInRadius/damageInCone` và các `takeDamage` trực tiếp; đạn skill mang `setData('dmgType')` (`spawnArrow`), `WorldScene` đọc khi đạn trúng. Loại: `arcane_nova`/`arcane_chain` Lightning, `frost_nova`/`ice_lance`/`absolute_zero` Ice, `meteor`/`flame_burst`/`fire_wall` Fire, `void_rift` + `VoidStaffWeapon` Dark. Skill tự áp hiệu ứng riêng đặt `damageNoProc`. Staff/wand thường, skill Knight/Ranger/Necro còn vật lý (chưa gắn).
+- **Hiệu ứng nguyên tố (GĐ3 xong):** logic thuần ở `combat/damage/elementEffects.ts` (`pickChainTargets`, `IceStackTracker`, `LeechLimiter`; test `elementEffects.test.ts`), số liệu cuối `config/damageTypeConfig.ts`. `EnemyBase.takeDamage` tự kích hoạt khi `info.parts` có loại tương ứng: Fire→`applyDot('burn')`, Ice→`applyChill`+`applyFreeze` (3 tầng/3 s), Wind→`applyPush`, Dark→curse + sự kiện `dark-damage`, Lightning→sự kiện `chain` (`WorldScene.chainLightning`). Boss: không đóng băng, đẩy ×0.3, hút ×0.5, chậm tối đa 40%. Chưa nguồn nào truyền `info.parts` nên chưa có tác dụng trong game (GĐ4).
+- **Hệ 6 loại sát thương (GĐ1–2 xong):** đã nối vào `EnemyBase.takeDamage(..., info?: HitInfo)` (hồ sơ `defense`, boss `resCap` 50%), `Player.takeDamage` (`source.type/armorPen/resPen`; kháng đọc từ `CombatStats.resist`; bể giáp đỡ 100% vật lý / 50% nguyên tố), đạn quái đọc `setData('dmgType')`. Mặc định vật lý nên gameplay không đổi; chưa có nguồn kháng (trang bị/passive) và chưa có sàn `MIN_TAKEN` trong Player. Module gốc: `combat/damage/resolveDamage.ts` (hàm thuần: `resolveDamage`, `splitPlayerDamage`, `applyDamageFloor`, `stochasticRound`), số liệu `config/damageTypeConfig.ts`, test `combat/damage/resolveDamage.test.ts` (chạy bằng `npm test`; `vitest` là devDependency, `*.test.ts` bị loại khỏi `tsconfig`). Thiết kế đầy đủ: phiên trao đổi 2026-11-13 (Armor giữ là bể giáp + `poolShare` theo loại).
+
+### Skills — `src/skills/`
+- `skills.ts` — 18 skill đang dùng (`SKILLS`, `getSkill`, `SkillContext`; 6 skill/lớp, 18 tổng). **Đã triển khai & đang chạy.** Cơ động theo lớp: `shield_bash` = Xung Phong Khiên, `evasive_roll` = Lướt Bóng (tích lượt), `blink` = Dịch Chuyển tuỳ chọn (Lv9). Thiết kế: `docs/CLASS_REDESIGN.md`.
+- `skillControl.ts` — type `SkillControl` (instant/directional/point/target); `SkillDefinition.control` tùy chọn, bỏ trống = instant. **Mới thêm, chưa có code nào đọc** (chuẩn bị cho Mobile Combat HUD).
+- `tree/skillTreeTypes.ts`, `tree/skillTreeData.ts`, `tree/skillTreeRules.ts` — hệ cây kỹ năng (điểm, prerequisite, synergy, respec). **SP = level − 1, luôn suy ra, không lưu; mọi node tối đa 5 cấp.** Đã có API trong `WorldScene` (`getSkillTreePanelState`, `learnSkillNode`, `respecSkills`, `getSkillPointSummary`); UI cây ở `ui/SkillTreeView.ts` (mở từ nút "CÂY KỸ NĂNG" trong tab Kỹ năng của `CharacterPanelScene`); cấp node ảnh hưởng skill live qua bảng `config/skillNodeMap.ts` (`LIVE_SKILL_NODE`) và `config/skillLevelConfig.ts` (sát thương +10%/cấp từ cấp 2, hồi chiêu −4%/cấp; `SkillContext.power`, `WorldScene.getEffectiveCooldown`); skill không gắn node (Tàng Hình, Săn Máu, Khổng Lồ, Ý Chí Sắt, Khoá Thời Gian) không lên cấp được; riêng `nec_raise_skeleton`/`nec_bone_mage` có node nhánh Xương Cốt (`bonecraft`): cấp → trần số đồng minh riêng từng skill (`SKELETON_SQUAD`/`BONE_MAGE_SQUAD`, `SkillContext.level`), +20% máu, +10% sát thương; passive: `skills/tree/passiveEffects.ts` (đọc `modifiers` của node, chỉ các stat đã nối — nay gần đủ mọi passive của cây; phần mới: Khiên Phép `Player.setEnergyAbsorb`; Giáp Vỡ `Player.onArmorBroken` → `WorldScene.triggerShatterWard`; Uy Nghiêm/Độc Suy Nhược `WorldScene.getEnemyDamageScale` + `Player.takeDamage(..., damageScale)`; Quá Nhiệt/Dư Chấn trong `tryCastSkill` (`maybeEchoSkill`); Tâm Băng/aura `updatePassiveAuras`; Mồi Lửa/Độc Tố/Băng Vĩnh Cửu qua `EnemyBase.statusTuning`, `applyChill`, `addPoisonStack`; số liệu ở cuối `treeSkillsConfig.ts` (Đánh Lén/Nhãn Quang: `EnemyBase.hitModifier` do `WorldScene.modifyPlayerHit` gán — cộng sát thương đánh từ sau, chí mạng khi đánh từ sau/mục tiêu xa, hằng số `CRIT_BASE_DAMAGE_MULT`; Rút Nhanh: `Player.configureQuickDraw/triggerQuickDraw/getRangedAttackCooldownMultiplier/consumeShotEnergy`, kích hoạt sau `evasive_roll` (cấp 5 cả `shadow_step`), áp vào Blaster/Bow/DragonBow/Staff; thêm attackSpeedPerStack = Đà Chém: `Player.configureMomentum/addMomentumStack`, chỉ tăng tốc đánh vũ khí cận chiến, mất khi bị trúng): maxArmor, armorRegenSpeed (`Player.setArmorRegenSpeed`), energyOnHit (hook chung: `EnemyBase.takeDamage` phát sự kiện `damaged` → `WorldScene.watchEnemyHits/handlePlayerHit`, không gồm DoT; chỗ mới cho passive "khi đánh trúng"), energyOnKill, dodgeChance, damagePerMissingHealth → Ý Chí Sắt, Quân Luật, Phản Xạ Ma, Huyết Hận; còn lại chưa có hiệu ứng). Triệu Hồn Sư có 6 node ở 2 nhánh: Xương Cốt (Dậy Bộ Xương, Pháp Sư Xương) và Tử Khí (`deathcraft`: Gai Xương, Héo Mòn, Nổ Xác, Nhà Tù Xương — cấp chỉ tăng sát thương/hồi chiêu qua `skillLevelConfig`); đồng minh sống 60 s, không còn trần chung (`MinionManager.spawn(..., maxOfKind)` thay con cũ nhất cùng loại).
+
+### Progression / lưu trữ — `src/progression/`
+- `CharacterProgress.ts` — save/load `localStorage` (key `pixel-world:progress:v1`), `SAVE_VERSION`, save theo nhân vật (level, stat, túi đồ, gear, skill).
+- `LevelSystem.ts` (XP/level), `progressionConfig.ts` (XP_*), `StatSheet.ts` (cộng stat → chỉ số).
+- **Legacy/không đăng ký:** `BuffManager.ts`, `buffCatalog.ts`, `buffTypes.ts`, `scenes/LevelUpScene.ts` — hệ buff/level-up đã tắt (README: "code giữ lại"); `LevelUpScene` không có trong `gameConfig.ts`. `buffTypes.ts` vẫn được `Player.ts` import (`CombatStats`, `createBaseStats`).
+
+### Config / dữ liệu cân bằng — `src/config/`
+| File | Nội dung |
+|---|---|
+| `gameConfig.ts` | Phaser config + danh sách scene |
+| `constants.ts` | Kích thước thế giới/tile, `SCENE_KEYS`, `GAME_EVENTS`, `TEXTURE_KEYS`, `PLAYER_SPEED` |
+| `combatConfig.ts` | Mọi số liệu chiến đấu: player, quái, boss, threat, hòm, từng vũ khí, dash, nova |
+| `characters.ts` | 4 nhân vật (`CHARACTERS`), `WEAPON_LABELS`; `allowedWeapons` = vũ khí mỗi lớp được cầm (hòm chỉ rơi loại này, `WorldScene.equipWeaponFromInventory` chặn loại khác, save cũ được lọc khi tải) |
+| `weaponInfo.ts` | Thông tin/độ hiếm vũ khí (`WEAPON_INFO`, `WEAPON_IDS`, `WEAPON_RARITY_LABELS` — nhãn độ hiếm dùng chung cho cả trang bị) |
+| `gearConfig.ts` | Trang bị: slot, rarity, bonus, scale theo level |
+| `statConfig.ts` | 6 stat, điểm mỗi level |
+| `scaleConfig.ts` | Thang số HIỂN THỊ: máu/giáp ×100, EN ×20, sát thương/máu quái ×50; Sức đánh gốc 100, mỗi điểm Sức mạnh +10. Logic chiến đấu giữ đơn vị gốc, chỉ UI (bảng chỉ số, số sát thương, mô tả trang bị) nhân hệ số |
+| `economyConfig.ts` | Vàng & ngọc: tỉ lệ rơi (`GOLD_DROP_CHANCE`, `GEM_DROP_CHANCE` — đang cao cho demo), giá mua/bán, chi phí nâng cấp/đục lỗ, vùng làng `VILLAGE_ZONE`, `VILLAGE_NPCS` |
+| `gemConfig.ts` | 7 loại ngọc (`GEM_INFO`: hút máu, sát thương, hút ki, phản đòn, sinh lực, giáp, né đòn), `MAX_SOCKETS`, `computeGemBonuses` |
+| `assets.ts` | Đường dẫn asset village, key texture player |
+| `palette.ts` | Màu hiệu ứng (đạn, heal…); màu nguyên tố nằm ở `ELEMENT_PALETTE` trong `damageTypeConfig.ts` |
+| `controlsConfig.ts` | Bố cục nút Combat HUD (gốc + override theo nhân vật), joystick, ngưỡng ngắm, key lưu cấu hình. Được `CombatHUD`, `ControlLayoutStore`, `ControlLayoutEditor`, `VirtualJoystick`, `SkillAimingController`, `Hud` import. |
+
+### Input & UI — `src/systems/`, `src/ui/`
+- `systems/CorpseManager.ts` — xác chết (pool 8, hết hạn 8 s, `consumeNearest`); WorldScene thêm xác khi quái thường/minion chết. Chưa skill nào dùng.
+- `systems/InputController.ts` — bàn phím/chuột/chạm, phát yêu cầu đổi vũ khí; dùng `ui/TouchControls`.
+- `ui/Hud.ts` — HUD (level + XP, skill bar, boss text, vàng).
+- `ui/PlayerBars.ts` — thanh trên đầu nhân vật: một thanh chung máu (đỏ) + máu ảo (trắng xám = giáp, trừ trước) và thanh mana (xanh) nhỏ hơn bên dưới.
+- `ui/SkillQuickAssign.ts` — chọn nhanh skill vào ô (giữ để mở picker).
+- `ui/TouchControls.ts` — cầu nối cảm ứng cho `InputController`: gắn `VirtualJoystick` + `ui/combat/CombatHUD`.
+- `ui/combat/CombatHUD.ts` — cụm nút phải (Attack, S1–S3, Swap; nút Dash chỉ có khi bật `GENERIC_DASH_ENABLED`); bố cục từ `config/controlsConfig.ts`, kích thước tính theo CSS px. `ui/combat/ActionButton.ts` — nút tròn dùng chung (hồi chiêu/khoá).
+- Trên cảm ứng, thanh kỹ năng giữa màn hình trong `ui/Hud.ts` bị ẩn (S1–S3 do CombatHUD thay); đổi kỹ năng trên mobile qua tab Skills của panel.
+- `input/MobileInputManager.ts` — định tuyến đa điểm chạm: mỗi `pointerId` thuộc đúng một `PointerControl`.
+- `input/SkillAimingController.ts` — máy trạng thái ngắm kỹ năng (thuần logic) + type `SkillCastRequest`/`AimPreview`.
+- `ui/combat/ControlLayoutStore.ts` — đọc/ghi cấu hình nút của người chơi (`pixel-world:controls:v1`, theo thiết bị, dùng chung mọi nhân vật), tính vị trí/kích thước cuối, kẹp vào vùng cho phép.
+- `ui/combat/ControlLayoutEditor.ts` — nội dung tab SETTINGS: xem trước đúng tỉ lệ, kéo nút, chỉnh cỡ từng nút, độ trong suốt chung, reset. Lưu ngay; `CombatHUD.reloadLayout()` áp khi đóng panel.
+- `ui/combat/AimIndicator.ts` — vẽ đường ngắm/vùng ảnh hưởng trong world (WorldScene gọi mỗi frame).
+- `input/VirtualJoystick.ts` — joystick nổi (số liệu ở `config/controlsConfig.ts`).
+
+### VFX — `src/vfx/`
+- `VFXManager.ts` — cửa duy nhất phát hiệu ứng: `VFXManager.for(scene).play(id, opts)` / `.attach(aura, target, tint)`; mỗi scene một manager, tự dọn khi shutdown; 1 emitter particle dùng chung.
+- `VFXPool.ts` — pool sprite có trần (`VFX_MAX_SPRITES`), không tạo/hủy khi chơi.
+- `vfxTextures.ts` — sinh texture/anim pixel (slash 6 frame, ring, crack, aura); gọi từ `PreloadScene`.
+- `vfxTypes.ts` — `VFXId`, `VFXPlayOptions`, `VFXHandle`. Số liệu: `config/vfxConfig.ts`.
+- **Số sát thương (Damage Number):** `DamageNumberManager.ts` (pool BitmapText, tự `update` mỗi frame từ `WorldScene.update`, không tween; gộp đòn cùng mục tiêu+loại trong `DAMAGE_NUMBER_MERGE_MS`, DoT cộng dồn mỗi giây, trần slot, thu hồi theo ưu tiên DoT < thường < crit < người chơi), `damageNumberLayout.ts` (hàm thuần + test `damageNumberLayout.test.ts`), `damageNumberFont.ts` (font pixel 5×7 sinh runtime, 2 biến thể `normal`/`crit`, gọi từ `PreloadScene`). Số liệu/màu/bật tắt: `config/damageNumberConfig.ts` (`DAMAGE_NUMBERS_ENABLED`). Nguồn dữ liệu: `EnemyBase` phát `damage-dealt` (sát thương thực tế theo từng loại, đã sau giáp/kháng/dễ thương, cờ crit từ `hitModifier` → `HitModifierResult`) và `dot-damage`; `Player.onDamageTaken(type, giáp+HP mất)`; nối ở `WorldScene.watchEnemyHits` / `create`. Poison có màu riêng (không phải `DamageType`). Không đổi công thức sát thương.
+- Đã dùng trong 6 skill Warrior (`skills.ts`: `attachAura`, `slash.arc`, `ground.crack`). Mage/Assassin: dự kiến.
+
+### World — `src/world/`
+- `town.ts` — `buildTown()` dựng làng (dùng asset `public/assets/village/`), viền khu an toàn và NPC.
+- `castleWall.ts` — tường thành gạch bao quanh `VILLAGE_ZONE` (4 cổng ở đường lát đá, tháp góc + tháp cổng, răng cưa); vẽ bằng `vfx/brickBox.ts` (dùng chung với Bất Động Thành Lũy), nướng thành texture từng đoạn, chặn vật lý qua nhóm `obstacles`, trồi lên + bụi lúc vào scene. Số liệu `config/castleConfig.ts`.
+
+### Làng & kinh tế
+- Quái rơi vàng/ngọc (`WorldScene.dropLoot/dropBossLoot/updateLootDrops`, `entities/LootDrop.ts`); vàng hiện ở `Hud.setGold`.
+- `systems/VillageService.ts` — toàn bộ giao dịch (mua/bán/đổi ngọc, nâng cấp, đục lỗ, khảm/tháo). Giữ vàng, `gems`, `gearSockets`; đụng túi đồ qua `VillageHost` (do `WorldScene.createVillageHost` cung cấp). `onChanged` → tính lại chỉ số + lưu.
+- Nâng cấp = `gearLevels` có sẵn (+25% chỉ số gốc mỗi cấp). Ngọc chỉ tính khi món đồ đang được mặc (`config/gemConfig.computeGemBonuses`), áp ở `WorldScene.applyPlayerStatistics`; Hút máu/Hút ki ở `handlePlayerHit`, Phản đòn qua `Player.onHurt` → `reflectThorns`.
+- Khu an toàn: `VILLAGE_ZONE`; Trong làng không chiến đấu được: `WorldScene.update` chặn đánh/kỹ năng/boss/spawn/AI quái khi `isInsideVillage`; `updateVillage` báo vào/ra, đẩy mọi quái (cả boss) ra, xoá đạn quái, `Player.setSafeZone` miễn sát thương. Tương tác NPC dùng chung phím F/nút đánh với hòm (`updateChests`, `getNearbyNpc`, `openVillageShop`).
+- Save v7: `gold`, `gems`, `gearSockets` (`progression/CharacterProgress.ts`); save cũ nhận `STARTING_GOLD`.
+
+### Utils — `src/utils/`
+- `placeholderPlayer.ts` — sinh spritesheet + anim player/hero (lớn, ~1250 dòng). Đấu sĩ (`knight`): giáp thép, mũ sắt kín mặt có chùm lông, áo choàng tím lót cam (`drawKnightCape`); vẽ lại sprite theo mũ/giáp/giày đang mặc (`createPlaceholderPlayerSheet(..., look)`, ngoại hình ở `config/gearLook.ts`); `getHeroHandOffset` cho biết toạ độ bàn tay để vũ khí (`combat/*Weapon.ts`) gắn vào tay qua `Player.getHandPoint`.
+- `enemySprites.ts` — sinh spritesheet quái.
+- `effects.ts` — lớp tương thích (spark, burst, ring, dust, afterimage), chỉ chuyển sang `vfx/VFXManager`.
+- `pixelTexture.ts`, `textCache.ts` (`setTextColor`/`setTextValue`: chỉ vẽ lại Text khi giá trị đổi), `projectile.ts` (id đạn, `fireEnemyBullet` bắn đạn địch dùng chung quái/boss), `device.ts` (`isTouchDevice`), `perfOverlay.ts` (bảng đo FPS/frame time/bước vật lý, bật bằng `?perf` trên URL).
+
+### Rung hình / đồng bộ (2026-11-13)
+`gameConfig` đặt `physics.arcade.fixedStep: false`; lerp camera đổi theo thời gian thực mỗi frame (`WorldScene.update`, hằng `CAMERA_FOLLOW_LERP_60FPS`); vũ khí bám tay cập nhật ở `POST_UPDATE` (`WorldScene.updateWeaponsAfterPhysics`) để khớp thân.
+
+### Style
+`src/style.css`, `index.html` — khung trang/canvas.
+
+## 3. Phụ thuộc chính (A → B = A import B)
+
+```
+main → config/gameConfig → scenes/*
+WorldScene → entities, combat, config, progression, skills, systems, ui, world, utils
+CharacterPanelScene → WorldScene (gọi method public), config/{gear,stat,weaponInfo}, skills/skills
+CharacterSelectScene → config/characters, progression/CharacterProgress, skills/skills
+PreloadScene → config/{assets,characters}, utils/{placeholderPlayer,enemySprites,pixelTexture}
+Player → config/combatConfig, progression/buffTypes, utils/{effects,placeholderPlayer}
+combat/Weapon → entities/EnemyBase
+skills/skills → entities/{Player,EnemyBase}, utils/{effects,projectile}
+Hud → entities/Player, progression/LevelSystem, ui/SkillQuickAssign
+InputController → ui/TouchControls
+CharacterProgress → config/{characters,gear,stat,weaponInfo}, skills/*, progression/{LevelSystem,progressionConfig}
+```
+Lưu ý: `WorldScene` ↔ `CharacterPanelScene` phụ thuộc hai chiều (panel gọi World; World mở panel).
+
+## 4. Tìm file khi cần sửa…
+
+| Muốn sửa | Bắt đầu ở |
+|---|---|
+| Sát thương/cooldown/tầm vũ khí | `config/combatConfig.ts` (số) → `combat/<Tên>Weapon.ts` (hành vi) |
+| Thêm vũ khí mới | `combat/Weapon.ts` (WeaponId), file mới trong `combat/`, `config/weaponInfo.ts`, `config/constants.ts` (TEXTURE_KEYS), `config/combatConfig.ts`, `WorldScene.createWeaponById` (+ danh sách loot `SPECIAL/LEGENDARY_WEAPON_IDS`), `config/characters.ts` (WEAPON_LABELS, `allowedWeapons`), art ở `utils/weaponArt.ts` + `config/weaponSpriteConfig.ts` |
+| Hình dáng / kích thước / điểm cầm vũ khí | `utils/weaponArt.ts` (art), `config/weaponSpriteConfig.ts` (grip, muzzle), `combat/weaponSprite.ts` (gắn vào tay, depth) |
+| Skill (18 skill chủ động) | `skills/skills.ts`; gán ô: `WorldScene.assignSkillToSlot`, `ui/SkillQuickAssign.ts`, `ui/Hud.ts` |
+| Cuồng Nộ (`blade_storm`) / Tự Bạo (`self_destruct`) của Đấu sĩ | Số liệu `combatConfig.ts` (BERSERK_*, EXHAUST_*, SELF_DESTRUCT_*); trạng thái BERSERK/EXHAUSTED + hệ số HP/giáp/đam + `sacrifice()` ở `entities/Player.ts` (`rageState`); kích hoạt/VFX ở `skills/skills.ts`; điều kiện dùng: `SkillDefinition.canCast` (kiểm ở `WorldScene.tryCastSkill`) |
+| Cây kỹ năng (chưa nối) | `skills/tree/*` |
+| Quái / AI quái | `entities/EnemyBase.ts`, `Enemy.ts`, `RangedEnemy.ts`; số liệu `combatConfig.ts`; sprite `utils/enemySprites.ts` |
+| Boss | `entities/BossEnemy.ts`; điều phối `WorldScene` (`updateBoss`…); số liệu `combatConfig.ts` (BOSS_*) |
+| Spawn quái / độ khó theo thời gian | `WorldScene.spawnEnemy/updateEnemySpawning/getThreatTier`; `combatConfig.ts` (THREAT_*) |
+| Hòm vũ khí / legendary | `entities/WeaponChest.ts`; `WorldScene` (nhóm `*Chest*`); `combatConfig.ts` (CHEST_*, LEGENDARY_*) |
+| Di chuyển, dash, máu/giáp/năng lượng | `entities/Player.ts`; `combatConfig.ts` (PLAYER_*, DASH_*) |
+| Phím/chuột/cảm ứng | `systems/InputController.ts`, `ui/TouchControls.ts` |
+| HUD | `ui/Hud.ts`; thanh máu/máu ảo/mana trên đầu: `ui/PlayerBars.ts` |
+| Panel nhân vật (Stats/Túi/Trang bị/Skills/Settings) | UI: `scenes/CharacterPanelScene.ts`; logic dữ liệu: method public trong `WorldScene` |
+| Chỉ số (stat) & điểm cộng | `config/statConfig.ts`, `progression/StatSheet.ts`, `WorldScene.addStatPoint/applyPlayerStatistics` |
+| Trang bị (gear) | `config/gearConfig.ts` (chỉ số), `config/gearLook.ts` (ngoại hình trên người), `WorldScene.equipGearFromInventory/unequipGear` |
+| XP / level | `progression/LevelSystem.ts`, `progressionConfig.ts`, `WorldScene.grantExperience` |
+| Lưu/tải tiến trình, đổi cấu trúc save | `progression/CharacterProgress.ts` (cân nhắc tăng `SAVE_VERSION`), `WorldScene.saveProgress` |
+| Nhân vật (3 hero) | `config/characters.ts`; sprite `utils/placeholderPlayer.ts`; chọn: `scenes/CharacterSelectScene.ts` |
+| Map / làng / asset village | `world/town.ts`, `config/assets.ts`, `public/assets/village/` |
+| Vàng, tỉ lệ rơi, giá, NPC, khu làng | `config/economyConfig.ts`; logic giao dịch `systems/VillageService.ts`; UI `scenes/VillageShopScene.ts` |
+| Ngọc / lỗ ngọc / hiệu ứng ngọc | `config/gemConfig.ts` (số), `WorldScene.applyPlayerStatistics/handlePlayerHit/reflectThorns` (hiệu ứng) |
+| Hiệu ứng hình ảnh | `vfx/VFXManager.ts` (thêm id mới ở `play`), texture: `vfx/vfxTextures.ts`, số liệu: `config/vfxConfig.ts`; `utils/effects.ts` là lớp cũ |
+| Số sát thương nổi (màu, kích cỡ, gộp, trần) | `config/damageNumberConfig.ts` (số) → `vfx/DamageNumberManager.ts` (hành vi); nguồn sự kiện ở `EnemyBase.takeDamage/takeStatusDamage`, `Player.takeDamage` |
+| Sprite sinh runtime / load asset | `scenes/PreloadScene.ts`, `utils/*` |
+| Danh mục asset, quy chuẩn VFX/anim/đặt tên | `docs/assets/` (`README.md` = quy trình tái dùng; `ASSET_CATALOG.md`, `VFX_GUIDE.md`, `ANIMATION_GUIDE.md`, `ASSET_NAMING.md`, `COLOR_PALETTE.md` = bảng màu và quyết định nghệ thuật đã duyệt) |
+| Ảnh tham chiếu phong cách nghệ thuật (không phải asset game) | `docs/references/visual/` — thư viện ảnh tham chiếu nghệ thuật của Pixel World (`README.md` = cách dùng; 6 thư mục chủ đề `01-environment` … `06-ui`) |
+| Menu / màn chọn nhân vật | `scenes/MainMenuScene.ts`, `scenes/CharacterSelectScene.ts` |
+| Thêm/đổi scene | `config/constants.ts` (SCENE_KEYS), `config/gameConfig.ts` |
+| Màu, kích thước thế giới | `config/palette.ts`, `config/constants.ts` |
+| Buff / level-up chọn buff | Legacy (tắt): `progression/buff*.ts`, `BuffManager.ts`, `scenes/LevelUpScene.ts` |
+
+## 5. Dự kiến / chưa triển khai
+Mobile Combat HUD (đang làm theo kế hoạch 8 bước; xong bước 1–5 và 7 (kỹ năng `target`: hunters_mark = MARK OF DEATH; kéo-để-ngắm đã chạy cho shield_bash, blink, arrow_rain, meteor; các kỹ năng còn lại vẫn instant): `config/controlsConfig.ts`, `skills/skillControl.ts`, `input/MobileInputManager.ts`, `input/VirtualJoystick.ts`). Tab SETTINGS (bước 7) đã xong; bước 6 (PC dùng chung bộ ngắm) tạm hoãn theo yêu cầu; đã có đợt tối ưu mobile (Hud chỉ vẽ lại khi đổi, nút menu ≥44px, nút toàn màn hình trong SETTINGS). Còn lại: tinh chỉnh bố cục/icon theo nhân vật trên máy thật.
+Ngoài ra chưa có mục nào được xác nhận trong repo. Hiện không có thư mục test, backend, âm thanh hay tài liệu nào khác ngoài `README.md` và file này. Khi thêm hệ thống mới, ghi vào đây với nhãn "dự kiến" cho tới khi file tồn tại.
+
+## 6. Bảo trì bản đồ
+- Ngôn ngữ: toàn bộ chữ hiển thị trong game là tiếng Việt (tên/mô tả ở `config/*`, `skills/skills.ts`, `combat/*Weapon.ts` `name`, `buffCatalog.ts` `RARITY_LABELS`/`TAG_LABELS`). Id nội bộ (`sword`, `dragon_bow`…) giữ tiếng Anh. Thêm nội dung mới thì viết tiếng Việt.
+- Khi thêm/xóa/đổi tên file hoặc đổi trách nhiệm: sửa mục tương ứng ở trên trong cùng thay đổi.
+- Số dòng chỉ mang tính tham khảo (để biết file lớn nên đọc theo đoạn).
+
+## 7. Mở rộng lớp (dự kiến)
+Thiết kế Necromancer + Druid, lộ trình GĐ0–8: `docs/CLASS_EXPANSION.md`. Đã làm: GĐ1–3 và GĐ4 (Triệu Hồn Sư `necromancer`: `skills/necromancerSkills.ts`, `config/necromancerConfig.ts`, `entities/Minion.ts`, `systems/MinionManager.ts`; dùng sprite pháp sư đổi màu; đồng minh có máu, bị quái đánh (contact) và quái đổi mục tiêu sang đồng minh trong tầm 150 px). Chưa có skill nào dùng các trạng thái này. Lớp `druid` **chưa tồn tại** trong code.
+
+## 8. Ô kỹ năng và kỹ năng từ cây
+- **7 ô kỹ năng**: ô 0–2 (phím 3/4/5, luôn có skill) + 4 ô phụ (phím 6/7/8/9, có thể trống). Save: `CharacterSave.extraSkills` (SAVE_VERSION 6). Logic: `WorldScene.assignSkillToSlot/clearSkillSlot/getSlotIds`. Touch: `HudButtonId` `skill3`–`skill6` (hàng ngang dưới-giữa, `BASE_HUD_LAYOUT` trong `config/controlsConfig.ts`); PC: thanh kỹ năng `ui/Hud.ts` 7 ô; panel: `CharacterPanelScene.renderSkills` (thư viện phân trang, 7 nút gán).
+- **Kỹ năng từ cây** (15 skill, cần học node; Pháp sư có thêm `arcane_chain` = Xích Tinh, nhánh Hư Không): `skills/treeSkills.ts`, số liệu `config/treeSkillsConfig.ts`, đăng ký trong `SKILLS` (`skills.ts`), khai báo theo lớp ở `CharacterDefinition.treeSkills`; `SkillDefinition.requiresNode` quyết định dùng/gán được. `LIVE_SKILL_NODE` (`config/skillNodeMap.ts`) ánh xạ skill ↔ node.
+- `SkillContext` có thêm `enemyBullets` và `getEnemies()` cho kỹ năng kéo dài.
+
+### Ghi chú bổ sung (node cho skill cũ & mốc cấp 5)
+- 5 skill chủ động cũ nay có node riêng trong `skillTreeData.ts` (cấp node = cấp skill, ánh xạ ở `config/skillNodeMap.ts`): `iron_will`→`steel_body` (Thành Lũy), `blade_storm`→`colossus_form` (Cuồng Huyết), `poison_trap`→`vanish` (Bóng Đêm), `arrow_rain`→`blood_hunt` (Xạ Thuật), `arcane_shield`→`time_lock` (Hàn Băng). `ui/SkillTreeView.ts` thu gọn hàng khi một nhánh có hơn 5 node.
+- Mốc cấp 5 của passive đã nối (qua `PassiveBundle`): Huyết Hận (Lốc Xoáy miễn EN), Đà Chém (sóng chém, `WorldScene.handlePlayerHit`), Quân Luật (Tiếng Hô -2s, `getEffectiveCooldown`), Nhãn Quang (tầm bắn +10%), Phản Xạ Ma (hoàn hồi chiêu khi né, `Player.onDodge`).
+- Mốc cấp 3/5 của skill chủ động nay đọc `SkillContext.level` ngay trong hàm `cast` (`skills.ts`, `treeSkills.ts`). Skill muốn làm mới hồi chiêu của chính nó phát sự kiện `skill-cooldown-reset` (WorldScene lắng nghe). Chưa làm: Thế Thủ lv5, Dịch Chuyển lv5, Băng Thương lv5, Bình Dịch lv5, Bão Tên lv3, Dấu Săn lv5, Tàng Hình lv5.
+- Các file số liệu trong `src/config/` (và `progression/buffTypes.ts`, `StatSheet.ts`) đã có chú thích tiếng Việt từng dòng: đơn vị (ms/px/độ), ý nghĩa từng chỉ số. Khi thêm hằng số mới hãy giữ quy ước này.
