@@ -1,6 +1,14 @@
 import Phaser from 'phaser';
 
+import { TEXTURE_KEYS } from '../config/constants';
 import {
+  ELEMENT_PALETTE,
+  ELEMENT_TYPES,
+  type DamageType,
+} from '../config/damageTypeConfig';
+import { NEON } from '../config/palette';
+import {
+  ENEMY_BULLET_VISUAL,
   VFX_RING_RADIUS,
   VFX_SLASH_FRAME,
   VFX_SLASH_FRAMES,
@@ -319,9 +327,118 @@ function createBolt(scene: Phaser.Scene): void {
   });
 }
 
+interface BulletColors {
+  core: number;
+  body: number;
+  edge: number;
+}
+
+/** Trộn hai màu 0xRRGGBB theo tỉ lệ t (0 = a, 1 = b). */
+function mixColor(a: number, b: number, t: number): number {
+  const channel = (shift: number): number =>
+    Math.round(((a >> shift) & 255) * (1 - t) + ((b >> shift) & 255) * t);
+
+  return (channel(16) << 16) | (channel(8) << 8) | channel(0);
+}
+
+/** Texture đạn quái của một hệ; không có hệ (hoặc vật lý) dùng texture mặc định. */
+export function enemyBulletTextureKey(type?: DamageType): string {
+  return type && type !== 'physical'
+    ? `${TEXTURE_KEYS.enemyBullet}-${type}`
+    : TEXTURE_KEYS.enemyBullet;
+}
+
+/**
+ * Tô từng ô CELL×CELL với màu riêng (khác `paint` chỉ tô trắng để tint).
+ * Hàm trả null = bỏ qua ô.
+ */
+function paintColored(
+  scene: Phaser.Scene,
+  key: string,
+  width: number,
+  height: number,
+  cell: (x: number, y: number) => { color: number; alpha: number } | null,
+): void {
+  if (scene.textures.exists(key)) {
+    return;
+  }
+
+  const graphics = scene.make.graphics({}, false);
+
+  for (let y = 0; y < height; y += CELL) {
+    for (let x = 0; x < width; x += CELL) {
+      const fill = cell(x + CELL / 2, y + CELL / 2);
+
+      if (fill && fill.alpha > 0) {
+        graphics.fillStyle(fill.color, fill.alpha);
+        graphics.fillRect(x, y, CELL, CELL);
+      }
+    }
+  }
+
+  graphics.generateTexture(key, width, height);
+  graphics.destroy();
+}
+
+/**
+ * Một viên đạn quái hình TRỤ (viên thuốc: thân đều, hai đầu bo tròn), nằm ngang và được xoay theo
+ * hướng bay. Ba lớp màu lấy từ thuộc tính: viền/quầng ngoài (edge), thân (body), lõi sáng (core).
+ */
+function createEnemyBulletTexture(
+  scene: Phaser.Scene,
+  key: string,
+  colors: BulletColors,
+): void {
+  const { length, width } = ENEMY_BULLET_VISUAL;
+  const cx = length / 2;
+  const cy = width / 2;
+  const radius = width / 2;
+  const axis = length / 2 - radius; // nửa độ dài đoạn thẳng của viên thuốc
+
+  /** Khoảng cách tới trục dọc của viên thuốc có nửa độ dài trục `half`. */
+  const distance = (x: number, y: number, half: number): number =>
+    Math.hypot(Math.max(Math.abs(x - cx) - half, 0), y - cy);
+
+  paintColored(scene, key, length, width, (x, y) => {
+    if (distance(x, y, axis - 2) <= radius * 0.3) {
+      return { color: colors.core, alpha: 1 };
+    }
+
+    if (distance(x, y, axis) <= radius * 0.7) {
+      return { color: colors.body, alpha: 1 };
+    }
+
+    if (distance(x, y, axis) <= radius) {
+      return { color: colors.edge, alpha: 0.85 };
+    }
+
+    return null;
+  });
+}
+
+/** Sinh texture đạn quái: một texture mặc định (vật lý) + một cho từng hệ nguyên tố. */
+function createEnemyBullets(scene: Phaser.Scene): void {
+  const body = NEON.enemyBullet;
+
+  createEnemyBulletTexture(scene, enemyBulletTextureKey(), {
+    core: mixColor(body, 0xffffff, 0.65),
+    body,
+    edge: mixColor(body, 0x000000, 0.5),
+  });
+
+  for (const type of ELEMENT_TYPES) {
+    createEnemyBulletTexture(
+      scene,
+      enemyBulletTextureKey(type),
+      ELEMENT_PALETTE[type],
+    );
+  }
+}
+
 /** Sinh toàn bộ texture/anim VFX; gọi một lần từ PreloadScene. */
 export function createVfxTextures(scene: Phaser.Scene): void {
   paint(scene, VFX_TEXTURES.pixel, CELL, CELL, () => 1);
+  createEnemyBullets(scene);
   createSlash(scene);
   createRing(scene);
   createCrack(scene);

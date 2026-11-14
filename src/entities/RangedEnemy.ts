@@ -16,6 +16,7 @@ import {
 } from '../config/combatConfig';
 import { TEXTURE_KEYS } from '../config/constants';
 import { NEON } from '../config/palette';
+import { ENEMY_TELEGRAPH_GLOW_ALPHA } from '../config/vfxConfig';
 import { spawnGlow, spawnHitSpark, spawnRing } from '../utils/effects';
 import {
   ELEMENTAL_ENEMIES_ENABLED,
@@ -137,6 +138,7 @@ export class RangedEnemy extends EnemyBase {
         telegraphColor,
         0.8,
         RANGED_ENEMY_TELEGRAPH_MS,
+        ENEMY_TELEGRAPH_GLOW_ALPHA,
       );
 
       return;

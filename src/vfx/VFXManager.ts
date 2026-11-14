@@ -410,7 +410,7 @@ export class VFXManager {
       .setTint(o.tint ?? 0xffffff)
       .setBlendMode(Phaser.BlendModes.ADD)
       .setScale(scale)
-      .setAlpha(0.9);
+      .setAlpha(o.alpha ?? 0.9);
     this.scene.tweens.add({
       targets: sprite,
       alpha: 0,

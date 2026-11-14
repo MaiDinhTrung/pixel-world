@@ -25,6 +25,7 @@ export function spawnGlow(
   color: number,
   scale = 1,
   duration = 250,
+  alpha?: number,
 ): void {
   VFXManager.for(scene).play('glow.flash', {
     x,
@@ -32,6 +33,7 @@ export function spawnGlow(
     tint: color,
     scale,
     durationMs: duration,
+    alpha,
   });
 }
 

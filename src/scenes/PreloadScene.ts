@@ -83,27 +83,8 @@ const BULLET_PALETTE = {
 
 const BULLET_ROWS = ['WWBB', 'BBBB'];
 
-// Texture đạn quái trung tính (xám): màu thật do tint quyết định theo nguồn/nguyên tố
-// trong fireEnemyBullet (utils/projectile.ts). Tuyệt đối không nhuộm màu ở đây,
-// vì tint nhân với màu texture sẽ làm lệch màu hệ.
-const ENEMY_BULLET_PALETTE = {
-  O: '#707070',
-  M: '#d4d4d4',
-  W: '#ffffff',
-} as const;
-
-const ENEMY_BULLET_ROWS = [
-  '...OOOO...',
-  '..OMMMMO..',
-  '.OMMWWMMO.',
-  'OMMWWWWMMO',
-  'OMMWWWWMMO',
-  'OMMWWWWMMO',
-  'OMMWWWWMMO',
-  '.OMMWWMMO.',
-  '..OMMMMO..',
-  '...OOOO...',
-];
+// Texture đạn quái được sinh ở vfx/vfxTextures.ts (createVfxTextures): màu trắng trung tính,
+// màu thật do tint quyết định theo nguồn/nguyên tố trong fireEnemyBullet (utils/projectile.ts).
 
 const SPARK_PALETTE = {
   Y: '#ffe66d',
@@ -234,12 +215,6 @@ export class PreloadScene extends Phaser.Scene {
   create(): void {
     createPixelTexture(this, TEXTURE_KEYS.player, PLAYER_ROWS, PLAYER_PALETTE);
     createEnemySpriteSheets(this);
-    createPixelTexture(
-      this,
-      TEXTURE_KEYS.enemyBullet,
-      ENEMY_BULLET_ROWS,
-      ENEMY_BULLET_PALETTE,
-    );
 
     // Vật thể nhỏ dùng art cũ nhân đôi để giữ chi tiết pixel.
     createPixelTexture(this, TEXTURE_KEYS.rock, ROCK_ROWS, ROCK_PALETTE, 2);

@@ -1,9 +1,9 @@
 import Phaser from 'phaser';
 
 import { ENEMY_BULLET_LIFETIME_MS } from '../config/combatConfig';
-import { TEXTURE_KEYS } from '../config/constants';
-import { ELEMENT_COLORS, type DamageType } from '../config/damageTypeConfig';
-import { NEON } from '../config/palette';
+import type { DamageType } from '../config/damageTypeConfig';
+import { ENEMY_BULLET_VISUAL } from '../config/vfxConfig';
+import { enemyBulletTextureKey } from '../vfx/vfxTextures';
 
 let projectileSequence = 0;
 
@@ -29,15 +29,15 @@ export function fireEnemyBullet(
   fromBoss = false,
   type?: DamageType,
 ): boolean {
-  const bullet = pool.get(
-    x,
-    y,
-    TEXTURE_KEYS.enemyBullet,
-  ) as Phaser.Physics.Arcade.Sprite | null;
+  const textureKey = enemyBulletTextureKey(type);
+  const bullet = pool.get(x, y, textureKey) as Phaser.Physics.Arcade.Sprite | null;
 
   if (!bullet) {
     return false;
   }
+
+  // Group.get bỏ qua `key` với đạn lấy lại từ pool, nên phải đặt texture thủ công mỗi lần bắn.
+  bullet.setTexture(textureKey);
 
   const shotId = nextProjectileId();
 
@@ -48,14 +48,20 @@ export function fireEnemyBullet(
   // Luôn gán (kể cả undefined) vì đạn dùng lại từ pool.
   bullet.setData('dmgType', type);
 
-  // Texture đạn trung tính nên luôn phải tint: có hệ → màu hệ, vật lý → màu đạn quái.
-  bullet.setTint(
-    type && type !== 'physical' ? ELEMENT_COLORS[type] : NEON.enemyBullet,
-  );
+  // Màu đã nằm trong texture theo thuộc tính (lõi/thân/viền); xóa tint còn sót từ lần dùng trước.
+  bullet.clearTint();
 
   bullet.enableBody(true, x, y, true, true);
-  bullet.setDepth(9);
+  bullet.setDepth(ENEMY_BULLET_VISUAL.depth);
   bullet.setScale(1);
+  // Texture đạn dài/rộng hơn đạn cũ và xoay theo hướng bay, nhưng vùng va chạm giữ
+  // vuông cố định ở tâm như đạn cũ (10×10) nên gameplay không đổi.
+  bullet.setRotation(angle);
+  (bullet.body as Phaser.Physics.Arcade.Body | null)?.setSize(
+    ENEMY_BULLET_VISUAL.hitbox,
+    ENEMY_BULLET_VISUAL.hitbox,
+    true,
+  );
   bullet.setBlendMode(Phaser.BlendModes.ADD);
   bullet.setVelocity(Math.cos(angle) * speed, Math.sin(angle) * speed);
 

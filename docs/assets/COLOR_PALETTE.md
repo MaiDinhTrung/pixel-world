@@ -43,10 +43,17 @@ Có thể tinh chỉnh sau khi xem trong game; mọi thay đổi phải qua phê
   - Tia chạm sét lan (`#e8c030`) và Mồi Lửa (`#e0702a`) dùng `ELEMENT_COLORS`.
 - **Đạn người chơi và dash:** giữ cyan `#5fe0ff`.
 - **Đạn quái:** `NEON.enemyBullet` giữ `#d8402a`.
-  - Texture đạn quái là xám trung tính (`PreloadScene.ts`); màu thật do tint quyết định trong `fireEnemyBullet` (`src/utils/projectile.ts`).
-  - Đạn có hệ → `ELEMENT_COLORS[hệ]`; đạn vật lý của quái, và đạn boss không có hệ → `NEON.enemyBullet`.
+  - Mỗi thuộc tính có một texture đạn riêng, sinh ở `src/vfx/vfxTextures.ts` (`createEnemyBullets`, khóa qua `enemyBulletTextureKey`): đạn có hệ lấy 3 lớp lõi/thân/viền từ `ELEMENT_PALETTE[hệ]`; đạn vật lý của quái, và đạn boss không có hệ, dùng texture mặc định với thân `NEON.enemyBullet` (lõi trộn trắng 65%, viền trộn đen 50%). `fireEnemyBullet` (`src/utils/projectile.ts`) chọn texture theo hệ và gọi `setTexture` mỗi lần bắn (vì `Group.get` bỏ qua khóa texture với đạn lấy lại từ pool); không còn tint.
+  - Hình dạng khi bay: **hình trụ** (viên thuốc, thân đều, hai đầu bo tròn) dài 44 × rộng 20 px, xoay theo hướng bay; vùng va chạm giữ vuông 10 px ở tâm như đạn cũ (`ENEMY_BULLET_VISUAL` trong `config/vfxConfig.ts`). Người dùng yêu cầu hình trụ, màu theo thuộc tính, rộng hơn 10%, dài hơn 40% so với bản 32×18 và "sáng rực"; kích thước do AI làm tròn, chưa được người dùng xem lại.
+  - Đạn quái vẽ ở depth 2702 (trên ambient, không bị làm tối); đổi `depth` về 9 trong `ENEMY_BULLET_VISUAL` để trở về cách vẽ cũ.
   - Lý do: texture cũ nhuộm hồng làm đạn nguyên tố bị ám tím/đỏ khi nhân tint.
-- **Giữ nguyên** (đã quyết định chưa đổi): màu thân và viền sprite quái/boss (`enemySprites.ts`), glow quái/boss, `NEON.meleeEnemy`, `NEON.rangedEnemy`, `NEON.boss`, và màu telegraph nova của boss (`#9d6bff`, màu riêng, không gộp vào bảng nguyên tố).
+- **Giữ nguyên** (đã quyết định chưa đổi): màu thân và viền sprite quái/boss (`enemySprites.ts`), glow quái thường (`BRUTE.glow`) và glow boss (`BOSS.glow`), `NEON.meleeEnemy`, `NEON.enemyBullet`, màu cuồng nộ của boss, và màu telegraph nova của boss (`#9d6bff`, màu riêng, không gộp vào bảng nguyên tố).
+- **Bỏ hồng neon của quái bắn xa và boss (đã duyệt, đã triển khai):**
+  - `NEON.rangedEnemy` `#ff4fd8` → `#a02848` (đỏ thẫm).
+  - Mắt quái bắn xa `CASTER.glow` `#ff4fd8` → `#c8385a`.
+  - `NEON.boss` `#ff5577` → `#c8243a` (đỏ máu đậm; vòng báo trước, glow, aura, thanh máu boss theo màu này).
+- **Đồng bộ màu Dark (đã duyệt, đã triển khai):** `void_rift` (màu nhận diện, vòng, glow, vùng ảnh hưởng, burst) → `ELEMENT_COLORS.dark`; glow Khiên Phép (`Player.ts`) → `ELEMENT_COLORS.dark`; slash Shadow Dance → `ELEMENT_COLORS.dark`, nhấn trúng đòn → `ELEMENT_PALETTE.dark.core`.
+- **Giữ màu tím cho `arcane_nova` và `arcane_chain`** (kỹ năng 'arcane', dù sát thương hệ Lightning); không chuyển sang vàng Lightning.
 
 ### Giai đoạn 2 — đã duyệt và triển khai (giá trị khởi đầu, chỉnh trong `src/config/atmosphereConfig.ts`)
 
@@ -71,13 +78,13 @@ Chưa có thay đổi code nào cho các mục này.
 - **Asset làng:** tạm giữ `market-stall`, `flower-bed`, `oak-tree`; ưu tiên bố trí lại và chỉnh màu; xét thay thế ở giai đoạn nâng cấp môi trường.
 - **Asset ma quái:** chưa bổ sung ngay; tận dụng asset hiện có; tương lai ưu tiên pack CC0 phù hợp; VFX có thể tạo bằng code nhưng không dùng texture sinh bằng code để thay thế mọi asset môi trường.
 - **Mức hoang tàn của làng:** cũ kỹ, u ám, suy tàn; không biến thành phế tích; vẫn có cảm giác có người sinh sống.
-- **Màu quái/boss:** hướng đỏ thẫm, đỏ máu hoặc đỏ tím, loại bỏ hồng neon; có cấp nhận diện khác nhau cho quái thường, tinh anh, boss; đạn phải phân biệt theo nguồn và hệ. **Giá trị hex cụ thể chưa được duyệt** (xem mục 5).
+- **Màu quái/boss:** hướng đỏ thẫm, đỏ máu hoặc đỏ tím, loại bỏ hồng neon; có cấp nhận diện khác nhau cho quái thường, tinh anh, boss; đạn phải phân biệt theo nguồn và hệ. Đã duyệt và áp dụng riêng phần bỏ hồng neon (xem mục 3); **các hex còn lại chưa được duyệt** (xem mục 5).
 
 ## 5. Đề xuất CHƯA duyệt (không phải quy chuẩn)
 
 Chỉ để tham khảo; không áp dụng khi chưa có phê duyệt.
 
-- Quái/boss: `meleeEnemy #8a3a6a`, `rangedEnemy #a02848`, `boss #c8243a`, `bossBullet #d8304a`, `bossEnraged #d8304a`; glow `CASTER #c8385a`.
+- Quái/boss: `meleeEnemy #8a3a6a`, `bossBullet #d8304a`, `bossEnraged #d8304a` (chưa duyệt; các hex `rangedEnemy`, `boss`, `CASTER.glow` đã duyệt, xem mục 3).
 - `enemyBullet #b8243c` — **đã bị từ chối**, giữ `#d8402a`.
 - Gộp telegraph nova của boss vào `ELEMENT_PALETTE.dark.body` — **chưa áp dụng**.
 - Màu vũ khí trong `NEON` (sword, bow, scythe, dualBlades, staff) và `heal #7fc99a`.
@@ -87,7 +94,8 @@ Chỉ để tham khảo; không áp dụng khi chưa có phê duyệt.
 
 ## 6. Việc còn tồn đọng đã biết
 
-- Màu hard-code chưa xử lý (vai trò chưa rõ hoặc ngoài phạm vi): `Player.ts` glow Khiên Phép `#b48cff`, `skills.ts` slash Shadow Dance `#b48cff`; các kỹ năng Lightning/Dark (`arcane_nova`, `arcane_chain`, `void_rift`); `arrow_rain` `#ff5e6c`; tint mặc định trong `VFXManager.ts`; `combat/*.ts` (Excalibur, Scythe, DragonBow, swordFireVfx); `weaponArt.ts` (sprite vũ khí); `placeholderPlayer.ts`.
-- Rủi ro nhìn rõ đạn quái (tính toán, đã được người dùng xem ổn nhưng cần theo dõi khi chơi nhiều quái): đạn Fire gần đạn vật lý của quái; đạn Ice của quái cùng hue với đạn cyan của người chơi; thân đạn tối hơn trước (~83% độ sáng tint).
+- Màu hard-code còn lại, **đã quyết định để Giai đoạn 4** (màu vũ khí và sprite, chưa có bảng màu duyệt): tint mặc định `VFXManager.ts` (14 hex), `combat/*.ts` (`ExcaliburWeapon` 14, `ScytheWeapon` 7, `swordFireVfx` 5, `StaffWeapon` 3, `DualBladesWeapon` 2, `DragonBowWeapon` 2), `weaponArt.ts` (142), `placeholderPlayer.ts` (4), `chestArt.ts` (16), `gearLook.ts` (26), `weaponInfo.ts` (3), `vfx/brickBox.ts` (5). Không đổi code ở các file này; số liệu là số hex tìm thấy bằng grep, chưa phân loại vai trò từng màu.
+- Hard-code nhỏ khác chưa đụng tới: `arrow_rain` `#ff5e6c`, `NEON_CSS.magenta` `#ff4fd8` (không được dùng ở đâu), `NEON` của vũ khí (sword, bow, scythe, dualBlades, staff), `heal`.
+- Rủi ro nhìn rõ đạn quái (tính toán, đã được người dùng xem ổn nhưng cần theo dõi khi chơi nhiều quái): đạn Fire gần đạn vật lý của quái; đạn Ice của quái cùng hue với đạn cyan của người chơi (nhưng đạn quái là hình tròn, đạn người chơi là thanh nhỏ nên vẫn phân biệt được qua hình dạng); thân đạn tối hơn trước (~83% độ sáng tint).
 - Không có quái tinh anh trong code; phân cấp thường/tinh anh/boss mới áp dụng được cho thường, bắn xa và boss.
 - Trích palette PNG pack làng (script chỉ đọc): độ bão hòa trung bình 23–38%, độ sáng trung bình 26–33%; điểm lệch Grim Dark chính là cỏ/cây/bụi xanh bão hòa (`#284c14`, `#38681c`) và nước xanh sáng (`#284870`, `#6888b0`). Viền pack `#1c1c20`, đất `#402c1c`/`#685840`, đá `#58646c`.

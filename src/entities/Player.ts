@@ -31,6 +31,7 @@ import {
 } from '../combat/damage/resolveDamage';
 import {
   ARMOR_PEN_MAX,
+  ELEMENT_COLORS,
   POOL_SHARE_ELEMENTAL,
   POOL_SHARE_PHYSICAL,
   type DamageType,
@@ -1177,7 +1178,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
       this.energy -= toEnergy * this.energyPerDamage;
       remaining -= toEnergy;
-      spawnGlow(this.scene, this.x, this.y, 0xb48cff, 1.1, 180);
+      spawnGlow(this.scene, this.x, this.y, ELEMENT_COLORS.dark, 1.1, 180);
     }
 
     const hadArmor = this.armor > 0;

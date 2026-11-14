@@ -64,7 +64,7 @@ const CASTER = {
   body: '#5a2a7a',
   light: '#a75fd8',
   trim: '#e6b3ff',
-  glow: '#ff4fd8',
+  glow: '#c8385a',
   white: '#fff0ff',
 } as const;
 

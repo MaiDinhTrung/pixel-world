@@ -74,7 +74,7 @@ import {
   SHADOW_DASH_SPEED_BOOST_MS,
 } from '../config/combatConfig';
 import { TEXTURE_KEYS } from '../config/constants';
-import { ELEMENT_COLORS } from '../config/damageTypeConfig';
+import { ELEMENT_COLORS, ELEMENT_PALETTE } from '../config/damageTypeConfig';
 import { cssColor } from '../config/palette';
 import type { EnemyBase, HitInfo } from '../entities/EnemyBase';
 import { pureDamage, type DamagePart } from '../combat/damage/resolveDamage';
@@ -1739,8 +1739,8 @@ const VOID_RIFT: SkillDefinition = {
   unlockLevel: 11,
   cooldownMs: 22000,
   energyCost: 45,
-  color: 0xb35cff,
-  colorCss: '#b35cff',
+  color: ELEMENT_COLORS.dark,
+  colorCss: cssColor(ELEMENT_COLORS.dark),
   cast: (context) => {
     const stats = context.player.getStats();
     const bounds = context.scene.physics.world.bounds;
@@ -1756,8 +1756,8 @@ const VOID_RIFT: SkillDefinition = {
     );
     const damage = 3.5 * stats.damageMultiplier * context.power;
 
-    spawnRing(context.scene, targetX, targetY, 170, 0xb35cff, 900);
-    spawnGlow(context.scene, targetX, targetY, 0xb35cff, 1.8, 800);
+    spawnRing(context.scene, targetX, targetY, 170, ELEMENT_COLORS.dark, 900);
+    spawnGlow(context.scene, targetX, targetY, ELEMENT_COLORS.dark, 1.8, 800);
 
     for (let tick = 0; tick < 3; tick += 1) {
       context.scene.time.delayedCall(500 + tick * 450, () => {
@@ -1767,7 +1767,7 @@ const VOID_RIFT: SkillDefinition = {
           targetY,
           170,
           damage,
-          0xb35cff,
+          ELEMENT_COLORS.dark,
         );
 
         applySlow(hits, 0.35, 2600);
@@ -1776,8 +1776,8 @@ const VOID_RIFT: SkillDefinition = {
           applyStun(hits, 700);
         }
 
-        spawnRing(context.scene, targetX, targetY, 170, 0xb35cff, 300);
-        spawnBurst(context.scene, targetX, targetY, 0xb35cff, 12, 160);
+        spawnRing(context.scene, targetX, targetY, 170, ELEMENT_COLORS.dark, 300);
+        spawnBurst(context.scene, targetX, targetY, ELEMENT_COLORS.dark, 12, 160);
       });
     }
 
@@ -1792,10 +1792,10 @@ const VOID_RIFT: SkillDefinition = {
           targetY,
           170,
           damage * 2,
-          0xb35cff,
+          ELEMENT_COLORS.dark,
         );
         spawnRing(context.scene, targetX, targetY, 170, 0xffffff, 380);
-        spawnBurst(context.scene, targetX, targetY, 0xb35cff, 20, 220);
+        spawnBurst(context.scene, targetX, targetY, ELEMENT_COLORS.dark, 20, 220);
       });
     }
 
@@ -2387,11 +2387,11 @@ function shadowDanceSlash(
     }
 
     enemy.takeDamage(damage, x, y, skillHitInfo(context));
-    vfx.play('impact.hit', { x: enemy.x, y: enemy.y, tint: 0xc9a8ff });
+    vfx.play('impact.hit', { x: enemy.x, y: enemy.y, tint: ELEMENT_PALETTE.dark.core });
     hits += 1;
   }
 
-  vfx.play('slash.arc', { x, y, angle, scale: 1.1, tint: 0xb48cff });
+  vfx.play('slash.arc', { x, y, angle, scale: 1.1, tint: ELEMENT_COLORS.dark });
   vfx.play('burst.sparks', {
     x,
     y,

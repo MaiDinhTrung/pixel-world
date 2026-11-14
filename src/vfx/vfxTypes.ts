@@ -20,6 +20,8 @@ export interface VFXPlayOptions {
   /** Bán kính mong muốn (px) — dùng cho ring/crack. */
   radius?: number;
   tint?: number;
+  /** Độ trong suốt ban đầu của quầng sáng (glow.flash); mặc định 0.9. */
+  alpha?: number;
   durationMs?: number;
   /** Số particle (burst). */
   count?: number;
