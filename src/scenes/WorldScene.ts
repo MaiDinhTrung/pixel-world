@@ -219,6 +219,7 @@ import { AimIndicator } from '../ui/combat/AimIndicator';
 import type { SkillCastRequest } from '../input/SkillAimingController';
 import { isTouchDevice } from '../utils/device';
 import { isPerfOverlayEnabled, PerfOverlay } from '../utils/perfOverlay';
+import { createAtmosphere } from '../vfx/atmosphere';
 import { buildTown, type TownInfo } from '../world/town';
 import {
   spawnAfterimage,
@@ -457,6 +458,7 @@ export class WorldScene extends Phaser.Scene {
 
     this.obstacles = this.physics.add.staticGroup();
     this.town = buildTown(this, this.obstacles);
+    createAtmosphere(this);
 
     this.physics.world.setBounds(
       WALL_THICKNESS,

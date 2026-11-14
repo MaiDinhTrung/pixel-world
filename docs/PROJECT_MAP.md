@@ -83,6 +83,7 @@ Bản đồ nhanh `CharacterPanelScene.ts`: `renderSkills`, `renderStats`, `rend
 | `gemConfig.ts` | 7 loại ngọc (`GEM_INFO`: hút máu, sát thương, hút ki, phản đòn, sinh lực, giáp, né đòn), `MAX_SOCKETS`, `computeGemBonuses` |
 | `assets.ts` | Đường dẫn asset village, key texture player |
 | `palette.ts` | Màu hiệu ứng (đạn, heal…); màu nguyên tố nằm ở `ELEMENT_PALETTE` trong `damageTypeConfig.ts` |
+| `atmosphereConfig.ts` | Không khí Grim Dark (GĐ2): bật/tắt, ambient (màu + alpha thử nghiệm 0.25), vignette, ánh sáng điểm (`LIGHT_SOURCES`), tint môi trường (`GROUND_WASH`, `TINT_BY_ASSET`), depth các lớp. Dùng bởi `vfx/atmosphere.ts` và `world/town.ts` |
 | `controlsConfig.ts` | Bố cục nút Combat HUD (gốc + override theo nhân vật), joystick, ngưỡng ngắm, key lưu cấu hình. Được `CombatHUD`, `ControlLayoutStore`, `ControlLayoutEditor`, `VirtualJoystick`, `SkillAimingController`, `Hud` import. |
 
 ### Input & UI — `src/systems/`, `src/ui/`
@@ -106,6 +107,7 @@ Bản đồ nhanh `CharacterPanelScene.ts`: `renderSkills`, `renderStats`, `rend
 - `VFXPool.ts` — pool sprite có trần (`VFX_MAX_SPRITES`), không tạo/hủy khi chơi.
 - `vfxTextures.ts` — sinh texture/anim pixel (slash 6 frame, ring, crack, aura); gọi từ `PreloadScene`.
 - `vfxTypes.ts` — `VFXId`, `VFXPlayOptions`, `VFXHandle`. Số liệu: `config/vfxConfig.ts`.
+- `atmosphere.ts` — `createAtmosphere(scene)`: lớp ambient MULTIPLY + vignette (texture canvas sinh runtime), cố định theo camera, depth 2700–2705 (trên thực thể y-sort, dưới VFX 3000+). Gọi từ `WorldScene.create` sau `buildTown`. Cũng có `addPointLight` (vầng sáng ADD nhấp nháy cho campfire/lamppost), `applyEnvironmentTint` (tint nhân theo asset), `addGroundWash` (lớp rửa nền cỏ), gọi từ `world/town.ts`. Thử nhanh bằng URL: `?atmo=off` (tắt tất cả), `?ambient=0.35`, `?vignette=0.6`. Số liệu: `config/atmosphereConfig.ts`.
 - **Số sát thương (Damage Number):** `DamageNumberManager.ts` (pool BitmapText, tự `update` mỗi frame từ `WorldScene.update`, không tween; gộp đòn cùng mục tiêu+loại trong `DAMAGE_NUMBER_MERGE_MS`, DoT cộng dồn mỗi giây, trần slot, thu hồi theo ưu tiên DoT < thường < crit < người chơi), `damageNumberLayout.ts` (hàm thuần + test `damageNumberLayout.test.ts`), `damageNumberFont.ts` (font pixel 5×7 sinh runtime, 2 biến thể `normal`/`crit`, gọi từ `PreloadScene`). Số liệu/màu/bật tắt: `config/damageNumberConfig.ts` (`DAMAGE_NUMBERS_ENABLED`). Nguồn dữ liệu: `EnemyBase` phát `damage-dealt` (sát thương thực tế theo từng loại, đã sau giáp/kháng/dễ thương, cờ crit từ `hitModifier` → `HitModifierResult`) và `dot-damage`; `Player.onDamageTaken(type, giáp+HP mất)`; nối ở `WorldScene.watchEnemyHits` / `create`. Poison có màu riêng (không phải `DamageType`). Không đổi công thức sát thương.
 - Đã dùng trong 6 skill Warrior (`skills.ts`: `attachAura`, `slash.arc`, `ground.crack`). Mage/Assassin: dự kiến.
 

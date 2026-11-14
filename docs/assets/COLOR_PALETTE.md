@@ -4,7 +4,7 @@
 
 Tài liệu này chỉ ghi **quyết định đã được người dùng duyệt** (mục 1–3) và **quyết định đã duyệt nhưng chưa triển khai** (mục 4). Mọi đề xuất chưa duyệt nằm ở mục 5 và **không phải** quy chuẩn.
 
-Trạng thái: Giai đoạn 1 (chuẩn hóa bảng màu) đã triển khai và được người dùng kiểm tra trực quan, xác nhận ổn.
+Trạng thái: Giai đoạn 1 (chuẩn hóa bảng màu) và Giai đoạn 2 (ambient, vignette, ánh sáng, tint môi trường) đã triển khai và được người dùng duyệt. Giai đoạn 3–4 chưa bắt đầu.
 
 ## 1. Nguồn màu duy nhất (đã triển khai)
 
@@ -48,11 +48,23 @@ Có thể tinh chỉnh sau khi xem trong game; mọi thay đổi phải qua phê
   - Lý do: texture cũ nhuộm hồng làm đạn nguyên tố bị ám tím/đỏ khi nhân tint.
 - **Giữ nguyên** (đã quyết định chưa đổi): màu thân và viền sprite quái/boss (`enemySprites.ts`), glow quái/boss, `NEON.meleeEnemy`, `NEON.rangedEnemy`, `NEON.boss`, và màu telegraph nova của boss (`#9d6bff`, màu riêng, không gộp vào bảng nguyên tố).
 
-## 4. Đã duyệt về nguyên tắc, chưa triển khai (Giai đoạn 2–4)
+### Giai đoạn 2 — đã duyệt và triển khai (giá trị khởi đầu, chỉnh trong `src/config/atmosphereConfig.ts`)
+
+Người dùng đã duyệt các giá trị đang triển khai. Chúng là giá trị khởi đầu, có thể tinh chỉnh sau nhưng mọi thay đổi phải qua phê duyệt. Lưu ý: người dùng chỉ duyệt kết quả tổng thể sau khi xem trong game; các số bên dưới là giá trị trong code.
+
+- **Ambient (MULTIPLY, depth 2700):** màu `#20283a`, alpha `0.25`. Chỉ tăng alpha khi có căn cứ từ kiểm tra khả năng nhìn rõ nhân vật, quái, địa hình, gameplay.
+- **Vignette (depth 2705):** độ đen góc `0.5`, vùng giữa trong suốt tới `0.55` bán kính.
+- **Ánh sáng điểm (ADD nhấp nháy, depth 2702):** màu `#ff9a30`; `campfire` bán kính 190 px (alpha 0.5), `lamppost` ×6 bán kính 150 px (alpha 0.38). Chưa có ánh sáng cho lò rèn, quán.
+- **Tint môi trường (runtime, không sửa PNG):**
+  - Lớp rửa nền cỏ `#3c4636` alpha `0.38` (cỏ bão hòa 58% → khoảng 41%).
+  - Nước `#90a89c`, cây/bụi/cây trồng/bồn hoa `#d0a0c0`, cờ `#a89880`, sạp chợ `#b8a898`.
+  - `market-stall`, `flower-bed`, `oak-tree` vẫn giữ, chỉ chỉnh màu.
+- Thử nhanh bằng URL: `?atmo=off` (tắt tất cả), `?ambient=…`, `?vignette=…`.
+
+## 4. Đã duyệt về nguyên tắc, chưa triển khai (Giai đoạn 3–4)
 
 Chưa có thay đổi code nào cho các mục này.
 
-- **Giai đoạn 2:** ambient overlay, vignette, ánh sáng, tint môi trường. Ambient alpha **bắt đầu thử ở 0.25** (giá trị thử nghiệm, chỉ tăng khi có kết quả kiểm tra khả năng nhìn rõ nhân vật, quái, địa hình, gameplay).
 - **Giai đoạn 3:** sương mù, bố trí lại môi trường.
 - **Giai đoạn 4:** mở rộng asset.
 - **Biến đổi màu môi trường:** ưu tiên tint runtime; không sửa hay ghi đè PNG gốc; chỉ xét xuất lại PNG palette-shift sau khi phong cách đã được kiểm chứng.
@@ -69,7 +81,7 @@ Chỉ để tham khảo; không áp dụng khi chưa có phê duyệt.
 - `enemyBullet #b8243c` — **đã bị từ chối**, giữ `#d8402a`.
 - Gộp telegraph nova của boss vào `ELEMENT_PALETTE.dark.body` — **chưa áp dụng**.
 - Màu vũ khí trong `NEON` (sword, bow, scythe, dualBlades, staff) và `heal #7fc99a`.
-- Môi trường (hex ước lượng): ambient overlay `#20283a`, vầng sáng ấm `#ff9a30`, ánh lạnh `#5a88d0`, sương `#607050`, vignette, bảng màu cỏ/đất/đá/nước.
+- Môi trường (hex ước lượng, thuộc Giai đoạn 3 trở đi): ánh sáng lạnh `#5a88d0`, sương `#607050`, bảng màu cỏ/đất/đá/nước làm đích để tinh chỉnh thêm.
 - Hạ thêm độ bão hòa body của Fire/Ice/Lightning, thêm hệ Poison vào `ELEMENT_PALETTE`, tăng mật độ pixel nhân vật theo ảnh tham chiếu.
 - Đưa tint mặc định trong `VFXManager.ts`, `combat/*.ts`, `weaponArt.ts` về config.
 

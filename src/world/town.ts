@@ -4,6 +4,11 @@ import { VILLAGE } from '../config/assets';
 import { TEXTURE_KEYS, WORLD_HEIGHT, WORLD_WIDTH } from '../config/constants';
 import { VILLAGE_NPCS, VILLAGE_ZONE } from '../config/economyConfig';
 import { Npc } from '../entities/Npc';
+import {
+  addGroundWash,
+  addPointLight,
+  applyEnvironmentTint,
+} from '../vfx/atmosphere';
 import { buildVillageWall } from './castleWall';
 
 type VillageAssetKey = keyof typeof VILLAGE;
@@ -128,8 +133,8 @@ function addGround(
   width: number,
   height: number,
   depth: number,
-): void {
-  scene.add
+): Phaser.GameObjects.TileSprite {
+  return scene.add
     .tileSprite(x, y, width, height, key)
     .setOrigin(0, 0)
     .setDepth(depth);
@@ -177,6 +182,8 @@ function addBuilding(
     .setScale(spec.scale)
     .setDepth(spec.baseY);
 
+  applyEnvironmentTint(image, spec.asset);
+
   addShadow(scene, spec.x, spec.baseY - 2, image.displayWidth * 0.68, 14, 0.22, spec.baseY - 1);
 
   addObstacle(
@@ -195,11 +202,13 @@ function addTree(
   x: number,
   y: number,
 ): void {
-  scene.add
+  const tree = scene.add
     .image(x, y, VILLAGE.oak.key)
     .setOrigin(0.5, 1)
     .setScale(2)
     .setDepth(y);
+
+  applyEnvironmentTint(tree, 'oak');
 
   addShadow(scene, x, y - 2, 30, 10, 0.2, y - 1);
 
@@ -211,11 +220,14 @@ function addProp(
   obstacles: Phaser.Physics.Arcade.StaticGroup,
   spec: PropSpec,
 ): void {
-  scene.add
+  const prop = scene.add
     .image(spec.x, spec.y, VILLAGE[spec.asset].key)
     .setOrigin(0.5, 1)
     .setScale(spec.scale)
     .setDepth(spec.y);
+
+  applyEnvironmentTint(prop, spec.asset);
+  addPointLight(scene, spec.asset, spec.x, spec.y);
 
   if (spec.obstacleWidth && spec.obstacleHeight) {
     addObstacle(
@@ -260,6 +272,7 @@ export function buildTown(
 ): TownInfo {
   // Nền
   addGround(scene, VILLAGE.grass.key, 0, 0, WORLD_WIDTH, WORLD_HEIGHT, 0);
+  addGroundWash(scene);
 
   // Đường chính + quảng trường trung tâm
   addGround(
@@ -299,7 +312,10 @@ export function buildTown(
   addGround(scene, VILLAGE.dirt.key, 2400, 2000, 360, 48, 1);
 
   // Hồ nước + va chạm
-  addGround(scene, VILLAGE.water.key, 256, 320, 512, 384, 1);
+  applyEnvironmentTint(
+    addGround(scene, VILLAGE.water.key, 256, 320, 512, 384, 1),
+    'water',
+  );
   addObstacle(scene, obstacles, 512, 512, 500, 372);
 
   addGround(
@@ -335,11 +351,13 @@ export function buildTown(
 
   for (let row = 0; row < 4; row += 1) {
     for (let column = 0; column < 5; column += 1) {
-      scene.add
+      const crop = scene.add
         .image(2920 + column * 96, 1960 + row * 80, VILLAGE.crop.key)
         .setOrigin(0.5, 1)
         .setScale(2)
         .setDepth(1901 + row * 80);
+
+      applyEnvironmentTint(crop, 'crop');
     }
   }
 
