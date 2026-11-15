@@ -102,8 +102,9 @@ Trạng thái: `idle → loading → ready | degraded`. `degraded` = vẫn dùng
 
 Chia hai bước vì chạm nhiều file lớn dùng chung:
 
-- **B1 (không đổi hành vi chạy):** chỉ *thêm* module + test: kiểu `ItemInstance`, bộ sinh uid, `migrateV7ToV8`, normalizer v8, logic `revision` trong `ProgressStore`/`LocalStorageRepository` (chưa bật). `SAVE_VERSION` vẫn 7 ở runtime.
-- **B2 (bật lên):** `SAVE_VERSION=8`, nối scene sang uid, sao lưu v7, thông báo xung đột. Một Developer, sửa tuần tự `CharacterProgress → VillageService → WorldScene → CharacterPanelScene → VillageShopScene`. Danh sách file chính xác của B2 sẽ chốt bằng Grep khi lập brief.
+- **B1 (không đổi hành vi chạy) = chỉ THÊM file thuần, không sửa file `src/` nào đang chạy:** kiểu `ItemInstance`/`CharacterSaveV8`, bộ cấp uid, hàm migrate v7→8 (thuần), bộ chuyển ngược v8→dạng v7, bộ kiểm tra bất biến, toàn bộ test. Chi tiết §3.5. `SAVE_VERSION` vẫn 7 ở runtime, không ai import các module mới.
+- **B2 (bật lên):** đổi kiểu của `ProgressRepository`/`LocalStorageRepository`/`ProgressStore` sang v8 và thêm `revision` (kiểm xung đột, chỉ-đọc theo nhân vật, thông báo), sao lưu v7, `SAVE_VERSION=8`, nối scene sang uid. Một Developer, sửa tuần tự `CharacterProgress → ProgressStore/Repository → VillageService → WorldScene → CharacterPanelScene → VillageShopScene`. Danh sách file chính xác chốt bằng Grep khi lập brief B2 (Cổng 1 riêng).
+- **Điều chỉnh so với bản đầu (2026-11-15):** bản đầu để logic `revision` vào B1. Sau khi đọc lại `ProgressStore`/`LocalStorageRepository` (đều gõ kiểu `CharacterSave` v7, `get()` trả v7 cho `WorldScene`), thêm `revision` mà không đổi kiểu là phải ép kiểu tạm và kéo theo đổi chữ ký ở nhiều nơi. Nên dời `revision` sang B2, nơi kiểu v8 đổi một lần. Nhờ vậy B1 thật sự không chạm file nào đang chạy.
 
 ### 3.1 Cấu trúc v8
 
@@ -151,6 +152,72 @@ Quy tắc an toàn:
 ### 3.3 Revision (quyết định 5)
 
 `save(id, data, expectedRevision)`: `LocalStorageRepository` so `revision` đang nằm trong blob (cùng lượt đọc-sửa-ghi đồng bộ) với `expectedRevision`; lệch → trả `{ok:false, reason:'conflict'}`, **không ghi**. Store giữ nguyên cache, đặt nhân vật đó sang chỉ-đọc, ngừng ghi, phát sự kiện; `WorldScene` hiện toast "DỮ LIỆU ĐÃ THAY ĐỔI Ở NƠI KHÁC — TIẾN TRÌNH KHÔNG ĐƯỢC LƯU, HÃY TẢI LẠI TRANG". Không có đường tự ghi đè.
+
+### 3.5 B1 — Feature Specification chi tiết (Cổng 1)
+
+**Mục tiêu:** có sẵn, đã test kỹ, nhưng chưa nối vào game: kiểu dữ liệu v8, cách cấp uid, migration v7→8 bảo toàn 100%, bộ chuyển ngược, bộ kiểm bất biến. B2 chỉ còn việc nối dây.
+
+**Kiểu (đã đối chiếu `gearConfig`/`gemConfig`/`CharacterProgress`):**
+```ts
+// ItemInstance.ts
+type WeaponInstance = { uid: string; kind: 'weapon'; defId: WeaponId; level: 1 };
+type GearInstance   = { uid: string; kind: 'gear';   defId: GearId; level: number; sockets: (GemId | null)[] };
+type ItemInstance   = WeaponInstance | GearInstance;
+
+// saveV8.ts
+type CharacterSaveV8 =
+  Omit<CharacterSave, 'version'|'inventory'|'equipped'|'gearInventory'|'equippedGear'|'gearLevels'|'gearSockets'> & {
+    version: 8;
+    characterUid: string;                    // 'ch_<CharacterId>_1'
+    revision: number;                        // migration đặt 1; B2 mới dùng để kiểm xung đột
+    nextItemSeq: number;                     // số thứ tự kế tiếp cho uid
+    items: Record<string, ItemInstance>;
+    bag: string[];                           // uid; vũ khí rồi đến trang bị, giữ đúng thứ tự mảng v7
+    equippedWeapons: [string | null, string | null];
+    equippedGear: Record<GearSlot, string | null>;   // uid
+    migrationLog: string[];                  // rỗng nếu không có gì bị loại
+  };
+```
+- Luật uid (`ItemIds.ts`): `uid = (kind==='weapon' ? 'w' : 'g') + seq.toString(36)`, `seq` lấy từ `nextItemSeq` rồi tăng. Thuần, xác định, không `Math.random`/`Date`.
+- `GearInstance.sockets` luôn là mảng (mặc định `[]`), tối đa `MAX_SOCKETS`; `level` trong `[1, MAX_GEAR_LEVEL]`.
+- Bất biến (`validateSaveV8`, trả danh sách lỗi): uid duy nhất và khớp tiền tố/`kind` của item; mọi uid trong `bag`/`equipped*` có trong `items`, và mọi item nằm trong `bag` đúng một lần; mỗi `defId` xuất hiện ≤ 1 lần theo từng `kind` (quyết định 1); `equippedWeapons` toàn là `weapon` và hai ô không trùng uid; `equippedGear[slot]` là `gear` có `GEAR_INFO[defId].slot === slot`; `nextItemSeq` lớn hơn mọi seq đang dùng; `revision` là số nguyên ≥ 1; save JSON-hóa được (không `undefined`, `Map`, `NaN`).
+
+**Hàm (`saveMigration.ts`, không import Phaser/`window`/`localStorage`):**
+- `migrateV7ToV8(characterId, v7: CharacterSave): { ok: true; save: CharacterSaveV8 } | { ok: false; errors: string[] }`. Đầu vào là v7 **đã chuẩn hóa** (đầu ra của `normalizeCharacterSave`). Ánh xạ đúng bảng §3.2. Không đổi `level/xp/xpToNext/statPoints/stats/gold/gems/skillLoadout/extraSkills/skillLevels`. Kết quả luôn được `validateSaveV8` kiểm; lỗi → trả `ok:false`, không trả save dở.
+- `migrateToLatest(characterId, raw: unknown)`: `version ≥ 8` → kiểm bằng `validateSaveV8` (không đủ/hỏng → `ok:false`, **không tự sửa im lặng**); còn lại → `normalizeCharacterSave` rồi `migrateV7ToV8`. Chạy trên kết quả của chính nó cho kết quả y hệt (idempotent).
+- `v8ToV7Shape(save): CharacterSave` (`version: 7`): dựng lại `inventory`, `equipped`, `gearInventory`, `equippedGear`, `gearLevels` (chỉ ghi `level > 1`, đúng như `normalizeGearLevels`), `gearSockets` (chỉ ghi khi mảng không rỗng, đúng như `normalizeGearSockets`). Dùng cho test round-trip và làm cầu nối khi B2 chuyển dần từng chỗ. **Tính chất bắt buộc:** với mọi v7 chuẩn `s`, `v8ToV7Shape(migrate(s)) deepEqual s`.
+
+**File — B1:**
+- **ĐƯỢC SỬA (đã tồn tại):** `src/config/progressConfig.ts` (thêm hằng `SAVE_VERSION_V8 = 8`, `CHARACTER_UID_PREFIX = 'ch_'`, tiền tố uid `w`/`g`, có chú thích tiếng Việt), `docs/PROJECT_MAP.md`.
+- **ĐƯỢC TẠO (chưa tồn tại):** `src/progression/ItemInstance.ts`, `src/progression/ItemIds.ts`, `src/progression/ItemIds.test.ts`, `src/progression/saveV8.ts`, `src/progression/saveV8.test.ts`, `src/progression/saveMigration.ts`, `src/progression/saveMigration.test.ts`.
+- **Không được đụng:** mọi file khác trong `src/` (đặc biệt `CharacterProgress.ts`, `ProgressStore.ts`, `LocalStorageRepository.ts`, `ProgressRepository.ts`, mọi scene, `VillageService`). Module mới chỉ *import* từ chúng (kiểu `CharacterSave`, `normalizeCharacterSave`, `GEAR_INFO`…).
+
+**Acceptance Criteria — B1:**
+
+*Máy kiểm được:*
+1. `npm run build`, `npx tsc --noEmit`, `npm test` đạt.
+2. **Bất hoạt:** `git diff --name-status HEAD` chỉ có `M docs/PROJECT_MAP.md`, `M src/config/progressConfig.ts` và các file mới ở trên. Grep cho thấy không file nào ngoài các file mới và test **import** `ItemInstance|ItemIds|saveV8|saveMigration`. `SAVE_VERSION` trong `CharacterProgress.ts` vẫn 7.
+3. **Thuần:** các file mới không chứa `phaser`, `window`, `localStorage`, `Math.random`, `Date.`.
+4. `ItemIds.test.ts`: cấp uid tuần tự, đúng tiền tố, ổn định giữa hai lần chạy, không trùng, `seq` base36 (ví dụ vượt 35).
+5. `saveV8.test.ts`: mỗi bất biến ở trên có ít nhất một test *phát hiện được* vi phạm (uid trùng, `bag` thiếu/thừa uid, `defId` trùng, gear sai ô, vũ khí trùng ô, `nextItemSeq` thấp, `revision` 0, giá trị không JSON-hóa được) và một test save hợp lệ đi qua.
+6. `saveMigration.test.ts`:
+   - save mặc định của **từng** `CharacterId` (`createDefaultSave`) → migrate được, `validateSaveV8` sạch, round-trip bằng đúng v7 gốc;
+   - bảng toàn bộ `WeaponId` và `GearId` hợp lệ (mỗi id thành đúng một instance đúng `kind`);
+   - nhân vật đầy đủ: mọi ô trang bị, `gearLevels` > 1, lỗ ngọc có ngọc/lỗ trống, 2 vũ khí trang bị → mỗi trường khớp bảng ánh xạ, `bag` giữ đúng thứ tự mảng v7;
+   - `equipped`/`equippedGear` trỏ đúng instance; trường hợp một ô vũ khí `null`;
+   - đầu vào `raw` xấu: `undefined`, `null`, `{}`, chuỗi, mảng, `version` 0–6, trường sai kiểu, `gearSockets` của món không có trong túi → kết quả chính là cái `normalizeCharacterSave` hiện có cho ra, rồi migrate qua; không ném lỗi;
+   - idempotent: `migrateToLatest(migrateToLatest(x).save)` deepEqual lần một;
+   - tính xác định: hai lần migrate cùng đầu vào → deepEqual (uid không phụ thuộc thời gian);
+   - `JSON.parse(JSON.stringify(save))` deepEqual `save`;
+   - v8 hỏng (thiếu `items`, uid mồ côi, `version` 8 nhưng `revision` thiếu) → `ok:false` kèm `errors`, không throw, không tự sửa;
+   - round-trip tính chất `v8ToV7Shape(migrate(s)) deepEqual s` trên ít nhất 20 save v7 sinh theo bảng (kết hợp ô trang bị/level/lỗ ngọc khác nhau, xác định, không dùng random).
+7. Phạm vi theo WORKFLOW §6a; HEAD không đổi.
+
+*Chơi thật:* không có chức năng mới để chơi. Chỉ cần kiểm nhanh hồi quy "game vẫn mở và vào được bằng save cũ" vì không file chạy nào bị đổi.
+
+**Rủi ro:** thấp; không file đang chạy bị sửa trừ hằng số trong `progressConfig.ts`. Rủi ro thật là *sai ánh xạ nhưng test không bắt được*, nên tính chất round-trip trên save sinh theo bảng là tiêu chí cốt lõi. **Rollback:** `git revert`, không ảnh hưởng dữ liệu.
+
+**Việc B1 cố ý không làm (để B2):** `revision` thực sự (kiểm xung đột, chỉ-đọc, thông báo), sao lưu v7 vào `backup-v7`, ghi v8 xuống đĩa, đổi kiểu `get()/commit()`, nối `WorldScene`/`VillageService`/panel/shop, và việc uid thay `GearId` làm khóa `gearLevels`/`gearSockets`.
 
 ### 3.4 Acceptance Criteria (Gói B)
 

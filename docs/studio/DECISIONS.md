@@ -25,6 +25,14 @@ Mẫu mục:
 - **Trạng thái:** Đã chốt 5 lựa chọn; **Cổng 1 Gói A: đã duyệt (2026-11-15)**, kèm đồng ý commit riêng 3 file docs để cây tracked sạch trước baseline. **Gói A: đã triển khai, QA Đạt (build, tsc, 129/129 test, phạm vi sạch), người dùng đồng ý chốt (Cổng 2, 2026-11-15)**; người dùng không gửi báo cáo Đạt/Chưa đạt từng mục chơi thử nên các mục "phải chơi thật" (AC 7–10) chưa được xác nhận riêng. Bốn lỗi không chặn QA tìm thấy (`persistent` không về `true`; listener `onError` ném lỗi làm kẹt hàng đợi; test thiếu ca và một assertion luôn đúng; `PROJECT_MAP.md` thiếu 2 file test) **đã sửa ở vòng sau, QA Đạt (135/135 test), người dùng đồng ý chốt (2026-11-15)**. Giới hạn: hai tab cùng một nhân vật vẫn "ghi sau thắng" cho tới Gói B. Gói B, C: chờ Cổng 1 riêng.
 - **Tài liệu liên quan:** `docs/DATA_ARCHITECTURE.md` (Feature Specification đầy đủ, ánh xạ trường, migration, Acceptance Criteria)
 
+### 2026-11-15 — Gói B1: kiểu v8, uid, migration v7→8 (module thuần, chưa nối vào game)
+- **Quyết định (đề xuất, chờ duyệt Cổng 1):** B1 chỉ **thêm file thuần** (`ItemInstance`, `ItemIds`, `saveV8`, `saveMigration` + test), không sửa file chạy nào ngoài hằng số ở `progressConfig.ts`; `SAVE_VERSION` vẫn 7. `revision` (kiểm xung đột, chỉ-đọc, thông báo), sao lưu v7, ghi v8 xuống đĩa và nối scene dời sang **B2**.
+- **Lý do dời `revision`:** sau khi đọc lại code, `ProgressStore`/`LocalStorageRepository` gõ kiểu v7 và `get()` trả v7 cho `WorldScene`; thêm `revision` ở B1 phải ép kiểu tạm và đổi chữ ký nhiều nơi. Đổi kiểu một lần ở B2 gọn hơn và giữ B1 thật sự không đụng game.
+- **Phương án bị loại:** làm migration và `revision` cùng B1 (rủi ro ép kiểu); migrate trực tiếp từ JSON thô (bỏ qua `normalizeCharacterSave` đã kiểm chứng); `Math.random`/`Date` để sinh uid (mất tính xác định, khó test).
+- **Ảnh hưởng:** `src/config/progressConfig.ts`, `src/progression/{ItemInstance,ItemIds,saveV8,saveMigration}.ts` + 3 file test, `docs/PROJECT_MAP.md`. Tiêu chí then chốt: `v8ToV7Shape(migrate(s))` deepEqual `s` trên save mặc định của mọi nhân vật và ≥ 20 save sinh theo bảng.
+- **Trạng thái:** Đã duyệt Cổng 1 (2026-11-15), kèm đồng ý commit riêng docs; đang giao Developer. B2: Cổng 1 riêng.
+- **Tài liệu liên quan:** `docs/DATA_ARCHITECTURE.md` §3.5
+
 ### 2026-11-15 — Định hướng thiết kế tổng thể (Design Pillars)
 - **Quyết định (người dùng chỉ đạo):** Visual lấy cảm hứng Soul Knight (silhouette rõ, animation sinh động); World & Gameplay kiểu MMORPG 2D lấy cảm hứng Ngọc Rồng Online; Combat & Skills kiểu Action RPG lấy cảm hứng Diablo; Identity giữ Grim Dark Fantasy, IP/hình ảnh/kỹ năng nguyên bản, không sao chép tài sản game tham khảo.
 - **Lý do:** có một nguồn định hướng chung cho Designer và Developer.
