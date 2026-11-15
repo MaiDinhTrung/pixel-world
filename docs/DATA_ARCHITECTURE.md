@@ -219,6 +219,60 @@ type CharacterSaveV8 =
 
 **Việc B1 cố ý không làm (để B2):** `revision` thực sự (kiểm xung đột, chỉ-đọc, thông báo), sao lưu v7 vào `backup-v7`, ghi v8 xuống đĩa, đổi kiểu `get()/commit()`, nối `WorldScene`/`VillageService`/panel/shop, và việc uid thay `GearId` làm khóa `gearLevels`/`gearSockets`.
 
+### 3.6 B2 — Feature Specification chi tiết (Cổng 1)
+
+**Phát hiện khi đọc code (đổi cách làm so với §3 ban đầu):** toàn bộ runtime đều khóa theo `WeaponId`/`GearId`: `applyGearBonuses(equippedGear, gearLevels)`, `computeGemBonuses(equippedGear, sockets)`, `resolveGearLook(equippedGear)`, mọi method panel/shop gọi `WorldScene` bằng defId (`equipGearFromInventory(gearId)`, `getGearLevel(id)`, `getVillageInventory()`…), và `VillageHost` đều theo defId. Vì mỗi nhân vật có tối đa một món cho mỗi defId (quyết định 1), uid ↔ defId là 1:1. Nên **không cần** đổi 45+ điểm chạm trong `WorldScene`, `CharacterPanelScene`, `VillageShopScene`, `VillageService` để có save v8 với uid ổn định.
+
+**Cách làm: cầu nối ở biên lưu trữ.** `WorldScene` giữ nguyên cấu trúc nội bộ theo defId. Chỉ hai chỗ biên đổi: nạp (`v8 → dạng v7` bằng `v8ToV7Shape` có sẵn) và lưu (`dạng v7 → v8` bằng hàm mới `applyV7ShapeToV8`, giữ uid cũ theo `kind+defId`, cấp uid mới cho món mới, không bao giờ tái dùng uid đã bỏ). Hệ quả: đĩa lưu v8 (uid, `characterUid`, `revision`, sao lưu v7), game chạy y hệt. Gói C về sau chuyển runtime sang uid khi thật sự cần (nhiều bản trùng, giao dịch giữa người chơi).
+
+**Chia hai gói để rủi ro nằm gọn ở một chỗ:**
+- **B2a (thuần, chỉ thêm file):** `applyV7ShapeToV8` + test. Không sửa file chạy nào.
+- **B2b (bật lên, rủi ro chính):** repository/store v8 + revision + sao lưu + khóa xung đột + nối hai chỗ biên trong `WorldScene`.
+
+#### B2a — cầu nối thuần
+`saveBridge.ts` (không import Phaser/`window`/`localStorage`/`Math.random`/`Date`):
+`applyV7ShapeToV8(prev: CharacterSaveV8, next: CharacterSave /*dạng v7 do scene dựng*/): { ok: true; save: CharacterSaveV8 } | { ok: false; errors: string[] }`
+- `items`: với mỗi `defId` trong `next.inventory` (weapon) và `next.gearInventory` (gear): giữ uid của item cùng `kind+defId` trong `prev` nếu có; không thì cấp uid mới từ `prev.nextItemSeq` (tăng dần). Item không còn trong `next` bị bỏ, **uid của nó không bao giờ được cấp lại** (`nextItemSeq` chỉ tăng).
+- `level` gear = `clamp(next.gearLevels[id] ?? 1, 1, MAX_GEAR_LEVEL)`; `sockets` = `next.gearSockets[id]` cắt tối đa `MAX_SOCKETS` (sao chép sâu); socket của món không có trong túi bị bỏ.
+- `bag`: vũ khí rồi trang bị, đúng thứ tự `next`. `equippedWeapons`/`equippedGear`: map defId → uid; trỏ đồ không có trong túi → `ok:false` (không đoán, không âm thầm xóa).
+- Các trường còn lại (`level, xp, xpToNext, statPoints, stats, gold, gems, skillLoadout, extraSkills, skillLevels`) lấy từ `next`. Giữ `characterUid`, `revision`, `migrationLog` của `prev` (revision do store quản lý). Kết quả luôn qua `validateSaveV8`.
+- **File — B2a.** ĐƯỢC SỬA: `docs/PROJECT_MAP.md`. ĐƯỢC TẠO: `src/progression/saveBridge.ts`, `src/progression/saveBridge.test.ts`.
+- **AC — B2a:** build/tsc/test đạt; chỉ hai file mới + PROJECT_MAP đổi; không file nào ngoài test import `saveBridge`; file thuần (grep). Test bắt buộc: (1) `applyV7ShapeToV8(prev, v8ToV7Shape(prev))` deepEqual `prev` (uid, `nextItemSeq`, `bag` không đổi) trên save mặc định mọi `CharacterId` và ≥ 20 save sinh theo bảng của B1; (2) thêm đồ mới → uid mới = `nextItemSeq` cũ, `nextItemSeq` +1, các uid khác không đổi; (3) bỏ đồ rồi thêm lại cùng defId → uid **mới**, không tái dùng uid cũ; (4) đổi level/socket/thứ tự bag/ô trang bị phản ánh đúng, uid giữ nguyên; (5) `v8ToV7Shape(apply(prev, s))` deepEqual `s` với mọi `s` hợp lệ (có đồ thêm/bớt); (6) ô trang bị trỏ đồ không có trong túi, `defId` trùng, `defId` sai → `ok:false` + `errors`, không throw, không sửa `prev`; (7) idempotent: `apply(apply(prev,s).save, s)` deepEqual `apply(prev,s).save`; (8) JSON round-trip ổn định.
+
+#### B2b — bật v8 thật
+**Kiểu & hợp đồng:**
+- `ProgressRepository.save(id, data: CharacterSaveV8, expectedRevision: number): Promise<SaveResult>`; `loadAll()` vẫn trả dữ liệu thô. `ProgressStore.get/getAll/commit` đổi sang `CharacterSaveV8` (thêm `ProgressDataV8` ở `saveV8.ts`).
+- **Hydrate:** mỗi nhân vật qua `migrateToLatest(id, raw)`. Ghi nhớ `diskRevision[id]` = `raw.revision` nếu là số nguyên, ngược lại **0** (v7 trên đĩa chưa có revision). **Hydrate không ghi gì xuống đĩa** (migration lười: chỉ ghi ở lần `commit` đầu tiên của nhân vật đó; ai chỉ mở xem thì đĩa vẫn v7).
+- **Khóa chỉ-đọc theo nhân vật** (`locked`): đặt khi (a) `migrateToLatest` trả `ok:false` (v8 hỏng/`version ≥ 9`/`characterUid` không khớp `makeCharacterUid(id)` — kiểm mới, theo ghi chú QA B1), (b) ghi trả `conflict`, (c) ghi trả `readonly`. Nhân vật `locked`: `get` vẫn trả cache (v8 mặc định cho trường hợp (a), để màn chọn vẫn hiển thị), `commit` cập nhật cache nhưng **không bao giờ ghi**, phát lỗi một lần. Không có đường tự ghi đè dữ liệu đã có trên đĩa.
+- **Revision:** `commit` đặt `revision = cache.revision + 1` vào bản đưa vào cache/hàng đợi. Lúc `pump` ghi, `expectedRevision = diskRevision[id]`; thành công → `diskRevision[id] = save.revision`; lỗi `io` → giữ nguyên (thử lại như Gói A); `conflict` → `locked`.
+- **`LocalStorageRepository.save`** (vẫn đồng bộ trong một lượt đọc-sửa-ghi): (1) đọc `stored = blob[id]`; `storedRev` = số nguyên `revision` của nó, ngược lại 0; khác `expectedRevision` → `{ok:false, reason:'conflict'}`, **không ghi gì**; (2) nếu `stored` là v7 (chưa có `revision`/`version < 8`): sao lưu trước; **sao lưu = chuỗi blob nguyên văn vừa `getItem`**, ghi vào `pixel-world:progress:v1:backup-v7` chỉ khi khóa đó chưa tồn tại; `setItem` sao lưu ném → `{ok:false, reason:'readonly'}`, **không ghi v8**; (3) mới `blob[id] = data` và `setItem`. Sao lưu **không bao giờ bị ghi đè hay xóa**; các khóa nhân vật khác giữ nguyên văn.
+- **`WorldScene.ts` — chỉ ba chỗ** (file lớn: Grep rồi đọc theo offset/limit): (1) nạp ở `create` (~dòng 695): `const save = v8ToV7Shape(progressStore.get(this.characterId))`, phần còn lại của hàm đọc `save.*` như cũ; (2) `saveProgress()` (~2476): dựng object dạng v7 y như hiện nay → `applyV7ShapeToV8(progressStore.get(id), shape)` → `ok` thì `progressStore.commit`, `!ok` thì `console.error` + không ghi (và không ném); (3) đăng ký `progressStore.onError` trong `create`, hủy ở sự kiện shutdown scene; khi lỗi `conflict`/`readonly` của nhân vật đang chơi → `hud.showToast('DỮ LIỆU ĐÃ THAY ĐỔI Ở NƠI KHÁC — TIẾN TRÌNH KHÔNG ĐƯỢC LƯU. HÃY TẢI LẠI TRANG', màu cảnh báo)` một lần mỗi lần vào scene.
+- `CharacterSelectScene.ts`: chỉ đổi kiểu `ProgressData` → `ProgressDataV8` (đọc `level`/`statPoints` như cũ).
+- **Không đụng:** `VillageService`, `CharacterPanelScene`, `VillageShopScene`, `BossArenaScene`, `Hud`, `CharacterProgress.ts` (giữ làm bộ chuẩn hóa v7 + `SAVE_VERSION`/kiểu `CharacterSave` dạng cầu nối).
+- **File — B2b.** ĐƯỢC SỬA: `src/progression/ProgressRepository.ts`, `src/progression/LocalStorageRepository.ts`, `src/progression/LocalStorageRepository.test.ts`, `src/progression/ProgressStore.ts`, `src/progression/ProgressStore.test.ts`, `src/progression/saveV8.ts` (thêm `ProgressDataV8`), `src/config/progressConfig.ts` (`PROGRESS_BACKUP_V7_KEY`), `src/scenes/WorldScene.ts`, `src/scenes/CharacterSelectScene.ts`, `docs/PROJECT_MAP.md`. ĐƯỢC TẠO: không có.
+
+**AC — B2b (máy kiểm được):**
+1. build/tsc/test đạt; HEAD đúng baseline; chỉ chạm danh sách trên.
+2. Test `LocalStorageRepository` mới: `expectedRevision` khớp thì ghi; lệch → `conflict`, blob không đổi một byte; v7 trên đĩa + ghi v8 đầu tiên → `backup-v7` bằng đúng chuỗi blob trước đó (byte-giống), nhân vật khác trong blob không đổi; ghi lần hai không đổi `backup-v7`; `setItem` sao lưu ném → `readonly` và blob vẫn là v7; nhân vật thứ hai (v7) được ghi sau đó **không** ghi đè sao lưu; v8 trên đĩa → không tạo sao lưu mới.
+3. Test `ProgressStore` mới: hydrate v7 → cache v8 (`revision 1`), **không có `save` nào được gọi, không có sao lưu**; `commit` đầu → gọi `save(..., expected = 0)`, `revision` trong dữ liệu ghi = 2; nhiều `commit` gộp → `expected` đúng, `revision` tăng đơn điệu; `io` lỗi rồi thử lại không đổi `expected`; hai store dùng chung Storage giả: store B `commit` sau khi A đã ghi → `conflict`, B `locked`, Storage chỉ còn dữ liệu của A, B phát lỗi đúng một lần, `commit` tiếp theo của B không ghi; v8 hỏng/`characterUid` không khớp/`version 9` → `locked`, **đĩa không bị ghi**, `get` vẫn trả cache hiển thị được; nhân vật khác vẫn ghi bình thường.
+4. Grep: `localStorage` vẫn chỉ ở `LocalStorageRepository.ts` (+ getter lười trong `ProgressStore.ts`); không còn gọi `repo.save(` thiếu `expectedRevision`.
+5. `git diff` của `WorldScene.ts` chỉ gồm 3 chỗ trên (không đổi logic equip/shop/panel/boss).
+
+**AC — B2b (phải chơi thật, bằng save v7 thật; sao chép giá trị khóa `pixel-world:progress:v1` ra file TRƯỚC khi chạy):**
+6. Mở game, chọn nhân vật: level, túi đồ, trang bị, level đồ, lỗ ngọc, vàng, ngọc, kỹ năng giống hệt trước (so ảnh). Lúc chỉ mở xem, DevTools: khóa chính **vẫn v7**, chưa có `backup-v7`.
+7. Thay đổi một thứ (mua đồ/nâng cấp/nhặt đồ), rồi xem DevTools: `backup-v7` có và **bằng đúng chuỗi đã sao chép**; nhân vật đã chơi là `version 8` có `items/bag/characterUid/revision`; nhân vật chưa mở vẫn v7.
+8. Mọi luồng hoạt động như trước: mua/bán, nâng cấp, đục lỗ, khảm/tháo ngọc, vứt đồ, đổi vũ khí, mặc/tháo trang bị, nhặt hòm vũ khí, boss rơi đồ (level đồ tăng), qua cổng Boss Arena và về, chết rồi chơi lại, F5 và đóng-tab-ngay đều giữ nguyên.
+9. Xung đột: mở **hai tab** cùng nhân vật; ở tab 2 thay đổi và để lưu; về tab 1 thay đổi → thấy thông báo "không được lưu, hãy tải lại"; tải lại tab 1 → dữ liệu của tab 2 còn nguyên, không bị ghi đè.
+10. Mất `localStorage` (ẩn danh/chặn): vẫn vào game được như Gói A.
+
+**Rủi ro và giới hạn (nói thẳng):**
+- **Không hạ cấp được bằng code:** nếu `git revert` sau khi một nhân vật đã thành v8, code cũ đọc v8 như "thiếu trường" và nhân vật trông như bị reset (dữ liệu v8 vẫn trên đĩa, `backup-v7` vẫn còn). Cách khôi phục: chép giá trị `backup-v7` vào lại khóa chính (mất tiến trình sau lúc chuyển). Vì vậy checklist chơi thật 6–9 phải xong trước khi chốt, và người dùng sao chép save trước khi thử.
+- Tab bị bỏ quên ở menu hàng giờ trong khi tab khác chơi sẽ vào World với cache cũ rồi bị `conflict` ở lần lưu đầu (không mất dữ liệu, nhưng hiển thị dữ liệu cũ). Chấp nhận ở bước này.
+- Phần `revision` mới chỉ bảo vệ "ghi sau thắng"; chưa phải đồng bộ nhiều thiết bị (việc của server).
+- Uid hiện chưa được game dùng làm khóa (runtime vẫn theo defId); giá trị là định danh ổn định trên đĩa và nền cho Gói C.
+
+**Quyết định cần bạn xác nhận khi duyệt:** (1) cầu nối ở biên thay vì đổi runtime sang uid (khuyến nghị: ít điểm chạm, bảo toàn hành vi); (2) migration lười (chỉ ghi ở lần lưu đầu của từng nhân vật); (3) chấp nhận giới hạn "không hạ cấp được bằng code".
+
 ### 3.4 Acceptance Criteria (Gói B)
 
 1. Build/tsc/test đạt. File `migrations.test.ts` gồm tối thiểu: (a) save v7 đầy đủ → đủ mọi trường theo bảng; kiểm ngược v8 → "dạng v7" bằng đúng v7 chuẩn ban đầu (round-trip); (b) mọi `WeaponId` và `GearId` hợp lệ; (c) `equipped`/`equippedGear` trỏ đúng instance, có trường hợp trỏ đồ không có trong túi; (d) level đồ >1 và socket có ngọc được giữ; (e) save thiếu trường, v1–v6, `{}`, null, sai kiểu; (f) idempotent; (g) uid không trùng và ổn định giữa hai lần chạy; (h) sao lưu v7 được tạo đúng một lần, không bị ghi đè, byte-giống blob gốc; (i) lỗi sao lưu → không ghi v8; (j) lỗi validate → giữ v7; (k) `revision` tăng đúng, `expectedRevision` lệch → từ chối và không đổi blob; (l) trong một tab, hai lần `commit` liên tiếp không tự gây conflict.
