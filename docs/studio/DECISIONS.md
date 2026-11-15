@@ -22,7 +22,7 @@ Mẫu mục:
 - **Lý do:** tách I/O khỏi scene, chuẩn bị server-authoritative với chi phí nhỏ nhất; làm ID/revision sớm vì càng muộn càng tốn.
 - **Phương án bị loại:** tái cấu trúc toàn dự án một lượt; mỗi lần nhặt là một instance riêng (đổi thiết kế túi đồ và cân bằng); wrapper `@deprecated` cho hàm save cũ (import vòng với store; chỉ 3 nơi gọi); debounce ghi (mất hợp đồng "ghi đồng bộ khi gọi", rủi ro mất dữ liệu khi đóng tab); `registry` làm nơi giữ store (thêm tầng gián tiếp, không cần).
 - **Ảnh hưởng:** Gói A: `src/progression/{CharacterProgress,ProgressRepository,LocalStorageRepository,ProgressStore}.ts` (+ 2 test), `src/config/progressConfig.ts`, `WorldScene.ts`, `CharacterSelectScene.ts`, `PreloadScene.ts`, `docs/PROJECT_MAP.md`. Gói B/C: danh sách chốt khi lập brief. Giới hạn đã biết của A: hai tab cùng một nhân vật vẫn "ghi sau thắng" cho tới khi có `revision` ở B.
-- **Trạng thái:** Đã chốt 5 lựa chọn; **chờ duyệt Cổng 1 bản thiết kế cuối của Gói A** (chưa gọi Developer, chưa code, chưa commit). Gói B, C: chờ Gói A nghiệm thu và Cổng 1 riêng.
+- **Trạng thái:** Đã chốt 5 lựa chọn; **Cổng 1 Gói A: đã duyệt (2026-11-15)**, kèm đồng ý commit riêng 3 file docs để cây tracked sạch trước baseline. Gói A đang giao Developer (chờ QA và chơi thử). Gói B, C: chờ Gói A nghiệm thu và Cổng 1 riêng.
 - **Tài liệu liên quan:** `docs/DATA_ARCHITECTURE.md` (Feature Specification đầy đủ, ánh xạ trường, migration, Acceptance Criteria)
 
 ### 2026-11-15 — Định hướng thiết kế tổng thể (Design Pillars)
