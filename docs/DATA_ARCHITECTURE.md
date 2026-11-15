@@ -283,17 +283,121 @@ type CharacterSaveV8 =
 
 ---
 
-## 4. GÓI C — PlayerState thuần (chia 5 bước, mỗi bước một lần giao + QA)
+## 4. GÓI C — PlayerState thuần: Feature Specification (Cổng 1)
 
-`src/systems/PlayerState.ts` (không import Phaser, cùng kiểu `VillageService`). Phạm vi tối thiểu: `items/bag/equipped*`, `statPoints`, `stats`, `skillLevels`, `gold/gems` (nhận từ `VillageService` ở bước 3), `fromSave()/toSave()`.
+Trạng thái: **chờ duyệt Cổng 1** (2026-11-15). Thay thế bản phác thảo cũ của mục này. Chưa code.
 
-1. Tạo `PlayerState` từ save; `WorldScene` giữ nhưng chưa dùng; test `fromSave/toSave` round-trip.
-2. Chuyển thao tác kho đồ (equip/unequip/discard/add, tương ứng `WorldScene` ~2850–2930, ~1549–1560, ~3795–3820).
-3. `VillageHost` gọi `PlayerState`.
-4. Chuyển `statPoints`, `stats`, `skillLevels`.
-5. `saveProgress()` = `progressStore.commit(id, playerState.toSave(...))`.
+### 4.1 Hiện trạng đã xác minh (Lead đọc `WorldScene.ts`, `StatSheet.ts`, `CharacterProgress.ts`)
 
-Cố ý **để lại** `WorldScene`: HP/giáp/EN, sprite, input, `LevelSystem`/XP (gắn cảnh), `RunSession`, tính chỉ số hiệu dụng. Tiêu chí chung: test thuần cho từng thao tác + hồi quy chơi thật toàn bộ luồng túi đồ/làng sau mỗi bước. Rollback: mỗi bước một commit. Danh sách file chính xác lập khi tới gói C.
+- Trạng thái người chơi nằm rải trong `WorldScene` thành 11 trường: `levelSystem`, `statSheet`, `statPoints`, `statsAllocation`, `inventory`, `equipped`, `gearInventory`, `equippedGear`, `gearLevels`, `skillLevels`, `skillLoadout`/`extraLoadout`; vàng, ngọc, lỗ ngọc nằm trong `VillageService`. Có 52 lần tham chiếu nhóm `statPoints/statsAllocation/skillLevels/skillLoadout/extraLoadout/levelSystem/statSheet` và ~45 lần nhóm kho đồ.
+- Mỗi thao tác trộn **luật** với **hiệu ứng scene**: `equipWeaponFromInventory` vừa kiểm luật (lớp có dùng được không, đã ở ô kia chưa) vừa hủy/tạo đối tượng vũ khí, bật toast, gọi `saveProgress`; `discardGear` vừa kiểm "đang mặc", xóa level, gọi `village.releaseGear`; `grantBossLoot` vừa tính level thưởng vừa vẽ hiệu ứng. Vì dính Phaser nên **luật chưa có test nào**.
+- Các hàm config nhận cấu trúc theo defId: `applyGearBonuses(equippedGear, gearLevels)`, `computeGemBonuses(equippedGear, sockets)`, `resolveGearLook(equippedGear)`; mọi method panel/shop khóa theo `WeaponId`/`GearId`. `LevelSystem` và `StatSheet` đã là lớp thuần; `skillTreeRules` đã là hàm thuần.
+- Sau B2b, trên đĩa đã là v8 (uid), runtime vẫn theo defId qua cầu nối `v8ToV7Shape`/`applyV7ShapeToV8` ở hai chỗ trong `WorldScene`.
+
+### 4.2 Mục tiêu và nguyên tắc
+
+Gom **luật** thay đổi trạng thái người chơi vào một lớp thuần `PlayerState` có test; `WorldScene` chỉ còn **hiệu ứng** (tạo/hủy vũ khí, toast, `applyPlayerStatistics`, `saveProgress`). Mỗi thao tác trả kết quả `{ ok: true, … } | { ok: false, reason }` (không toast, không Phaser). Đây cũng chính là dạng "lệnh có kết quả" mà server-authoritative cần về sau.
+
+Nguyên tắc:
+1. **API hướng defId** (giữ `WeaponId`/`GearId` cho panel/shop/`VillageHost`); uid chỉ là định danh bên trong và trên đĩa. Chuyển API sang uid chỉ làm khi thật sự có nhiều bản trùng hoặc giao dịch.
+2. **Mỗi trường chỉ có một chủ tại mọi thời điểm** (trường trong scene cho tới khi chuyển, sau đó thuộc `PlayerState`). Không bao giờ phản chiếu hai bản.
+3. Hành vi người chơi thấy **không đổi một chữ**: nội dung toast, thứ tự kiểm luật, điều kiện từ chối giữ nguyên.
+4. Mỗi gói là một lần giao + QA + chơi thử + commit riêng; gói sau chỉ bắt đầu khi gói trước đã chốt. `WorldScene.ts` sửa **tuần tự**, không song song.
+
+**Không nằm trong Gói C (cố ý để lại):** `VillageService` (vàng, ngọc, lỗ ngọc; vẫn do nó giữ, `PlayerState` chỉ nhận ảnh chụp lúc lưu); HP/giáp/EN, sprite, input, `RunSession`, tính chỉ số hiệu dụng (`applyPlayerStatistics`); đổi API sang uid; `CharacterPanelScene`, `VillageShopScene`, `BossArenaScene`, `Hud` (không đụng).
+
+### 4.3 Cấu trúc và giao diện
+
+```ts
+// src/systems/PlayerState.ts — không import Phaser/window; tái dùng ItemIds, saveV8, StatSheet, LevelSystem, skillTreeRules
+interface PlayerRules {
+  allowedWeapons: readonly WeaponId[];
+  startingWeapons: readonly [WeaponId, WeaponId];
+  startingGear: Readonly<Record<GearSlot, GearId>>;
+}
+type Fail<R extends string> = { ok: false; reason: R };
+
+class PlayerState {
+  static fromSave(save: CharacterSaveV8, rules: PlayerRules): PlayerState;
+  // Chuẩn hóa như WorldScene.create hiện tại: lọc vũ khí ngoài lớp, thêm vũ khí khởi đầu,
+  // chọn lại ô vũ khí (cùng thuật toán dòng ~725–735), giữ uid trên đĩa.
+
+  // --- Gói C1/C2a: vũ khí ---
+  ownsWeapon(id): boolean;  getWeapons(): WeaponId[];  getEquippedWeapons(): [WeaponId | null, WeaponId | null];
+  addWeapon(id): { ok: true } | Fail<'owned'>;
+  removeWeapon(id): { ok: true } | Fail<'not_owned'>;                      // bán ở làng (điều kiện do VillageService kiểm)
+  equipWeapon(id, slot): { ok: true } | Fail<'not_allowed' | 'not_owned' | 'in_other_slot'>;   // đúng thứ tự kiểm như hiện nay
+  unequipWeapon(slot): { ok: true; id: WeaponId } | Fail<'empty'>;
+  discardWeapon(id): { ok: true } | Fail<'not_owned' | 'equipped'>;
+
+  // --- Gói C2b: trang bị + level ---
+  ownsGear(id): boolean;  getGear(): GearId[];
+  getEquippedGear(): Record<GearSlot, GearId | null>;  getGearLevels(): GearLevels;   // dạng cho applyGearBonuses/resolveGearLook
+  getGearLevel(id): number;  setGearLevel(id, level): void;                          // kẹp [1, MAX_GEAR_LEVEL]
+  addGear(id): { ok: true } | Fail<'owned'>;
+  rewardGear(id, tier): { ok: true; level: number };                                // luật grantBossLoot: lên max(tier+1, cấp hiện tại+1), thêm nếu chưa có
+  removeGear(id): { ok: true } | Fail<'not_owned'>;                                  // xóa cả level
+  equipGear(id): { ok: true; slot: GearSlot } | Fail<'not_owned' | 'already_equipped'>;
+  unequipGear(slot): { ok: true; id: GearId } | Fail<'empty'>;
+  discardGear(id): { ok: true } | Fail<'not_owned' | 'equipped'>;
+
+  // --- Gói C3: tiến trình ---
+  getStatPoints(): number;  addStatPoints(n): void;  spendStatPoint(statId): { ok: true } | Fail<'no_points'>;
+  getAllocation(): StatAllocation;  getStatSheet(): StatSheet;                       // StatSheet và LevelSystem do PlayerState giữ
+  getLevelSystem(): LevelSystem;
+  getSkillLevels(): SkillLevels;  learnSkillNode(id, characterId): …;  respecSkills(): …;   // dùng skillTreeRules sẵn có
+  getSlotIds(): (SkillId | null)[];  assignSkill(skillId, slot): { ok: true } | Fail<…>;  clearSkillSlot(slot): …;
+
+  // --- lưu ---
+  toSave(economy: { gold: number; gems: GemCounts; sockets: GearSockets }, base: CharacterSaveV8): CharacterSaveV8;
+}
+```
+- Lý do giữ `economy` ở ngoài: `VillageService` vẫn là chủ vàng/ngọc/lỗ ngọc; `toSave` ghép ảnh chụp của nó vào `sockets` của từng instance gear. Tách hẳn kinh tế là một gói riêng về sau, không làm lẫn ở đây.
+- uid: `PlayerState` cấp uid mới bằng `allocateItemUid` từ `nextItemSeq`; uid đã bỏ không tái dùng (như cầu nối hiện nay). Trong lúc `saveProgress` còn dùng cầu nối (tới C4), uid trong bộ nhớ có thể lệch uid cầu nối cấp; **không ai đọc uid này ở runtime** nên vô hại, và C4 hợp nhất.
+- Phần "kết quả → toast" (bảng ánh xạ lý do → câu chữ hiện nay) nằm ở `WorldScene`, giữ y nguyên chuỗi.
+
+### 4.4 Chia gói
+
+| Gói | Nội dung | File ĐƯỢC SỬA | File ĐƯỢC TẠO | Rủi ro |
+|---|---|---|---|---|
+| **C1** | `PlayerState` phần kho đồ + trang bị + level + `toSave/fromSave` + toàn bộ test. **Chỉ thêm file**, không ai import. | `docs/PROJECT_MAP.md` | `src/systems/PlayerState.ts`, `src/systems/PlayerState.test.ts` | Thấp |
+| **C2a** | Nối **vũ khí** vào `WorldScene`: nạp (dòng ~717–735), `weapons` khởi tạo từ ô trang bị, `equipWeaponFromInventory`/`unequipWeapon`/`discardWeapon`, `getInventoryPanelState`/`getEquipmentPanelState`/`getVillageInventory` (phần vũ khí), host `ownsWeapon/isWeaponEquipped/addWeapon/removeWeapon`, hòm vũ khí, `saveProgress` đọc phần vũ khí từ `PlayerState`. Gỡ trường `inventory`, `equipped`. | `src/scenes/WorldScene.ts`, `docs/PROJECT_MAP.md` | — | Trung bình |
+| **C2b** | Nối **trang bị + level** : nạp, `grantBossLoot`, `refreshHeroLook`/`applyPlayerStatistics` (đọc `getEquippedGear/getGearLevels`), `equipGear/unequipGear/discardGear`, `getGearLevel`, panel/shop (phần trang bị), host gear, hòm trang bị, `saveProgress`. Gỡ `gearInventory`, `equippedGear`, `gearLevels`. | `src/scenes/WorldScene.ts`, `docs/PROJECT_MAP.md` | — | Trung bình–cao |
+| **C3** | Nối **tiến trình**: `statPoints`, `statsAllocation`/`statSheet`, `levelSystem`, `skillLevels`, `skillLoadout`/`extraLoadout`: `addStatPoint`, `grantExperience`, `learnSkillNode`, `respecSkills`, `assignSkillToSlot`, `clearSkillSlot`, `getStatPanelState`, `getSkillTreePanelState`, `getSkillPointSummary`. Thêm phần tương ứng vào `PlayerState` + test trước. | `src/systems/PlayerState.ts`, `src/systems/PlayerState.test.ts`, `src/scenes/WorldScene.ts`, `docs/PROJECT_MAP.md` | — | Trung bình |
+| **C4** | **Một nguồn lưu**: `saveProgress = commit(id, playerState.toSave(economy, base))`; nạp = `PlayerState.fromSave`; bỏ `v8ToV7Shape`/`applyV7ShapeToV8` khỏi `WorldScene` (hai module giữ lại làm công cụ khôi phục và test, đánh dấu trong PROJECT_MAP). | `src/scenes/WorldScene.ts`, `docs/PROJECT_MAP.md` | — | Trung bình |
+
+(Mỗi gói C2a–C4 có hồi quy chơi thật của vùng nó chạm; bảng file chính xác của từng gói được chốt bằng Grep lúc lập brief, vì số dòng sẽ dịch sau mỗi gói.)
+
+### 4.5 Acceptance Criteria
+
+**C1 (máy kiểm được):**
+1. build/tsc/test đạt; `git diff` chỉ `PROJECT_MAP.md` + hai file mới; Grep: không file nào ngoài test import `PlayerState`; file thuần (không `phaser|window|localStorage|Math.random|Date.`).
+2. Ma trận luật, mỗi dòng một test, **khớp hành vi hiện tại của `WorldScene`**: `equipWeapon` kiểm `not_allowed` trước, rồi `not_owned`, rồi `in_other_slot`; `discardWeapon`/`discardGear` từ chối khi đang mặc (`equipped`); `unequipWeapon` ô trống → `empty`; `addWeapon`/`addGear` trùng → `owned` (hòm: "ĐÃ SỞ HỮU"); `rewardGear` lên `max(tier+1, cấp hiện tại+1)` kẹp `MAX_GEAR_LEVEL` và thêm món nếu chưa có; `removeGear`/`discardGear` xóa cả level; `equipGear` đúng ô theo `GEAR_INFO[id].slot`; `setGearLevel` kẹp `[1, MAX]`.
+3. `fromSave` sao đúng thuật toán nạp hiện tại: lọc vũ khí ngoài lớp, thêm vũ khí khởi đầu còn thiếu, chọn ô vũ khí (gồm ca ô 1 bị lọc, ô 2 trùng ô 1, ô 2 là vũ khí khởi đầu đầu tiên) — mỗi ca một test, với dữ liệu lấy từ `CHARACTERS` thật.
+4. **Tính chất đối chiếu với cầu nối:** với chuỗi thao tác xác định (≥ 30 chuỗi, tổ hợp equip/unequip/add/discard/reward/setLevel) trên save mặc định của mọi `CharacterId`: `v8ToV7Shape(state.toSave(...))` deepEqual dạng v7 mà `WorldScene` cũ sẽ dựng (mô hình tham chiếu viết trong test từ đúng các phép toán hiện tại trên mảng/Record) — chứng minh `PlayerState` tương đương logic cũ. `toSave(fromSave(x))` deepEqual `x` cho `x` nhất quán; idempotent; uid xác định và không tái dùng.
+5. Mọi kết quả `ok:false` không đổi trạng thái (so snapshot trước/sau); không throw với id sai.
+
+**C2a/C2b/C3/C4 (máy kiểm được, chung):** build/tsc/test đạt; baseline + phạm vi theo §6a; Grep chứng minh trường tương ứng đã **biến mất** khỏi `WorldScene` (`this.inventory`, `this.equipped`, … theo từng gói) và không còn chủ thứ hai; so `git diff` các chuỗi toast: **mọi chuỗi hiển thị cũ vẫn còn đúng nguyên văn** (QA liệt kê các `showToast(` bị đổi, kỳ vọng rỗng, ngoại lệ phải báo); `getInventoryPanelState`/`getEquipmentPanelState`/`getVillageInventory`/`getStatPanelState` trả đúng kiểu cũ (không đổi chữ ký public để panel/shop khỏi sửa); `CharacterPanelScene`, `VillageShopScene`, `VillageService`, `BossArenaScene`, `Hud` không có trong diff.
+
+**Chơi thật (bằng save v8 hiện có, sao chép khóa `pixel-world:progress:v1` trước khi thử):**
+- C2a: đổi vũ khí hai ô, tháo, vứt (đang cầm bị từ chối, toast "HÃY THÁO RA TRƯỚC KHI VỨT BỎ"), lớp không dùng được vũ khí (toast tên lớp), nhặt hòm trùng ("ĐÃ SỞ HỮU"), mua/bán vũ khí ở làng, F5 giữ nguyên.
+- C2b: mặc/tháo/vứt trang bị, đổi ngoại hình khi mặc đồ, chỉ số đổi đúng, boss rơi đồ (level đồ tăng), nâng cấp/đục lỗ/khảm ngọc ở thợ rèn, bán đồ, vứt đồ có ngọc trả ngọc, F5.
+- C3: cộng điểm chỉ số, lên cấp (toast, điểm), học/nâng/hồi điểm kỹ năng, gán/hoán đổi/bỏ kỹ năng ô phụ, ô chính không được trống, F5.
+- C4: toàn bộ luồng trên một lượt, hai tab xung đột còn toast, qua cổng boss rồi về, chết rồi chơi lại.
+
+### 4.6 Rủi ro và giới hạn
+
+- C2b và C3 chạm nhiều điểm trong `WorldScene` (file lớn dùng chung): làm tuần tự, mỗi gói một baseline. Rủi ro chính là **đổi hành vi âm thầm** (thứ tự kiểm luật, chuỗi toast, thời điểm `saveProgress`). Giảm bằng ma trận luật + mô hình tham chiếu ở C1 và đối chiếu chuỗi toast ở QA.
+- Giữa C2a và C4 hai cơ chế lưu cùng tồn tại (cầu nối cho phần chưa chuyển); chỉ an toàn nhờ nguyên tắc "một chủ mỗi trường".
+- Giá trị trước mắt cho người chơi bằng 0 (không tính năng mới); lợi ích là luật có test, `WorldScene` gọn hơn, và nền để chuyển sang server-authoritative. **Điểm dừng được phép:** sau C1, hoặc sau C2a làm điểm kiểm tra, nếu thấy lợi ích không tương xứng.
+- Gói C không làm sai lệch uid trên đĩa: cầu nối vẫn là nơi cấp uid ghi xuống đĩa cho tới C4.
+
+### 4.7 Quyết định cần bạn xác nhận khi duyệt
+
+1. API `PlayerState` hướng defId, uid chỉ nội bộ/đĩa (khuyến nghị).
+2. Vàng/ngọc/lỗ ngọc vẫn do `VillageService` giữ; `PlayerState` chỉ ghép ảnh chụp khi lưu (khuyến nghị).
+3. Cách chia 5 gói (C1, C2a, C2b, C3, C4), mỗi gói một lần QA + chơi thử + commit; duyệt Cổng 1 một lần cho cả spec, mỗi gói vẫn có Cổng 2 riêng.
+4. Điểm dừng được phép sau C1 hoặc C2a.
 
 ---
 
