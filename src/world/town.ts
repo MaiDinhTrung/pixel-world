@@ -1,6 +1,13 @@
 import Phaser from 'phaser';
 
 import { VILLAGE } from '../config/assets';
+import {
+  BOSS_ARENA_ENTRANCE,
+  BOSS_ARENA_ENTRANCE_LABEL,
+  BOSS_ARENA_ENTRANCE_POST_OFFSET,
+  BOSS_ARENA_ENTRY_COLOR,
+  BOSS_ARENA_ENTRY_COLOR_CSS,
+} from '../config/bossArenaConfig';
 import { VILLAGE_MARKER } from '../config/atmosphereConfig';
 import { TEXTURE_KEYS, WORLD_HEIGHT, WORLD_WIDTH } from '../config/constants';
 import { VILLAGE_NPCS, VILLAGE_ZONE } from '../config/economyConfig';
@@ -13,6 +20,7 @@ import {
   applyEnvironmentTint,
 } from '../vfx/atmosphere';
 import { buildVillageWall } from './castleWall';
+import { createPortal, type ScenePortal } from './portal';
 
 type VillageAssetKey = keyof typeof VILLAGE;
 
@@ -49,6 +57,8 @@ export interface TownInfo {
   enemySpawns: { x: number; y: number }[];
   /** NPC tương tác trong làng (thương nhân, thợ rèn, trưởng làng). */
   npcs: Npc[];
+  /** Cổng dịch chuyển trong map (cổng vào Đấu Trường ở map chính; cổng về ở Arena). */
+  portal?: ScenePortal;
 }
 
 const BUILDINGS: readonly BuildingSpec[] = [
@@ -491,9 +501,32 @@ export function buildTown(
     addObstacle(scene, obstacles, spec.x, spec.y - 10, 30, 20);
   }
 
+  // Cổng vào Đấu Trường Boss: ngoài làng, sát phía Bắc cổng thành Bắc, trên trục đường lát đá.
+  // Hai trụ đèn làm khung. Các điểm sinh quái (ENEMY_SPAWNS) đều cách cổng hàng trăm px nên quái không sinh ở đây.
+  for (const side of [-1, 1]) {
+    addProp(scene, obstacles, {
+      asset: 'lamppost',
+      x: BOSS_ARENA_ENTRANCE.x + side * BOSS_ARENA_ENTRANCE_POST_OFFSET,
+      y: BOSS_ARENA_ENTRANCE.y + 8,
+      scale: 2,
+      obstacleWidth: 16,
+      obstacleHeight: 12,
+    });
+  }
+
+  const portal = createPortal(scene, {
+    x: BOSS_ARENA_ENTRANCE.x,
+    y: BOSS_ARENA_ENTRANCE.y,
+    kind: 'enter',
+    color: BOSS_ARENA_ENTRY_COLOR,
+    label: BOSS_ARENA_ENTRANCE_LABEL,
+    labelColor: BOSS_ARENA_ENTRY_COLOR_CSS,
+  });
+
   return {
     playerSpawn: { x: 1920, y: 1440 },
     enemySpawns: ENEMY_SPAWNS.map((point) => ({ ...point })),
     npcs,
+    portal,
   };
 }

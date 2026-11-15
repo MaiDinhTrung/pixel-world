@@ -24,6 +24,7 @@ export const SCENE_KEYS = {
   menu: 'MainMenuScene', // menu chính
   characterSelect: 'CharacterSelectScene', // chọn nhân vật
   world: 'WorldScene', // màn chơi chính
+  bossArena: 'BossArenaScene', // đấu trường Boss (scene riêng, kế thừa WorldScene)
   characterPanel: 'CharacterPanelScene', // bảng nhân vật (chỉ số, túi đồ, cây kỹ năng...)
   levelUp: 'LevelUpScene', // chọn buff khi lên cấp
   villageShop: 'VillageShopScene', // cửa hàng làng (thương nhân / thợ rèn)

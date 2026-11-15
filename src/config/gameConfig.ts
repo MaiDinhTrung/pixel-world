@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 
 import { BootScene } from '../scenes/BootScene';
+import { BossArenaScene } from '../scenes/BossArenaScene';
 import { CharacterPanelScene } from '../scenes/CharacterPanelScene';
 import { CharacterSelectScene } from '../scenes/CharacterSelectScene';
 import { MainMenuScene } from '../scenes/MainMenuScene';
@@ -57,6 +58,7 @@ export const gameConfig: Phaser.Types.Core.GameConfig = {
     MainMenuScene,
     CharacterSelectScene,
     WorldScene,
+    BossArenaScene,
     CharacterPanelScene,
     VillageShopScene,
   ],

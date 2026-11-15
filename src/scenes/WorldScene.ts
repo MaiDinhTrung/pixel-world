@@ -222,6 +222,33 @@ import { isPerfOverlayEnabled, PerfOverlay } from '../utils/perfOverlay';
 import { createDayNightToggle } from '../ui/DayNightToggle';
 import { createAtmosphere } from '../vfx/atmosphere';
 import { buildTown, type TownInfo } from '../world/town';
+import type { ScenePortal } from '../world/portal';
+import {
+  decideBossAction,
+  getPortalChargeProgress,
+  getPortalDenyReason,
+  isPortalDenyToastWorthy,
+  type PortalDenyReason,
+} from '../world/bossArenaRules';
+import {
+  BOSS_ARENA_ENTRY_SPAWN_DELAY_MS,
+  BOSS_ARENA_FADE_TO_ARENA,
+  BOSS_ARENA_FADE_TO_WORLD,
+  BOSS_ARENA_PORTAL_CHARGE_MS,
+  BOSS_ARENA_PORTAL_COOLDOWN_MS,
+  BOSS_ARENA_PORTAL_EXTRA_INVULNERABLE_MS,
+  BOSS_ARENA_PORTAL_FADE_MS,
+  BOSS_ARENA_PORTAL_INTERACT_RADIUS,
+  BOSS_ARENA_PORTAL_TOAST_COOLDOWN_MS,
+} from '../config/bossArenaConfig';
+import {
+  RUN_SESSION_REGISTRY_KEY,
+  applyRunSessionToPlayer,
+  captureRunSession,
+  extractRunSceneState,
+  isRestorable,
+  type RunSession,
+} from '../progression/RunSession';
 import {
   spawnAfterimage,
   spawnBurst,
@@ -307,7 +334,7 @@ function getLootTexture(id: LootId): string {
 const AUTO_AIM_RANGE = 480;
 
 export class WorldScene extends Phaser.Scene {
-  private player!: Player;
+  protected player!: Player;
   private inputController!: InputController;
   private touchControls: TouchControls | null = null;
   private aimIndicator: AimIndicator | null = null;
@@ -360,18 +387,26 @@ export class WorldScene extends Phaser.Scene {
   private lastNoCombatToastAt = 0;
   private lastLootSaveAt = 0;
 
-  private boss: BossEnemy | null = null;
-  private bossNumber = 0;
-  private nextBossAt = 0;
+  protected boss: BossEnemy | null = null;
+  protected bossNumber = 0;
+  protected nextBossAt = 0;
   private bossWarningShown = false;
+  /** Hết giờ ở map chính: Boss đang chờ ở Đấu Trường (chỉ BossArenaScene mới sinh Boss). */
+  protected bossReady = false;
+  /** Thời điểm tuyệt đối vào Đấu Trường (null ở map chính). */
+  protected arenaEntryAt: number | null = null;
+  private portalCooldownUntil = 0;
+  private portalChargeStartedAt: number | null = null;
+  private portalTraveling = false;
+  private lastPortalToastAt = 0;
 
   private nextAfterimageAt = 0;
   private chests: WeaponChest[] = [];
   private attackWasDown = false;
-  private obstacles!: Phaser.Physics.Arcade.StaticGroup;
-  private town!: TownInfo;
+  protected obstacles!: Phaser.Physics.Arcade.StaticGroup;
+  protected town!: TownInfo;
 
-  private characterId: CharacterId = DEFAULT_CHARACTER_ID;
+  protected characterId: CharacterId = DEFAULT_CHARACTER_ID;
   private character!: CharacterDefinition;
   private allSkills: SkillDefinition[] = [];
   /** 7 ô: 0–2 ô chính (luôn có skill), 3–6 ô phụ (có thể trống). */
@@ -406,8 +441,123 @@ export class WorldScene extends Phaser.Scene {
   private runStartedAt = 0;
   private nextSpawnAt = 0;
 
-  constructor() {
-    super(SCENE_KEYS.world);
+  constructor(key: string = SCENE_KEYS.world) {
+    super(key);
+  }
+
+  // ---- Điểm ghi đè cho BossArenaScene (mặc định = map chính) ----
+
+  /** true ở BossArenaScene: chỉ ở đó Boss mới được sinh. */
+  protected get inBossArena(): boolean {
+    return false;
+  }
+
+  /** Dựng bản đồ và trả thông tin điểm sinh/NPC/cổng. */
+  protected buildMap(): TownInfo {
+    return buildTown(this, this.obstacles);
+  }
+
+  /** Khung thế giới vật lý (trước khi trừ tường biên). */
+  protected getWorldBounds(): { x: number; y: number; width: number; height: number } {
+    return { x: 0, y: 0, width: WORLD_WIDTH, height: WORLD_HEIGHT };
+  }
+
+  protected getCameraBounds(): { x: number; y: number; width: number; height: number } {
+    return this.getWorldBounds();
+  }
+
+  /** Ánh sáng/không khí của map (map chính: chu kỳ ngày/đêm). */
+  protected createLighting(): void {
+    createAtmosphere(this, this.player);
+  }
+
+  /** Nút/phím đổi ngày-đêm (Arena không có). */
+  protected createDayNightControl(): void {
+    createDayNightToggle(this);
+  }
+
+  /** Điểm có thuộc khu an toàn (làng) không. Arena luôn false. */
+  protected isSafeZonePoint(x: number, y: number): boolean {
+    return isInsideVillage(x, y);
+  }
+
+  /** Số quái sinh sẵn lúc vào scene. */
+  protected getInitialEnemyCount(): number {
+    return ENEMY_MAX_ALIVE;
+  }
+
+  /** Luật cho phép sinh quái ở frame này. */
+  protected canSpawnEnemies(_time: number): boolean {
+    return this.boss === null;
+  }
+
+  protected getMaxAliveEnemies(tier: number): number {
+    return Math.min(MAX_ALIVE_CAP, ENEMY_MAX_ALIVE + tier * THREAT_ALIVE_BONUS);
+  }
+
+  /** Chơi lại sau khi chết. */
+  protected restartRun(): void {
+    this.scene.restart();
+  }
+
+  /** Xóa phiên đang chờ khôi phục (chết/lượt mới). */
+  protected clearRunSession(): void {
+    this.registry.set(RUN_SESSION_REGISTRY_KEY, null);
+  }
+
+  /**
+   * Instance scene được DÙNG LẠI qua scene.start/restart nên mọi trường runtime không được create() nạp lại
+   * phải được đặt về mặc định ở đây (cờ skill bật/tắt, mốc ICD passive, nhiệt, cache mục tiêu...).
+   */
+  private resetInstanceRuntimeState(): void {
+    this.dualGuardActive = false;
+    this.vanishActive = false;
+    this.fortress = null;
+    this.heat = 0;
+    this.heatLastGainAt = 0;
+    this.echoReadyAt = 0;
+    this.shatterReadyAt = 0;
+    this.nextPassiveScanAt = 0;
+    this.bloodFreeReadyAt = 0;
+    this.nextSlashWaveAt = 0;
+    this.chilledNearby = 0;
+    this.nextMomentumAt = 0;
+    this.nextHitEnergyAt = 0;
+    this.nextGemEnergyAt = 0;
+    this.autoAimTarget = null;
+    this.lastNoCombatToastAt = 0;
+    this.lastLootSaveAt = 0;
+    this.activeWeaponIndex = 0;
+    this.weaponTime = 0;
+    this.missingHealthMult = 1;
+    this.enemyCache = [];
+    this.enemyCacheFrame = -1;
+  }
+
+  /**
+   * Tắt trạng thái skill đang bật TRƯỚC khi qua cổng, im lặng như khi người chơi chết
+   * (không toast, không đặt hồi chiêu); Thành Lũy kết thúc như lúc scene shutdown.
+   */
+  private endSkillStatesForTravel(): void {
+    this.vanishActive = false;
+    this.dualGuardActive = false;
+    this.applyDualGuardState();
+    this.player.breakStealth();
+    this.fortress?.end(false);
+    this.fortress = null;
+    this.player.setImmobilized(false);
+  }
+
+  /** Lấy (và hủy) phiên do scene trước chụp khi qua cổng; null = lượt mới. */
+  private takeRunSession(): RunSession | null {
+    const session = this.registry.get(RUN_SESSION_REGISTRY_KEY) as
+      | RunSession
+      | null
+      | undefined;
+
+    this.clearRunSession();
+
+    return isRestorable(session) ? session : null;
   }
 
   init(data?: { characterId?: string }): void {
@@ -425,6 +575,7 @@ export class WorldScene extends Phaser.Scene {
     this.lifestealCarry = 0;
     this.insideVillage = false;
     this.lootDirty = false;
+    this.resetInstanceRuntimeState();
     this.skillCooldownUntil = {};
     // Skill có thể xin làm mới hồi chiêu của chính nó sau khi WorldScene đã đặt hồi chiêu.
     this.events.off('skill-cooldown-reset');
@@ -451,20 +602,53 @@ export class WorldScene extends Phaser.Scene {
       ...this.character.skills,
       ...this.character.treeSkills,
     ].map((id) => getSkill(id));
-    this.runStartedAt = this.time.now;
-    this.nextSpawnAt = this.time.now + 1000;
-    this.nextBossAt = this.time.now + BOSS_FIRST_DELAY_MS;
+    // `this.time.now` chỉ cập nhật trong update() nên trong create() còn là giá trị cũ (có thể cách cả phút
+    // khi scene vừa ngủ lâu); dùng đồng hồ tuyệt đối của game loop cho mọi mốc đặt ở đây.
+    const startNow = this.game.loop.time;
+    const restored = this.takeRunSession();
+
+    this.bossReady = false;
+    this.arenaEntryAt = this.inBossArena ? startNow : null;
+    this.portalTraveling = false;
+    this.portalChargeStartedAt = null;
+    this.portalCooldownUntil = 0;
+    this.lastPortalToastAt = 0;
+    this.runStartedAt = startNow;
+    this.nextSpawnAt = startNow + 1000;
+    this.nextBossAt = startNow + BOSS_FIRST_DELAY_MS;
+
+    if (restored) {
+      const carried = extractRunSceneState(restored);
+
+      this.skillCooldownUntil = carried.skillCooldownUntil as Partial<
+        Record<SkillId, number>
+      >;
+      this.runStartedAt = carried.runStartedAt;
+      this.nextBossAt = carried.nextBossAt;
+      this.bossNumber = carried.bossNumber;
+      this.bossReady = carried.bossReady;
+      this.bossWarningShown = carried.bossWarningShown;
+      this.portalCooldownUntil = startNow + BOSS_ARENA_PORTAL_COOLDOWN_MS;
+
+      const fade = this.inBossArena
+        ? BOSS_ARENA_FADE_TO_ARENA
+        : BOSS_ARENA_FADE_TO_WORLD;
+
+      this.cameras.main.fadeIn(BOSS_ARENA_PORTAL_FADE_MS, fade.r, fade.g, fade.b);
+    }
 
     this.cameras.main.setBackgroundColor('#0b0b12');
 
     this.obstacles = this.physics.add.staticGroup();
-    this.town = buildTown(this, this.obstacles);
+    this.town = this.buildMap();
+
+    const worldBounds = this.getWorldBounds();
 
     this.physics.world.setBounds(
-      WALL_THICKNESS,
-      WALL_THICKNESS,
-      WORLD_WIDTH - WALL_THICKNESS * 2,
-      WORLD_HEIGHT - WALL_THICKNESS * 2,
+      worldBounds.x + WALL_THICKNESS,
+      worldBounds.y + WALL_THICKNESS,
+      worldBounds.width - WALL_THICKNESS * 2,
+      worldBounds.height - WALL_THICKNESS * 2,
     );
 
     this.player = new Player(
@@ -489,7 +673,7 @@ export class WorldScene extends Phaser.Scene {
     }
 
     // Sau buildTown (đã đăng ký các nguồn sáng) và sau khi có người chơi (tầm nhìn ban đêm đi theo người).
-    createAtmosphere(this, this.player);
+    this.createLighting();
 
     this.touchControls = isTouchDevice() ? new TouchControls(this, this.characterId) : null;
     this.aimIndicator = this.touchControls ? new AimIndicator(this) : null;
@@ -572,9 +756,21 @@ export class WorldScene extends Phaser.Scene {
     this.statSheet = new StatSheet(this.statsAllocation);
     this.applyPlayerStatistics();
 
+    // Sau khi chỉ số/trang bị đã áp (để kẹp theo tối đa đúng): trả lại HP, giáp, EN, lượt dash đã chụp.
+    if (restored) {
+      applyRunSessionToPlayer(restored, this.player);
+    }
+
     this.physics.add.collider(this.player, this.obstacles);
 
-    this.cameras.main.setBounds(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
+    const cameraBounds = this.getCameraBounds();
+
+    this.cameras.main.setBounds(
+      cameraBounds.x,
+      cameraBounds.y,
+      cameraBounds.width,
+      cameraBounds.height,
+    );
     this.cameras.main.startFollow(this.player, true, CAMERA_FOLLOW_LERP_60FPS, CAMERA_FOLLOW_LERP_60FPS);
 
     this.createCombat();
@@ -589,7 +785,7 @@ export class WorldScene extends Phaser.Scene {
     });
 
     this.hud.setGold(this.village.getGold());
-    createDayNightToggle(this);
+    this.createDayNightControl();
     this.playerBars = new PlayerBars(this);
 
     this.events.on(Phaser.Scenes.Events.RESUME, () => {
@@ -628,7 +824,7 @@ export class WorldScene extends Phaser.Scene {
     if (this.touchControls) {
       this.input.on('pointerdown', () => {
         if (this.player.isDead() && this.time.now - this.deathAt > 800) {
-          this.scene.restart();
+          this.restartRun();
         }
       });
     }
@@ -636,7 +832,7 @@ export class WorldScene extends Phaser.Scene {
     // Sự kiện keydown đảm bảo một cú bấm R rất nhanh vẫn được xử lý.
     this.input.keyboard?.on('keydown-R', (event: KeyboardEvent) => {
       if (!event.repeat && this.player.isDead()) {
-        this.scene.restart();
+        this.restartRun();
       }
     });
   }
@@ -731,7 +927,7 @@ export class WorldScene extends Phaser.Scene {
     this.weaponTime = time;
 
     // Trong làng không được chiến đấu; vẫn đọc input để nút đánh còn dùng làm nút tương tác NPC.
-    const inVillage = isInsideVillage(this.player.x, this.player.y);
+    const inVillage = this.isSafeZonePoint(this.player.x, this.player.y);
     const attackInput = this.inputController.isAttackDown();
     const attackDown =
       !this.player.isDead() &&
@@ -766,7 +962,7 @@ export class WorldScene extends Phaser.Scene {
 
     const skillRequest = this.inputController.consumeSkillRequest();
 
-    if (skillRequest !== null) {
+    if (skillRequest !== null && !this.portalTraveling) {
       if (inVillage) {
         if (time - this.lastNoCombatToastAt > 1500) {
           this.lastNoCombatToastAt = time;
@@ -791,9 +987,8 @@ export class WorldScene extends Phaser.Scene {
       }
     }
 
-    if (!inVillage) {
-      this.updateBoss(time);
-    }
+    // Đồng hồ Boss chạy toàn cục (kể cả trong làng): map chính chỉ đánh dấu "Boss chờ ở Đấu Trường".
+    this.updateBoss(time);
 
     if (!this.player.isDead()) {
       const stealthed = this.player.isStealthed(time);
@@ -824,6 +1019,7 @@ export class WorldScene extends Phaser.Scene {
     this.updateChests();
     this.updateLootDrops(time, delta);
     this.updateVillage();
+    this.updatePortalVisual(time);
 
     const skillStatus: SkillStatus = {
       dashRemainingMs: this.player.getDashCooldownRemaining(time),
@@ -1030,7 +1226,7 @@ export class WorldScene extends Phaser.Scene {
     this.physics.add.collider(this.enemies, this.enemies);
     this.physics.add.collider(this.enemies, this.obstacles);
 
-    for (let i = 0; i < ENEMY_MAX_ALIVE; i += 1) {
+    for (let i = 0; i < this.getInitialEnemyCount(); i += 1) {
       this.spawnEnemy();
     }
 
@@ -1095,15 +1291,12 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private updateEnemySpawning(time: number): void {
-    if (this.boss) {
+    if (!this.canSpawnEnemies(time)) {
       return;
     }
 
     const tier = this.getThreatTier(time);
-    const maxAlive = Math.min(
-      MAX_ALIVE_CAP,
-      ENEMY_MAX_ALIVE + tier * THREAT_ALIVE_BONUS,
-    );
+    const maxAlive = this.getMaxAliveEnemies(tier);
 
     if (this.getEnemies().length >= maxAlive) {
       return;
@@ -1128,6 +1321,12 @@ export class WorldScene extends Phaser.Scene {
       return `TRÙM ${this.bossNumber}`;
     }
 
+    if (this.bossReady) {
+      return this.inBossArena
+        ? `TRÙM ${this.bossNumber + 1} SẮP XUẤT HIỆN`
+        : 'TRÙM ĐANG CHỜ Ở ĐẤU TRƯỜNG';
+    }
+
     const remainingSeconds = Math.max(
       0,
       Math.ceil((this.nextBossAt - time) / 1000),
@@ -1139,19 +1338,28 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private updateBoss(time: number): void {
-    if (this.player.isDead() || this.boss) {
+    if (this.player.isDead()) {
       return;
     }
 
-    if (time >= this.nextBossAt) {
+    const action = decideBossAction({
+      inArena: this.inBossArena,
+      now: time,
+      nextBossAt: this.nextBossAt,
+      bossAlive: this.boss !== null,
+      bossReady: this.bossReady,
+      bossWarningShown: this.bossWarningShown,
+      warningMs: BOSS_WARNING_MS,
+      arenaEntryAt: this.arenaEntryAt,
+      entrySpawnDelayMs: BOSS_ARENA_ENTRY_SPAWN_DELAY_MS,
+    });
+
+    if (action === 'spawn') {
       this.spawnBoss();
-      return;
-    }
-
-    if (
-      !this.bossWarningShown &&
-      time >= this.nextBossAt - BOSS_WARNING_MS
-    ) {
+    } else if (action === 'mark_ready') {
+      this.bossReady = true;
+      this.hud.showToast('TRÙM ĐANG CHỜ Ở ĐẤU TRƯỜNG', '#ff8fa3');
+    } else if (action === 'warn') {
       this.bossWarningShown = true;
       this.hud.showToast(
         `TRÙM ${this.bossNumber + 1} SẮP XUẤT HIỆN`,
@@ -1161,6 +1369,12 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private spawnBoss(): void {
+    // Chốt chặn cuối: Boss chỉ tồn tại trong BossArenaScene.
+    if (!this.inBossArena || this.boss) {
+      return;
+    }
+
+    this.bossReady = false;
     this.bossNumber += 1;
     this.clearArenaForBoss();
 
@@ -1198,19 +1412,20 @@ export class WorldScene extends Phaser.Scene {
   private summonBossMinions(count: number, summoner: BossEnemy): number {
     const room = BOSS_SUMMON_MAX_MINIONS - (this.getEnemies().length - 1);
     const total = Math.min(count, Math.max(0, room));
+    const bounds = this.getWorldBounds();
     const tier = this.getThreatTier(this.time.now);
 
     for (let i = 0; i < total; i += 1) {
       const angle = (i / Math.max(1, total)) * Math.PI * 2 + Math.random();
       const x = Phaser.Math.Clamp(
         summoner.x + Math.cos(angle) * 110,
-        48,
-        WORLD_WIDTH - 48,
+        bounds.x + 48,
+        bounds.x + bounds.width - 48,
       );
       const y = Phaser.Math.Clamp(
         summoner.y + Math.sin(angle) * 110,
-        48,
-        WORLD_HEIGHT - 48,
+        bounds.y + 48,
+        bounds.y + bounds.height - 48,
       );
       const minion = new Enemy(this, x, y, tier);
 
@@ -1241,7 +1456,7 @@ export class WorldScene extends Phaser.Scene {
     }
   }
 
-  private getBossSpawnPoint(): { x: number; y: number } {
+  protected getBossSpawnPoint(): { x: number; y: number } {
     const options = this.town.enemySpawns.map((point) => ({
       ...point,
       distance: Phaser.Math.Distance.Between(
@@ -2287,13 +2502,17 @@ export class WorldScene extends Phaser.Scene {
   openCharacterPanel(
     tab: 'stats' | 'inventory' | 'skills' | 'equipment',
   ): void {
-    if (this.panelOpen || this.player.isDead()) {
+    if (this.panelOpen || this.player.isDead() || this.portalTraveling) {
       return;
     }
 
     this.panelOpen = true;
+    this.portalChargeStartedAt = null;
     this.inputController.resetRequests();
-    this.scene.launch(SCENE_KEYS.characterPanel, { tab });
+    this.scene.launch(SCENE_KEYS.characterPanel, {
+      tab,
+      worldKey: this.scene.key,
+    });
     this.scene.pause();
   }
 
@@ -2964,6 +3183,7 @@ export class WorldScene extends Phaser.Scene {
 
     if (this.player.isDead()) {
       this.hud.setInteractPrompt(null);
+      this.portalChargeStartedAt = null;
       return;
     }
 
@@ -3007,10 +3227,21 @@ export class WorldScene extends Phaser.Scene {
     }
 
     const nearNpc = this.getNearbyNpc();
+    const portal = this.town.portal ?? null;
+    const nearPortal =
+      portal !== null &&
+      Phaser.Math.Distance.Between(
+        this.player.x,
+        this.player.y,
+        portal.x,
+        portal.y,
+      ) <= BOSS_ARENA_PORTAL_INTERACT_RADIUS;
+    const now = this.time.now;
 
     this.inputController.setPickupAvailable(
-      nearestOpened !== null || nearNpc !== null,
+      nearestOpened !== null || nearNpc !== null || nearPortal,
     );
+    this.updatePortalCharge(now, nearPortal);
 
     if (nearestOpened) {
       this.hud.setInteractPrompt(
@@ -3024,6 +3255,8 @@ export class WorldScene extends Phaser.Scene {
           ? `CHẠM NÚT ĐÁNH ĐỂ NÓI CHUYỆN VỚI ${nearNpc.spec.name}`
           : `NHẤN F ĐỂ NÓI CHUYỆN VỚI ${nearNpc.spec.name}`,
       );
+    } else if (nearPortal && portal) {
+      this.hud.setInteractPrompt(this.getPortalPrompt(portal));
     } else if (nearestClosed) {
       this.hud.setInteractPrompt('CHẠM HÒM ĐỂ MỞ');
     } else {
@@ -3035,8 +3268,144 @@ export class WorldScene extends Phaser.Scene {
         this.pickUpChest(nearestOpened);
       } else if (nearNpc) {
         this.openVillageShop(nearNpc.role);
+      } else if (nearPortal && portal) {
+        this.tryStartPortalCharge(portal, now);
       }
     }
+  }
+
+  // ---- Cổng dịch chuyển (vào/ra Đấu Trường Boss) ----
+
+  private getPortalDeny(portal: ScenePortal, time: number): PortalDenyReason | null {
+    return getPortalDenyReason({
+      kind: portal.kind,
+      panelOpen: this.panelOpen,
+      playerDead: this.player.isDead(),
+      now: time,
+      portalCooldownUntil: this.portalCooldownUntil,
+      leaping: this.player.isLeaping(),
+      traveling: this.portalTraveling,
+      bossAlive: this.boss !== null,
+    });
+  }
+
+  private getPortalPrompt(portal: ScenePortal): string {
+    if (this.portalChargeStartedAt !== null) {
+      return 'ĐANG KÍCH HOẠT CỔNG…';
+    }
+
+    if (portal.kind === 'return' && this.boss !== null) {
+      return 'CỔNG KHÓA — HẠ TRÙM ĐỂ MỞ';
+    }
+
+    const action = portal.kind === 'enter' ? 'VÀO ĐẤU TRƯỜNG' : 'VỀ LÀNG';
+
+    return this.touchControls
+      ? `CHẠM NÚT ĐÁNH ĐỂ ${action}`
+      : `NHẤN F ĐỂ ${action}`;
+  }
+
+  private tryStartPortalCharge(portal: ScenePortal, time: number): void {
+    if (this.portalChargeStartedAt !== null) {
+      return;
+    }
+
+    const reason = this.getPortalDeny(portal, time);
+
+    if (reason !== null) {
+      if (isPortalDenyToastWorthy(reason) && time - this.lastPortalToastAt > BOSS_ARENA_PORTAL_TOAST_COOLDOWN_MS) {
+        this.lastPortalToastAt = time;
+        this.hud.showToast('CỔNG KHÓA — HẠ TRÙM ĐỂ MỞ', NEON_CSS.rose);
+      }
+
+      return;
+    }
+
+    this.portalChargeStartedAt = time;
+
+    // Rời đi khi còn vật phẩm trên sàn: chỉ cảnh báo, không chặn.
+    if (this.drops.length > 0 || this.chests.some((chest) => chest.active)) {
+      this.hud.showToast('CÒN VẬT PHẨM TRÊN SÀN — SẼ MẤT KHI RỜI ĐI', NEON_CSS.gold);
+    }
+  }
+
+  /** Cập nhật vòng sạc: hủy nếu rời cổng/bị từ chối, đủ thời gian thì chuyển scene. */
+  private updatePortalCharge(time: number, nearPortal: boolean): void {
+    const portal = this.town.portal;
+
+    if (this.portalChargeStartedAt === null || !portal) {
+      return;
+    }
+
+    if (!nearPortal || this.getPortalDeny(portal, time) !== null) {
+      this.portalChargeStartedAt = null;
+      portal.visual.setCharge(0);
+      return;
+    }
+
+    const progress = getPortalChargeProgress(
+      time,
+      this.portalChargeStartedAt,
+      BOSS_ARENA_PORTAL_CHARGE_MS,
+    );
+
+    portal.visual.setCharge(progress);
+
+    if (progress >= 1) {
+      this.startPortalTravel(portal, time);
+    }
+  }
+
+  /** Lưu tiến trình, chụp RunSession rồi mờ màn hình và stop→start sang scene đích. */
+  private startPortalTravel(portal: ScenePortal, time: number): void {
+    const toArena = portal.kind === 'enter';
+    const fade = toArena ? BOSS_ARENA_FADE_TO_ARENA : BOSS_ARENA_FADE_TO_WORLD;
+
+    this.portalTraveling = true;
+    this.portalChargeStartedAt = null;
+    this.endSkillStatesForTravel();
+    portal.visual.setCharge(0);
+    portal.visual.playActivate();
+    this.inputController.resetRequests();
+    this.player.setImmobilized(true);
+    this.player.setVelocity(0, 0);
+    this.player.grantInvulnerability(
+      time,
+      BOSS_ARENA_PORTAL_FADE_MS + BOSS_ARENA_PORTAL_EXTRA_INVULNERABLE_MS,
+    );
+    this.hud.setInteractPrompt(null);
+
+    this.saveProgress();
+    this.registry.set(
+      RUN_SESSION_REGISTRY_KEY,
+      captureRunSession(this.player, {
+        skillCooldownUntil: this.skillCooldownUntil,
+        runStartedAt: this.runStartedAt,
+        nextBossAt: this.nextBossAt,
+        bossNumber: this.bossNumber,
+        bossReady: this.bossReady,
+        bossWarningShown: this.bossWarningShown,
+      }),
+    );
+
+    const targetKey = toArena ? SCENE_KEYS.bossArena : SCENE_KEYS.world;
+    const camera = this.cameras.main;
+
+    camera.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => {
+      this.scene.start(targetKey, { characterId: this.characterId });
+    });
+    camera.fadeOut(BOSS_ARENA_PORTAL_FADE_MS, fade.r, fade.g, fade.b);
+  }
+
+  private updatePortalVisual(time: number): void {
+    const portal = this.town.portal;
+
+    if (!portal) {
+      return;
+    }
+
+    portal.visual.setLocked(portal.kind === 'return' && this.boss !== null);
+    portal.visual.update(time);
   }
 
   // ---- Làng, vàng, ngọc ----
@@ -3069,6 +3438,7 @@ export class WorldScene extends Phaser.Scene {
     }
 
     this.panelOpen = true;
+    this.portalChargeStartedAt = null;
     this.inputController.resetRequests();
     this.hud.setInteractPrompt(null);
     this.scene.launch(SCENE_KEYS.villageShop, { role });
@@ -3282,7 +3652,7 @@ export class WorldScene extends Phaser.Scene {
 
   /** Khu làng an toàn: báo vào/ra, quái lọt vào bị đẩy ra ngoài. */
   private updateVillage(): void {
-    const inside = isInsideVillage(this.player.x, this.player.y);
+    const inside = this.isSafeZonePoint(this.player.x, this.player.y);
 
     // Làng cách biệt hoàn toàn: người chơi bất khả xâm phạm, đạn quái bị xoá.
     this.player.setSafeZone(inside);
@@ -3291,7 +3661,7 @@ export class WorldScene extends Phaser.Scene {
       if (
         bullet instanceof Phaser.Physics.Arcade.Sprite &&
         bullet.active &&
-        isInsideVillage(bullet.x, bullet.y)
+        this.isSafeZonePoint(bullet.x, bullet.y)
       ) {
         bullet.disableBody(true, true);
       }
@@ -3309,7 +3679,7 @@ export class WorldScene extends Phaser.Scene {
     const centerY = VILLAGE_ZONE.y + VILLAGE_ZONE.height / 2;
 
     for (const enemy of this.getEnemies()) {
-      if (enemy.isAlive() && isInsideVillage(enemy.x, enemy.y)) {
+      if (enemy.isAlive() && this.isSafeZonePoint(enemy.x, enemy.y)) {
         const away = new Phaser.Math.Vector2(
           enemy.x - centerX,
           enemy.y - centerY,
@@ -3568,7 +3938,7 @@ export class WorldScene extends Phaser.Scene {
   private enemyCache: EnemyBase[] = [];
   private enemyCacheFrame = -1;
 
-  private getEnemies(): EnemyBase[] {
+  protected getEnemies(): EnemyBase[] {
     const frame = this.game.getFrame();
 
     if (frame !== this.enemyCacheFrame) {

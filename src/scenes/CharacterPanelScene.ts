@@ -121,7 +121,11 @@ export class CharacterPanelScene extends Phaser.Scene {
     super(SCENE_KEYS.characterPanel);
   }
 
-  init(data?: { tab?: PanelTab }): void {
+  /** Key scene thế giới đã mở panel (WorldScene hoặc BossArenaScene). */
+  private worldKey: string = SCENE_KEYS.world;
+
+  init(data?: { tab?: PanelTab; worldKey?: string }): void {
+    this.worldKey = data?.worldKey ?? SCENE_KEYS.world;
     this.activeTab = TABS.some((tab) => tab.id === data?.tab)
       ? (data?.tab as PanelTab)
       : 'stats';
@@ -138,7 +142,7 @@ export class CharacterPanelScene extends Phaser.Scene {
   }
 
   create(): void {
-    this.world = this.scene.get(SCENE_KEYS.world) as WorldScene;
+    this.world = this.scene.get(this.worldKey) as WorldScene;
 
     this.add
       .rectangle(
@@ -348,7 +352,7 @@ export class CharacterPanelScene extends Phaser.Scene {
 
     this.closing = true;
     this.world.onPanelClosed();
-    this.scene.resume(SCENE_KEYS.world);
+    this.scene.resume(this.worldKey);
     this.scene.stop();
   }
 

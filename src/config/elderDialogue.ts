@@ -13,7 +13,7 @@ export const ELDER_DIALOGUE_PAGES: readonly string[] = [
   // Trang 3: Thợ Rèn.
   'Thợ Rèn nâng cấp trang bị, đục lỗ và khảm ngọc vào đó. Lửa lò chưa bao giờ nguội, chỉ cần ngươi mang đủ vàng.',
   // Trang 4: hoang địa và Trùm. "chừng hai phút" bám BOSS_FIRST_DELAY_MS (combatConfig.ts) — nếu đổi giá trị đó thì sửa lời thoại.
-  'Ngoài tường làng là hoang địa. Quái vật mỗi lúc một đông, và sau chừng hai phút, một Trùm sẽ tìm đến ngươi.',
+  'Ngoài cổng Bắc có cổng đỏ dẫn tới Đấu Trường. Sau chừng hai phút, một Trùm sẽ thức giấc ở đó, chờ ngươi.',
   // Trang 5: lời dặn bán đồ và tạm biệt.
   'Đồ nhặt được ngoài kia, hãy mang về bán lấy vàng. Trở về còn sống cũng là một chiến thắng. Đi đi.',
 ];

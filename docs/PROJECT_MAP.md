@@ -9,7 +9,7 @@ Không liệt kê chi tiết: `node_modules/`, `dist/`, `package-lock.json`, ả
 
 `index.html` → `src/main.ts` → `src/config/gameConfig.ts` (danh sách scene đăng ký).
 
-Thứ tự: `BootScene` → `PreloadScene` → `MainMenuScene` → `CharacterSelectScene` → `WorldScene` (+ `CharacterPanelScene` và `VillageShopScene` chạy chồng lên World).
+Thứ tự: `BootScene` → `PreloadScene` → `MainMenuScene` → `CharacterSelectScene` → `WorldScene` (+ `CharacterPanelScene` và `VillageShopScene` chạy chồng lên World). Từ `WorldScene` qua cổng đỏ (ngoài làng, sát cổng thành Bắc) sang `BossArenaScene` và ngược lại (stop → start, trạng thái lượt chơi mang qua `progression/RunSession`).
 Key scene: `SCENE_KEYS` trong `src/config/constants.ts`.
 
 ## 2. Các hệ thống
@@ -22,9 +22,11 @@ Key scene: `SCENE_KEYS` trong `src/config/constants.ts`.
 | `MainMenuScene.ts` | Menu chính |
 | `CharacterSelectScene.ts` | Chọn nhân vật, đọc save từ `progression/CharacterProgress` |
 | `WorldScene.ts` (~1673 dòng) | **Trung tâm game loop**: tạo map/town, player, spawn quái/boss, threat tier, XP, hòm, lưu tiến trình, và API cho panel (equip/stat/skill) |
+| `BossArenaScene.ts` | **Đấu Trường Boss** (`extends WorldScene`, key `SCENE_KEYS.bossArena`): NƠI DUY NHẤT Boss được sinh. Chỉ ghi đè hook `protected` của World (`buildMap`, `getWorldBounds/getCameraBounds`, `createLighting`/`createDayNightControl` rỗng, `isSafeZonePoint` = false, `getInitialEnemyCount` = 0, `canSpawnEnemies` theo `shouldSpawnArenaMinions`, `getBossSpawnPoint`, `restartRun` → về WorldScene) + đẩy quái khỏi vùng sạch cổng về. Số liệu `config/bossArenaConfig.ts` |
 | `VillageShopScene.ts` | Cửa hàng làng (overlay, pause World): Thương nhân (tab MUA/BÁN/ĐỔI NGỌC) và Thợ rèn (nâng cấp, đục lỗ, khảm/tháo ngọc); chỉ gọi `WorldScene.getVillage()` (`VillageService`) |
 | `CharacterPanelScene.ts` (~1732 dòng) | Panel nhân vật (tab Skills/Stats/Inventory/Equipment); gọi ngược các method public của `WorldScene` |
 
+Hook `protected` của `WorldScene` cho Arena: `inBossArena`, `buildMap`, `getWorldBounds`, `getCameraBounds`, `createLighting`, `createDayNightControl`, `isSafeZonePoint`, `getInitialEnemyCount`, `canSpawnEnemies`, `getMaxAliveEnemies`, `getBossSpawnPoint`, `restartRun`, `clearRunSession`; trường `protected`: `player`, `boss`, `bossNumber`, `nextBossAt`, `bossReady`, `arenaEntryAt`, `obstacles`, `town`, `characterId`, `getEnemies`. Cổng dịch chuyển: `updateChests` → `tryStartPortalCharge/updatePortalCharge/startPortalTravel` (`saveProgress` → `captureRunSession` vào `registry` → mờ màn hình → `scene.start`); `create()` đọc `takeRunSession`. Mốc thời gian đặt trong `create()` dùng `this.game.loop.time` (vì `scene.time.now` chỉ cập nhật trong `update`, nên trong `create` còn cũ).
 Bản đồ nhanh `WorldScene.ts` (theo tên method): spawn quái `spawnEnemy/updateEnemySpawning/getThreatTier`; boss `updateBoss/spawnBoss/handleBossSlam/summonBossMinions/handleBossDefeated/grantBossLoot`; XP `grantExperience`; lưu `saveProgress`; panel API `addStatPoint/equip*/unequip*/discard*/assignSkillToSlot/get*PanelState`; hòm `updateChests/maybeDropWeaponChest/openChest/pickUpChest`; tạo vũ khí `createWeaponById`; auto-aim `updateAutoAim`.
 Bản đồ nhanh `CharacterPanelScene.ts`: `renderSkills`, `renderStats`, `renderInventory`, `renderEquipment`, `renderEquipmentDetails`, `bindKeys`, `createTabs`.
 
@@ -66,6 +68,7 @@ Bản đồ nhanh `CharacterPanelScene.ts`: `renderSkills`, `renderStats`, `rend
 ### Progression / lưu trữ — `src/progression/`
 - `CharacterProgress.ts` — save/load `localStorage` (key `pixel-world:progress:v1`), `SAVE_VERSION`, save theo nhân vật (level, stat, túi đồ, gear, skill).
 - `LevelSystem.ts` (XP/level), `progressionConfig.ts` (XP_*), `StatSheet.ts` (cộng stat → chỉ số).
+- `RunSession.ts` (+ `RunSession.test.ts`) — trạng thái lượt chơi KHÔNG nằm trong save, dùng chung World ↔ Arena (logic thuần, lưu ở `registry` khoá `runSession`): HP/giáp/EN, hồi chiêu skill, lượt dash, `runStartedAt`, `nextBossAt`, `bossNumber`, `bossReady`, `bossWarningShown`; mốc thời gian tuyệt đối (`game.loop.time`). `captureRunSession` trước khi qua cổng, `applyRunSessionToPlayer` + `extractRunSceneState` ở scene đích; chết = không chụp → lượt mới. Save KHÔNG có trường "map hiện tại", tải lại luôn vào làng.
 - **Legacy/không đăng ký:** `BuffManager.ts`, `buffCatalog.ts`, `buffTypes.ts`, `scenes/LevelUpScene.ts` — hệ buff/level-up đã tắt (README: "code giữ lại"); `LevelUpScene` không có trong `gameConfig.ts`. `buffTypes.ts` vẫn được `Player.ts` import (`CombatStats`, `createBaseStats`).
 
 ### Config / dữ liệu cân bằng — `src/config/`
@@ -115,6 +118,9 @@ Bản đồ nhanh `CharacterPanelScene.ts`: `renderSkills`, `renderStats`, `rend
 ### World — `src/world/`
 - `town.ts` — `buildTown()` dựng làng (dùng asset `public/assets/village/`), viền khu an toàn (màu từ `VILLAGE_MARKER`) và NPC; công trình có tint và nguồn sáng (lò rèn/quán/nhà thờ) từ `atmosphereConfig.ts`. Dữ liệu bố trí: `BUILDINGS`, `TREES`, `PROPS` (có `angle`/`unlit` cho vật nghiêng/đèn hỏng), `DECOR` (trang trí thuần hình ảnh, không vật cản: hàng rào gãy, bụi, hàng hóa, lửa trại ngoài cổng).
 - `castleWall.ts` — tường thành gạch bao quanh `VILLAGE_ZONE` (4 cổng ở đường lát đá, tháp góc + tháp cổng, răng cưa); vẽ bằng `vfx/brickBox.ts` (dùng chung với Bất Động Thành Lũy), nướng thành texture từng đoạn, chặn vật lý qua nhóm `obstacles`, trồi lên + bụi lúc vào scene. Số liệu `config/castleConfig.ts`.
+- `bossArena.ts` — `buildBossArena()` dựng Đấu Trường 1600×1088 (sàn 2 tông, tường gạch vát góc bậc thang bằng `vfx/brickBox.ts`, 4 cột, vòng ma pháp, brazier + đèn, ánh sáng CỐ ĐỊNH tự dựng — không dùng `vfx/atmosphere.ts`) và cổng về; trả `TownInfo`. Texture khoá cố định (`arena-*`) nên vào lại không sinh thêm.
+- `portal.ts` — `PortalVisual`/`createPortal`: cổng vẽ procedural (bệ 96 px, vòng xoáy 8 frame 64 px, hạt, nhãn, vòng sạc, khóa/mở). Cổng vào dựng trong `town.ts` (`TownInfo.portal`, 2 trụ đèn `lamppost`).
+- `bossArenaRules.ts` (+ test) — luật thuần: `decideBossAction` (Boss chỉ 'spawn' khi `inArena`), `shouldSpawnArenaMinions`, `getPortalDenyReason` (panel/chết/hồi/nhảy/Boss sống), tiến độ sạc, vùng sạch cổng. Số liệu `config/bossArenaConfig.ts`.
 
 ### Làng & kinh tế
 - Quái rơi vàng/ngọc (`WorldScene.dropLoot/dropBossLoot/updateLootDrops`, `entities/LootDrop.ts`); vàng hiện ở `Hud.setGold`.
@@ -164,6 +170,7 @@ Lưu ý: `WorldScene` ↔ `CharacterPanelScene` phụ thuộc hai chiều (panel
 | Cây kỹ năng (chưa nối) | `skills/tree/*` |
 | Quái / AI quái | `entities/EnemyBase.ts`, `Enemy.ts`, `RangedEnemy.ts`; số liệu `combatConfig.ts`; sprite `utils/enemySprites.ts` |
 | Boss | `entities/BossEnemy.ts`; điều phối `WorldScene` (`updateBoss`…); số liệu `combatConfig.ts` (BOSS_*) |
+| Đấu Trường Boss / cổng dịch chuyển / quái con ở Arena | `scenes/BossArenaScene.ts`, `world/{bossArena,portal,bossArenaRules}.ts`, `progression/RunSession.ts`, số liệu `config/bossArenaConfig.ts`; cổng vào ở `world/town.ts` |
 | Spawn quái / độ khó theo thời gian | `WorldScene.spawnEnemy/updateEnemySpawning/getThreatTier`; `combatConfig.ts` (THREAT_*) |
 | Hòm vũ khí / legendary | `entities/WeaponChest.ts`; `WorldScene` (nhóm `*Chest*`); `combatConfig.ts` (CHEST_*, LEGENDARY_*) |
 | Di chuyển, dash, máu/giáp/năng lượng | `entities/Player.ts`; `combatConfig.ts` (PLAYER_*, DASH_*) |

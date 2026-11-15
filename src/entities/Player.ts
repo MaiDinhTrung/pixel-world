@@ -489,6 +489,43 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     return this.dashChargeMax;
   }
 
+  /** Bản chụp mốc hồi từng lượt lướt tích trữ (thời gian tuyệt đối), để mang sang scene khác. */
+  getDashChargeReadyAt(): number[] {
+    return [...this.dashChargeReadyAt];
+  }
+
+  /** Áp lại mốc hồi lượt lướt đã chụp; chiều dài theo trần hiện tại (thiếu = đã sẵn sàng). */
+  setDashChargeReadyAt(readyAt: readonly number[]): void {
+    this.dashChargeReadyAt = this.dashChargeReadyAt.map(
+      (_, index) => readyAt[index] ?? 0,
+    );
+  }
+
+  /** Mốc hết hồi Dash thường (thời gian tuyệt đối). */
+  getDashReadyAt(): number {
+    return this.dashReadyAt;
+  }
+
+  setDashReadyAt(readyAt: number): void {
+    this.dashReadyAt = readyAt;
+  }
+
+  /** HP, giáp, năng lượng hiện tại (để lưu vào RunSession khi đổi scene). */
+  getVitals(): { health: number; armor: number; energy: number } {
+    return { health: this.health, armor: this.armor, energy: this.energy };
+  }
+
+  /** Áp lại HP/giáp/EN đã chụp, kẹp theo tối đa hiện tại (HP tối thiểu 1 để không "chết" khi áp). */
+  setVitals(vitals: { health: number; armor: number; energy: number }): void {
+    if (this.dead) {
+      return;
+    }
+
+    this.health = Phaser.Math.Clamp(vitals.health, 1, this.getMaxHealth());
+    this.armor = Phaser.Math.Clamp(vitals.armor, 0, this.getMaxArmor());
+    this.energy = Phaser.Math.Clamp(vitals.energy, 0, this.getMaxEnergy());
+  }
+
   /** Thời gian tới khi có thêm một lượt (0 nếu còn lượt hoặc không dùng lượt). */
   getNextDashChargeIn(time: number): number {
     if (this.dashChargeMax <= 0 || this.getDashCharges(time) > 0) {
