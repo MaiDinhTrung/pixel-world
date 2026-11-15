@@ -28,7 +28,8 @@ Không có file ảnh; sinh trong `PreloadScene.create()`. Key khai báo ở `TE
 | Quái | `enemy` (brute 24 px), `rangedEnemy` (caster 24 px), `boss` (32 px) | `utils/enemySprites.ts` (`SHEETS`) |
 | Đồng minh | `minion-skeleton` | `PreloadScene.create` |
 | Vũ khí cầm tay (12) | `hammer`, `sword`, `shield`, `blaster`, `bow`, `scythe`, `staff`, `wand`, `dualBlades`, `excalibur`, `dragonBow`, `voidStaff`; frame kéo dây `<key>-draw-N` (cung/cung rồng) | art `utils/weaponArt.ts`, sinh `utils/weaponTextures.ts`, gắn tay `config/weaponSpriteConfig.ts` |
-| Đạn/hiệu ứng nhỏ | `bullet`, `enemyBullet`, `arrow`, `orb`, `spark`, `glow`, `shadow`, `ring` | `PreloadScene` + `utils/pixelTexture.ts` |
+| Đạn/hiệu ứng nhỏ | `bullet`, `arrow`, `orb`, `spark`, `glow`, `shadow`, `ring` | `PreloadScene` + `utils/pixelTexture.ts` |
+| Đạn quái (6) | `enemyBullet` (vật lý/mặc định) + `enemyBullet-<hệ>` cho fire/ice/lightning/wind/dark; texture 44×20 px, 1 frame, sinh bằng code | `vfx/vfxTextures.ts` (`createEnemyBullets`, `enemyBulletTextureKey`); kích thước `ENEMY_BULLET_VISUAL` ở `config/vfxConfig.ts`; màu `NEON.enemyBullet` (`config/palette.ts`) + `ELEMENT_PALETTE` (`config/damageTypeConfig.ts`); bắn bằng `utils/projectile.ts` |
 | Hòm | `chestClosed`, `chestOpen`, `legendaryChestClosed`, `legendaryChestOpen` | `utils/chestArt.ts` |
 | Trang bị (9 icon) | mũ `gear-cloth-hood/iron-helm/dragon-crown`; giáp `gear-cloth-robe/iron-cuirass/dragon-plate`; giày `gear-worn-boots/swift-greaves/void-treads` | `PreloadScene.create` (`createPixelTexture`); ngoại hình trên người `config/gearLook.ts` |
 | Font số sát thương | `DAMAGE_FONT_KEYS.normal/crit` (BitmapFont 5×7, ký tự `0123456789k!`) | `vfx/damageNumberFont.ts`, số liệu `config/damageNumberConfig.ts` |

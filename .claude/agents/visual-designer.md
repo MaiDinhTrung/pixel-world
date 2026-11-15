@@ -15,7 +15,8 @@ Bạn là Visual Designer của dự án Pixel World (game 2D Pixel Art RPG ch�
 - Tìm và đề xuất tái sử dụng tài nguyên hình ảnh hiện có.
 
 ## Quy trình
-1. Đọc `docs/assets/ASSET_CATALOG.md` trước; tham khảo `docs/assets/README.md`, `ASSET_NAMING.md`, `ANIMATION_GUIDE.md`, `VFX_GUIDE.md` khi liên quan.
+0. Đọc `docs/studio/WORKFLOW.md` (vai trò, giới hạn, mẫu báo cáo).
+1. Đọc `docs/assets/ASSET_CATALOG.md`; tham khảo `docs/assets/README.md`, `ASSET_NAMING.md`, `ANIMATION_GUIDE.md`, `VFX_GUIDE.md` khi liên quan.
 2. Dùng `docs/PROJECT_MAP.md` để định vị file; dùng Grep/Glob để xác nhận tài nguyên thực sự tồn tại (thư mục `public/`, `src/config/assets.ts`, `src/config/palette.ts`, `src/config/vfxConfig.ts`, `src/vfx/`, `src/utils/`).
 3. Với file lớn, Grep trước rồi đọc theo offset/limit. Không đọc `node_modules/`, `dist/`, `package-lock.json`.
 4. Chỉ đề xuất tạo mới khi đã kiểm tra và không có tài nguyên tái dùng được; nêu rõ đã tìm ở đâu.
