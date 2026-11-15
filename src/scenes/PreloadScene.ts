@@ -3,6 +3,7 @@ import Phaser from 'phaser';
 import { VILLAGE_ASSETS } from '../config/assets';
 import { CHARACTER_LIST } from '../config/characters';
 import { SCENE_KEYS, TEXTURE_KEYS, TILE_SIZE } from '../config/constants';
+import { progressStore } from '../progression/ProgressStore';
 import { createEnemySpriteSheets } from '../utils/enemySprites';
 import { createChestTextures } from '../utils/chestArt';
 import { createPixelTexture } from '../utils/pixelTexture';
@@ -13,6 +14,9 @@ import {
   createPlaceholderPlayerSheet,
   createPlayerAnimations,
 } from '../utils/placeholderPlayer';
+
+/** Đã đăng ký sự kiện flush khi ẩn/đóng tab chưa. */
+let flushHooksRegistered = false;
 
 const PLAYER_PALETTE = {
   O: '#14141c',
@@ -213,6 +217,22 @@ export class PreloadScene extends Phaser.Scene {
   }
 
   create(): void {
+    // Nạp tiến trình sớm; chỉ vào menu khi đã nạp xong (hydrate không bao giờ reject).
+    const ready = progressStore.hydrate();
+
+    // Ghi nốt hàng đợi khi ẩn/đóng tab. Đăng ký một lần cho cả phiên.
+    if (!flushHooksRegistered) {
+      flushHooksRegistered = true;
+      window.addEventListener('pagehide', () => {
+        void progressStore.flush();
+      });
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden') {
+          void progressStore.flush();
+        }
+      });
+    }
+
     createPixelTexture(this, TEXTURE_KEYS.player, PLAYER_ROWS, PLAYER_PALETTE);
     createEnemySpriteSheets(this);
 
@@ -316,7 +336,9 @@ export class PreloadScene extends Phaser.Scene {
       );
     }
 
-    this.scene.start(SCENE_KEYS.menu);
+    ready.then(() => {
+      this.scene.start(SCENE_KEYS.menu);
+    });
   }
 
   private createGlowTexture(): void {

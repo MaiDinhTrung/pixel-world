@@ -30,8 +30,6 @@ import type { SkillLevels } from '../skills/tree/skillTreeTypes';
 import type { LevelState } from './LevelSystem';
 import { XP_BASE } from './progressionConfig';
 
-const STORAGE_KEY = 'pixel-world:progress:v1';
-
 /** Phiên bản save hiện tại. */
 export const SAVE_VERSION = 7;
 
@@ -61,26 +59,6 @@ export interface CharacterSave extends LevelState {
 }
 
 export type ProgressData = Partial<Record<CharacterId, CharacterSave>>;
-
-function readData(): ProgressData {
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-
-    if (!raw) {
-      return {};
-    }
-
-    const parsed: unknown = JSON.parse(raw);
-
-    if (!parsed || typeof parsed !== 'object') {
-      return {};
-    }
-
-    return parsed as ProgressData;
-  } catch {
-    return {};
-  }
-}
 
 function validNumber(value: unknown, minimum: number): number | null {
   if (
@@ -394,11 +372,15 @@ export function createDefaultSave(
   };
 }
 
-export function getCharacterSave(
+/**
+ * Chuẩn hóa dữ liệu thô (đọc từ kho lưu trữ) của một nhân vật thành
+ * CharacterSave hợp lệ; thiếu/hỏng thì dùng giá trị mặc định.
+ */
+export function normalizeCharacterSave(
   characterId: CharacterId,
+  raw: unknown,
 ): CharacterSave {
   const defaults = createDefaultSave(characterId);
-  const raw = readData()[characterId] as unknown;
 
   if (!raw || typeof raw !== 'object') {
     return defaults;
@@ -479,28 +461,4 @@ export function getCharacterSave(
     extraSkills,
     skillLevels,
   };
-}
-
-export function saveCharacterSave(
-  characterId: CharacterId,
-  save: CharacterSave,
-): void {
-  try {
-    const data = readData();
-
-    data[characterId] = save;
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-  } catch {
-    // localStorage có thể bị chặn; bỏ qua để game vẫn chạy.
-  }
-}
-
-export function getAllCharacterSaves(): ProgressData {
-  const saves: ProgressData = {};
-
-  for (const characterId of Object.keys(CHARACTERS) as CharacterId[]) {
-    saves[characterId] = getCharacterSave(characterId);
-  }
-
-  return saves;
 }

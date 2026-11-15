@@ -7,10 +7,8 @@ import {
   type CharacterDefinition,
 } from '../config/characters';
 import { DESIGN_HEIGHT, DESIGN_WIDTH, SCENE_KEYS } from '../config/constants';
-import {
-  getAllCharacterSaves,
-  type ProgressData,
-} from '../progression/CharacterProgress';
+import type { ProgressData } from '../progression/CharacterProgress';
+import { progressStore } from '../progression/ProgressStore';
 import { toDisplayEnergy, toDisplayHealth } from '../config/scaleConfig';
 import { getSkill } from '../skills/skills';
 
@@ -30,7 +28,7 @@ export class CharacterSelectScene extends Phaser.Scene {
 
   create(): void {
     this.resolved = false;
-    this.progress = getAllCharacterSaves();
+    this.progress = progressStore.getAll();
 
     this.cameras.main.setBackgroundColor('#07080d');
 

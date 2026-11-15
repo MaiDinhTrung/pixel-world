@@ -160,11 +160,8 @@ import { Player } from '../entities/Player';
 import { RangedEnemy } from '../entities/RangedEnemy';
 import { WeaponChest } from '../entities/WeaponChest';
 import { createPlaceholderPlayerSheet } from '../utils/placeholderPlayer';
-import {
-  SAVE_VERSION,
-  getCharacterSave,
-  saveCharacterSave,
-} from '../progression/CharacterProgress';
+import { SAVE_VERSION } from '../progression/CharacterProgress';
+import { progressStore } from '../progression/ProgressStore';
 import { LevelSystem } from '../progression/LevelSystem';
 import { XP_PER_KILL } from '../progression/progressionConfig';
 import { StatSheet } from '../progression/StatSheet';
@@ -695,7 +692,7 @@ export class WorldScene extends Phaser.Scene {
       this.minions.clear();
     });
 
-    const save = getCharacterSave(this.characterId);
+    const save = progressStore.get(this.characterId);
 
     this.levelSystem = new LevelSystem({
       level: save.level,
@@ -2476,7 +2473,7 @@ export class WorldScene extends Phaser.Scene {
   private saveProgress(): void {
     const levelState = this.levelSystem.getState();
 
-    saveCharacterSave(this.characterId, {
+    progressStore.commit(this.characterId, {
       ...levelState,
       version: SAVE_VERSION,
       statPoints: this.statPoints,
