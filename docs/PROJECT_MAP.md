@@ -197,6 +197,7 @@ Lưu ý: `WorldScene` ↔ `CharacterPanelScene` phụ thuộc hai chiều (panel
 
 ## 5. Dự kiến / chưa triển khai
 Mobile Combat HUD (đang làm theo kế hoạch 8 bước; xong bước 1–5 và 7 (kỹ năng `target`: hunters_mark = MARK OF DEATH; kéo-để-ngắm đã chạy cho shield_bash, blink, arrow_rain, meteor; các kỹ năng còn lại vẫn instant): `config/controlsConfig.ts`, `skills/skillControl.ts`, `input/MobileInputManager.ts`, `input/VirtualJoystick.ts`). Tab SETTINGS (bước 7) đã xong; bước 6 (PC dùng chung bộ ngắm) tạm hoãn theo yêu cầu; đã có đợt tối ưu mobile (Hud chỉ vẽ lại khi đổi, nút menu ≥44px, nút toàn màn hình trong SETTINGS). Còn lại: tinh chỉnh bố cục/icon theo nhân vật trên máy thật.
+**Kiến trúc dữ liệu (dự kiến, chờ duyệt Cổng 1, chưa có file):** `ProgressRepository`/`LocalStorageRepository`/`ProgressStore` (Gói A), Item Instance + `characterUid` + `revision` + migration save v7→8 (Gói B), `systems/PlayerState` (Gói C). Thiết kế đầy đủ: `docs/DATA_ARCHITECTURE.md`.
 Ngoài ra chưa có mục nào được xác nhận trong repo. Hiện không có thư mục test, backend, âm thanh hay tài liệu nào khác ngoài `README.md` và file này. Khi thêm hệ thống mới, ghi vào đây với nhãn "dự kiến" cho tới khi file tồn tại.
 
 ## 6. Bảo trì bản đồ

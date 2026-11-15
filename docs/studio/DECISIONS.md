@@ -16,6 +16,15 @@ Mẫu mục:
 
 ---
 
+### 2026-11-15 — Kiến trúc dữ liệu người chơi: Repository → Item Instance/UID/Revision → PlayerState
+- **Quyết định (người dùng chốt):** Định hướng **Single-player trước, Multiplayer sau**; chuẩn bị tối thiểu theo thứ tự **Gói A** (ProgressRepository + ProgressStore, không đổi định dạng save) → **Gói B** (Item Instance + `characterUid` + `revision`, migration SAVE_VERSION 7→8; chia B1 thêm module/test, B2 bật lên) → **Gói C** (PlayerState thuần, 5 bước). Năm lựa chọn: (1) gear trùng loại chỉ nâng level, không tạo món riêng; (2) nạp save sớm ở `PreloadScene`; (3) giữ sao lưu save v7 vĩnh viễn, không tự xóa/ghi đè; (4) khóa save vẫn là `CharacterId`; (5) `revision` xung đột → từ chối ghi và thông báo, không ghi đè.
+- **Lead đã tự xác minh bằng đọc code** (không chỉ báo cáo Designer): `PreloadScene.create` đồng bộ → nạp trước khi `scene.start(menu)`; `WorldScene.create` đồng bộ nên cần cache; kho đồ vốn là tập hợp không trùng (normalizer loại trùng, mọi đường thêm đồ kiểm `includes`) nên uid 1:1 với `defId` trong một nhân vật.
+- **Lý do:** tách I/O khỏi scene, chuẩn bị server-authoritative với chi phí nhỏ nhất; làm ID/revision sớm vì càng muộn càng tốn.
+- **Phương án bị loại:** tái cấu trúc toàn dự án một lượt; mỗi lần nhặt là một instance riêng (đổi thiết kế túi đồ và cân bằng); wrapper `@deprecated` cho hàm save cũ (import vòng với store; chỉ 3 nơi gọi); debounce ghi (mất hợp đồng "ghi đồng bộ khi gọi", rủi ro mất dữ liệu khi đóng tab); `registry` làm nơi giữ store (thêm tầng gián tiếp, không cần).
+- **Ảnh hưởng:** Gói A: `src/progression/{CharacterProgress,ProgressRepository,LocalStorageRepository,ProgressStore}.ts` (+ 2 test), `src/config/progressConfig.ts`, `WorldScene.ts`, `CharacterSelectScene.ts`, `PreloadScene.ts`, `docs/PROJECT_MAP.md`. Gói B/C: danh sách chốt khi lập brief. Giới hạn đã biết của A: hai tab cùng một nhân vật vẫn "ghi sau thắng" cho tới khi có `revision` ở B.
+- **Trạng thái:** Đã chốt 5 lựa chọn; **chờ duyệt Cổng 1 bản thiết kế cuối của Gói A** (chưa gọi Developer, chưa code, chưa commit). Gói B, C: chờ Gói A nghiệm thu và Cổng 1 riêng.
+- **Tài liệu liên quan:** `docs/DATA_ARCHITECTURE.md` (Feature Specification đầy đủ, ánh xạ trường, migration, Acceptance Criteria)
+
 ### 2026-11-15 — Định hướng thiết kế tổng thể (Design Pillars)
 - **Quyết định (người dùng chỉ đạo):** Visual lấy cảm hứng Soul Knight (silhouette rõ, animation sinh động); World & Gameplay kiểu MMORPG 2D lấy cảm hứng Ngọc Rồng Online; Combat & Skills kiểu Action RPG lấy cảm hứng Diablo; Identity giữ Grim Dark Fantasy, IP/hình ảnh/kỹ năng nguyên bản, không sao chép tài sản game tham khảo.
 - **Lý do:** có một nguồn định hướng chung cho Designer và Developer.
