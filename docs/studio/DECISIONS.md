@@ -30,7 +30,9 @@ Mẫu mục:
 - **Lý do dời `revision`:** sau khi đọc lại code, `ProgressStore`/`LocalStorageRepository` gõ kiểu v7 và `get()` trả v7 cho `WorldScene`; thêm `revision` ở B1 phải ép kiểu tạm và đổi chữ ký nhiều nơi. Đổi kiểu một lần ở B2 gọn hơn và giữ B1 thật sự không đụng game.
 - **Phương án bị loại:** làm migration và `revision` cùng B1 (rủi ro ép kiểu); migrate trực tiếp từ JSON thô (bỏ qua `normalizeCharacterSave` đã kiểm chứng); `Math.random`/`Date` để sinh uid (mất tính xác định, khó test).
 - **Ảnh hưởng:** `src/config/progressConfig.ts`, `src/progression/{ItemInstance,ItemIds,saveV8,saveMigration}.ts` + 3 file test, `docs/PROJECT_MAP.md`. Tiêu chí then chốt: `v8ToV7Shape(migrate(s))` deepEqual `s` trên save mặc định của mọi nhân vật và ≥ 20 save sinh theo bảng.
-- **Trạng thái:** Đã duyệt Cổng 1 (2026-11-15), kèm đồng ý commit riêng docs; đang giao Developer. B2: Cổng 1 riêng.
+- **Trạng thái:** Đã triển khai, QA Đạt (build, tsc, 203/203 test, phạm vi sạch, không file đang chạy nào import module mới); người dùng đồng ý chốt (Cổng 2, 2026-11-15). Không có chức năng mới để chơi nên không có bước chơi thử riêng. B2: Cổng 1 riêng.
+- **Quyết định tự do của Developer, QA đã đồng ý:** ô trang bị/vũ khí v7 trỏ đồ không có trong túi → đặt `null` + ghi `migrationLog` (không `ok:false`, vì sẽ khóa nhân vật chỉ vì một ô mồ côi; trong thực tế gần như không xảy ra); `gearLevels` của món không có trong túi bị loại + ghi log (game vốn xóa khi bỏ đồ nên gần như không có dữ liệu thật bị mất).
+- **Việc B2 phải làm (từ QA):** (1) kiểm `characterUid` khớp `makeCharacterUid(characterId)` khi nạp save v8 (`migrateToLatest` chưa kiểm); (2) ghi `migrationLog` xuống đĩa cùng save; (3) tăng độ mạnh test đa dạng (so từng cặp save sinh) nếu cần.
 - **Tài liệu liên quan:** `docs/DATA_ARCHITECTURE.md` §3.5
 
 ### 2026-11-15 — Định hướng thiết kế tổng thể (Design Pillars)
