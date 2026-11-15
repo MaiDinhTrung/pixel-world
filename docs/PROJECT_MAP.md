@@ -97,6 +97,7 @@ Bản đồ nhanh `CharacterPanelScene.ts`: `renderSkills`, `renderStats`, `rend
 ### Input & UI — `src/systems/`, `src/ui/`
 - `systems/CorpseManager.ts` — xác chết (pool 8, hết hạn 8 s, `consumeNearest`); WorldScene thêm xác khi quái thường/minion chết. Chưa skill nào dùng.
 - `systems/InputController.ts` — bàn phím/chuột/chạm, phát yêu cầu đổi vũ khí; dùng `ui/TouchControls`.
+- `systems/PlayerState.ts` (+ `.test.ts`) — Gói C1: luật kho đồ/trang bị/cấp đồ thuần (vũ khí 2 ô, trang bị 3 ô, `rewardGear` theo luật `grantBossLoot`, `fromSave` chuẩn hóa như `WorldScene.create`, `toSave(economy, base)` luôn qua `validateSaveV8`, `getLoadedSockets`). **Chưa nối vào game** (chỉ test import), dùng cho C2a. Chưa có phần tiến trình (C3). Thiết kế: `docs/DATA_ARCHITECTURE.md` §4.
 - `ui/Hud.ts` — HUD (level + XP, skill bar, boss text, vàng).
 - `ui/DayNightToggle.ts` — nút thử chuyển ngày/đêm (góc phải, dưới cụm thông tin vũ khí) + phím N: xoay vòng tự động → ép ngày → ép đêm; gọi `setTimeMode` của `vfx/atmosphere.ts`. Chỉ để kiểm tra, không ảnh hưởng gameplay.
 - `ui/PlayerBars.ts` — thanh trên đầu nhân vật: một thanh chung máu (đỏ) + máu ảo (trắng xám = giáp, trừ trước) và thanh mana (xanh) nhỏ hơn bên dưới.
@@ -205,7 +206,7 @@ Lưu ý: `WorldScene` ↔ `CharacterPanelScene` phụ thuộc hai chiều (panel
 
 ## 5. Dự kiến / chưa triển khai
 Mobile Combat HUD (đang làm theo kế hoạch 8 bước; xong bước 1–5 và 7 (kỹ năng `target`: hunters_mark = MARK OF DEATH; kéo-để-ngắm đã chạy cho shield_bash, blink, arrow_rain, meteor; các kỹ năng còn lại vẫn instant): `config/controlsConfig.ts`, `skills/skillControl.ts`, `input/MobileInputManager.ts`, `input/VirtualJoystick.ts`). Tab SETTINGS (bước 7) đã xong; bước 6 (PC dùng chung bộ ngắm) tạm hoãn theo yêu cầu; đã có đợt tối ưu mobile (Hud chỉ vẽ lại khi đổi, nút menu ≥44px, nút toàn màn hình trong SETTINGS). Còn lại: tinh chỉnh bố cục/icon theo nhân vật trên máy thật.
-**Kiến trúc dữ liệu:** Gói A đã có (`ProgressRepository`/`LocalStorageRepository`/`ProgressStore`). Gói B1 (kiểu v8, uid, migration v7→8, bộ kiểm) và B2a (cầu nối) đã được nối ở Gói B2b: đĩa lưu v8, có `revision`, sao lưu `backup-v7`, khóa chỉ-đọc theo nhân vật. Dự kiến, chưa có file: runtime dùng uid thay defId, `systems/PlayerState` (Gói C). Thiết kế đầy đủ: `docs/DATA_ARCHITECTURE.md`.
+**Kiến trúc dữ liệu:** Gói A đã có (`ProgressRepository`/`LocalStorageRepository`/`ProgressStore`). Gói B1 (kiểu v8, uid, migration v7→8, bộ kiểm) và B2a (cầu nối) đã được nối ở Gói B2b: đĩa lưu v8, có `revision`, sao lưu `backup-v7`, khóa chỉ-đọc theo nhân vật. Gói C1 đã có `systems/PlayerState.ts` (luật kho đồ/trang bị thuần, chưa nối vào game, dùng cho C2a). Dự kiến, chưa làm: nối `PlayerState` vào `WorldScene` (C2a–C4), phần tiến trình (C3), runtime dùng uid thay defId. Thiết kế đầy đủ: `docs/DATA_ARCHITECTURE.md`.
 Ngoài ra chưa có mục nào được xác nhận trong repo. Hiện không có thư mục test, backend, âm thanh hay tài liệu nào khác ngoài `README.md` và file này. Khi thêm hệ thống mới, ghi vào đây với nhãn "dự kiến" cho tới khi file tồn tại.
 
 ## 6. Bảo trì bản đồ
