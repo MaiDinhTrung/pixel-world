@@ -1,9 +1,12 @@
 import Phaser from 'phaser';
 
 import { VILLAGE } from '../config/assets';
+import { VILLAGE_MARKER } from '../config/atmosphereConfig';
 import { TEXTURE_KEYS, WORLD_HEIGHT, WORLD_WIDTH } from '../config/constants';
 import { VILLAGE_NPCS, VILLAGE_ZONE } from '../config/economyConfig';
+import { VILLAGE_VILLAGERS } from '../config/villageConfig';
 import { Npc } from '../entities/Npc';
+import { Villager } from '../entities/Villager';
 import {
   addGroundWash,
   addPointLight,
@@ -44,7 +47,7 @@ interface DecorSpec {
 export interface TownInfo {
   playerSpawn: { x: number; y: number };
   enemySpawns: { x: number; y: number }[];
-  /** NPC trong làng (thương nhân, thợ rèn). */
+  /** NPC tương tác trong làng (thương nhân, thợ rèn, trưởng làng). */
   npcs: Npc[];
 }
 
@@ -242,6 +245,7 @@ function addBuilding(
     .setDepth(spec.baseY);
 
   applyEnvironmentTint(image, spec.asset);
+  addPointLight(scene, spec.asset, spec.x, spec.baseY);
 
   addShadow(scene, spec.x, spec.baseY - 2, image.displayWidth * 0.68, 14, 0.22, spec.baseY - 1);
 
@@ -329,22 +333,26 @@ function addVillageMarkers(scene: Phaser.Scene): void {
   const { x, y, width, height } = VILLAGE_ZONE;
 
   scene.add
-    .rectangle(x, y, width, height, 0x4dffa6, 0.04)
+    .rectangle(x, y, width, height, VILLAGE_MARKER.fillColor, VILLAGE_MARKER.fillAlpha)
     .setOrigin(0, 0)
-    .setStrokeStyle(3, 0x4dffa6, 0.35)
+    .setStrokeStyle(
+      VILLAGE_MARKER.strokeWidth,
+      VILLAGE_MARKER.fillColor,
+      VILLAGE_MARKER.strokeAlpha,
+    )
     .setDepth(2);
 
   scene.add
     .text(x + width / 2, y + 28, 'LÀNG — KHU AN TOÀN', {
       fontFamily: 'monospace',
       fontSize: '20px',
-      color: '#4dffa6',
+      color: VILLAGE_MARKER.textColor,
       fontStyle: 'bold',
       backgroundColor: '#0b0c12',
       padding: { x: 8, y: 4 },
     })
     .setOrigin(0.5)
-    .setAlpha(0.85)
+    .setAlpha(VILLAGE_MARKER.textAlpha)
     .setDepth(3);
 }
 
@@ -476,6 +484,12 @@ export function buildTown(
     addObstacle(scene, obstacles, spec.x, spec.y - 10, 30, 20);
     return npc;
   });
+
+  // Dân làng trang trí: có vật cản như NPC nhưng KHÔNG nằm trong `npcs` (không mở cửa hàng khi đứng gần).
+  for (const spec of VILLAGE_VILLAGERS) {
+    new Villager(scene, spec);
+    addObstacle(scene, obstacles, spec.x, spec.y - 10, 30, 20);
+  }
 
   return {
     playerSpawn: { x: 1920, y: 1440 },

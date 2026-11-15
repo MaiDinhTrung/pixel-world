@@ -32,7 +32,7 @@ Bản đồ nhanh `CharacterPanelScene.ts`: `renderSkills`, `renderStats`, `rend
 - `Player.ts` — người chơi (di chuyển, dash kỹ năng + **lượt lướt tích trữ** `configureDashCharges/tryConsumeDashCharge`, máu/giáp/năng lượng, anim). Dash chung chỉ chạy khi `GENERIC_DASH_ENABLED` (mặc định tắt).
 - `EnemyBase.ts` (abstract; có stun/slow và trạng thái `applyDot` burn/poison, `applyVulnerable` mark/curse; số liệu `STATUS_*` ở `combatConfig.ts`) → `Enemy.ts` (cận chiến), `RangedEnemy.ts` (bắn xa), `BossEnemy.ts` (boss: slam, nova đạn, quạt đạn, mưa thiên thạch, triệu hồi, cuồng nộ <50% HP).
 - `WeaponChest.ts` — hòm vũ khí/trang bị rơi trên map. Hòm vẽ 24×21 px ở scale 1 (art sinh code ở `utils/chestArt.ts`, `createChestTextures` gọi từ `PreloadScene`); đồ nổi trong hòm hiện 1:1 (mũ/giáp/giày ~20 px), icon dài hơn `CHEST_ICON_MAX_FULL_SIZE` thì thu 0.5; độ cao đồ `CHEST_ICON_REST_Y`.
-- `Npc.ts` — NPC làng (Thương nhân, Thợ rèn); spec ở `config/economyConfig.ts` (`VILLAGE_NPCS`), dựng trong `world/town.ts`.
+- `Npc.ts` — NPC tương tác của làng (Thương nhân, Thợ rèn, Trưởng làng `elder`); spec ở `config/economyConfig.ts` (`VILLAGE_NPCS`, có `marker`), dựng trong `world/town.ts`. Export `NPC_ROWS`, `NPC_SCALE`. `Villager.ts` — dân làng trang trí (không tên/marker/tương tác), dựng từ `VILLAGE_VILLAGERS` (`config/villageConfig.ts`), texture `villager-<id>`, KHÔNG nằm trong `VILLAGE_NPCS`.
 - `LootDrop.ts` — vàng/ngọc rơi trên đất (hút về người chơi, hết hạn 30 s).
 
 ### Combat / vũ khí — `src/combat/`
@@ -79,11 +79,11 @@ Bản đồ nhanh `CharacterPanelScene.ts`: `renderSkills`, `renderStats`, `rend
 | `gearConfig.ts` | Trang bị: slot, rarity, bonus, scale theo level |
 | `statConfig.ts` | 6 stat, điểm mỗi level |
 | `scaleConfig.ts` | Thang số HIỂN THỊ: máu/giáp ×100, EN ×20, sát thương/máu quái ×50; Sức đánh gốc 100, mỗi điểm Sức mạnh +10. Logic chiến đấu giữ đơn vị gốc, chỉ UI (bảng chỉ số, số sát thương, mô tả trang bị) nhân hệ số |
-| `economyConfig.ts` | Vàng & ngọc: tỉ lệ rơi (`GOLD_DROP_CHANCE`, `GEM_DROP_CHANCE` — đang cao cho demo), giá mua/bán, chi phí nâng cấp/đục lỗ, vùng làng `VILLAGE_ZONE`, `VILLAGE_NPCS` |
+| `economyConfig.ts` | Vàng & ngọc: tỉ lệ rơi (`GOLD_DROP_CHANCE`, `GEM_DROP_CHANCE` — đang cao cho demo), giá mua/bán, chi phí nâng cấp/đục lỗ, vùng làng `VILLAGE_ZONE`, `VILLAGE_NPCS` (merchant/blacksmith/elder). Kèm `villageConfig.ts` (`VILLAGE_VILLAGERS`: 3 dân làng trang trí) và `elderDialogue.ts` (`ELDER_DIALOGUE_PAGES`, `ELDER_INPUT_LOCK_MS`; lời "hai phút" bám `BOSS_FIRST_DELAY_MS`) |
 | `gemConfig.ts` | 7 loại ngọc (`GEM_INFO`: hút máu, sát thương, hút ki, phản đòn, sinh lực, giáp, né đòn), `MAX_SOCKETS`, `computeGemBonuses` |
 | `assets.ts` | Đường dẫn asset village, key texture player |
 | `palette.ts` | Màu hiệu ứng (đạn, heal…); màu nguyên tố nằm ở `ELEMENT_PALETTE` trong `damageTypeConfig.ts` |
-| `atmosphereConfig.ts` | Không khí Grim Dark (GĐ2–3): bật/tắt, chu kỳ ngày/đêm (`DAY_NIGHT`, `NIGHT`), ambient (ngày 0, đêm 0.45), sương (`FOG`), vignette, ánh sáng điểm (`LIGHT_SOURCES`), tint môi trường (`GROUND_WASH`, `TINT_BY_ASSET`), depth các lớp. Dùng bởi `vfx/atmosphere.ts` và `world/town.ts` |
+| `atmosphereConfig.ts` | Không khí Grim Dark (GĐ2–3): bật/tắt, chu kỳ ngày/đêm (`DAY_NIGHT`, `NIGHT`), ambient (ngày 0, đêm 0.45), sương (`FOG`), vignette, ánh sáng điểm (`LIGHT_SOURCES`, gồm campfire, lamppost và lò rèn/quán/nhà thờ), tint môi trường (`GROUND_WASH`, `TINT_BY_ASSET`, gồm tint công trình `ENVIRONMENT_TINT.building`), màu viền/biển khu an toàn đồng trầm (`VILLAGE_MARKER`), depth các lớp. Dùng bởi `vfx/atmosphere.ts` và `world/town.ts` |
 | `controlsConfig.ts` | Bố cục nút Combat HUD (gốc + override theo nhân vật), joystick, ngưỡng ngắm, key lưu cấu hình. Được `CombatHUD`, `ControlLayoutStore`, `ControlLayoutEditor`, `VirtualJoystick`, `SkillAimingController`, `Hud` import. |
 
 ### Input & UI — `src/systems/`, `src/ui/`
@@ -113,14 +113,14 @@ Bản đồ nhanh `CharacterPanelScene.ts`: `renderSkills`, `renderStats`, `rend
 - Đã dùng trong 6 skill Warrior (`skills.ts`: `attachAura`, `slash.arc`, `ground.crack`). Mage/Assassin: dự kiến.
 
 ### World — `src/world/`
-- `town.ts` — `buildTown()` dựng làng (dùng asset `public/assets/village/`), viền khu an toàn và NPC. Dữ liệu bố trí: `BUILDINGS`, `TREES`, `PROPS` (có `angle`/`unlit` cho vật nghiêng/đèn hỏng), `DECOR` (trang trí thuần hình ảnh, không vật cản: hàng rào gãy, bụi, hàng hóa, lửa trại ngoài cổng).
+- `town.ts` — `buildTown()` dựng làng (dùng asset `public/assets/village/`), viền khu an toàn (màu từ `VILLAGE_MARKER`) và NPC; công trình có tint và nguồn sáng (lò rèn/quán/nhà thờ) từ `atmosphereConfig.ts`. Dữ liệu bố trí: `BUILDINGS`, `TREES`, `PROPS` (có `angle`/`unlit` cho vật nghiêng/đèn hỏng), `DECOR` (trang trí thuần hình ảnh, không vật cản: hàng rào gãy, bụi, hàng hóa, lửa trại ngoài cổng).
 - `castleWall.ts` — tường thành gạch bao quanh `VILLAGE_ZONE` (4 cổng ở đường lát đá, tháp góc + tháp cổng, răng cưa); vẽ bằng `vfx/brickBox.ts` (dùng chung với Bất Động Thành Lũy), nướng thành texture từng đoạn, chặn vật lý qua nhóm `obstacles`, trồi lên + bụi lúc vào scene. Số liệu `config/castleConfig.ts`.
 
 ### Làng & kinh tế
 - Quái rơi vàng/ngọc (`WorldScene.dropLoot/dropBossLoot/updateLootDrops`, `entities/LootDrop.ts`); vàng hiện ở `Hud.setGold`.
 - `systems/VillageService.ts` — toàn bộ giao dịch (mua/bán/đổi ngọc, nâng cấp, đục lỗ, khảm/tháo). Giữ vàng, `gems`, `gearSockets`; đụng túi đồ qua `VillageHost` (do `WorldScene.createVillageHost` cung cấp). `onChanged` → tính lại chỉ số + lưu.
 - Nâng cấp = `gearLevels` có sẵn (+25% chỉ số gốc mỗi cấp). Ngọc chỉ tính khi món đồ đang được mặc (`config/gemConfig.computeGemBonuses`), áp ở `WorldScene.applyPlayerStatistics`; Hút máu/Hút ki ở `handlePlayerHit`, Phản đòn qua `Player.onHurt` → `reflectThorns`.
-- Khu an toàn: `VILLAGE_ZONE`; Trong làng không chiến đấu được: `WorldScene.update` chặn đánh/kỹ năng/boss/spawn/AI quái khi `isInsideVillage`; `updateVillage` báo vào/ra, đẩy mọi quái (cả boss) ra, xoá đạn quái, `Player.setSafeZone` miễn sát thương. Tương tác NPC dùng chung phím F/nút đánh với hòm (`updateChests`, `getNearbyNpc`, `openVillageShop`).
+- Khu an toàn: `VILLAGE_ZONE`; Trong làng không chiến đấu được: `WorldScene.update` chặn đánh/kỹ năng/boss/spawn/AI quái khi `isInsideVillage`; `updateVillage` báo vào/ra, đẩy mọi quái (cả boss) ra, xoá đạn quái, `Player.setSafeZone` miễn sát thương. Tương tác NPC dùng chung phím F/nút đánh với hòm (`updateChests`, `getNearbyNpc`, `openVillageShop`). Ba NPC tương tác: Thương nhân, Thợ rèn, Trưởng làng (`role 'elder'`: không phải cửa hàng, `VillageShopScene.renderElder` hiện hội thoại tĩnh nhiều trang, F/ENTER/SPACE/chạm để tiếp, không lưu cờ "đã gặp"); 3 dân làng trang trí dựng trong `town.ts` (có vật cản, không tương tác).
 - Save v7: `gold`, `gems`, `gearSockets` (`progression/CharacterProgress.ts`); save cũ nhận `STARTING_GOLD`.
 
 ### Utils — `src/utils/`

@@ -60,10 +60,11 @@ export const VILLAGE_ZONE = { x: 1300, y: 900, width: 1240, height: 720 } as con
 export const VILLAGE_REPEL_SPEED = 170; // px/giây: tốc độ quái bị đẩy ra khỏi làng
 export const NPC_INTERACT_RADIUS = 96; // px: đứng gần NPC để nhấn F / nút đánh
 
-export type NpcRole = 'merchant' | 'blacksmith';
+export type NpcRole = 'merchant' | 'blacksmith' | 'elder';
 
 export interface NpcSpec {
   readonly role: NpcRole;
+  readonly marker: string; // biểu tượng nổi phía trên đầu NPC
   readonly name: string;
   readonly title: string; // dòng mô tả phía dưới tên
   readonly x: number;
@@ -77,19 +78,31 @@ export const VILLAGE_NPCS: readonly NpcSpec[] = [
     role: 'merchant',
     name: 'THƯƠNG NHÂN',
     title: 'MUA · BÁN · ĐỔI',
-    x: 1740,
-    y: 1480,
+    x: 2280,
+    y: 1400,
     color: 0xffd75e,
     colorCss: '#ffd75e',
+    marker: '$',
   },
   {
     role: 'blacksmith',
     name: 'THỢ RÈN',
     title: 'NÂNG CẤP · ĐỤC LỖ · KHẢM NGỌC',
-    x: 2100,
-    y: 1480,
+    x: 1380,
+    y: 1540,
     color: 0xff9f43,
     colorCss: '#ff9f43',
+    marker: '+',
+  },
+  {
+    role: 'elder',
+    name: 'TRƯỞNG LÀNG',
+    title: 'LỜI KHUYÊN CHO NGƯỜI MỚI',
+    x: 2024,
+    y: 1432,
+    color: 0xb8d0ea,
+    colorCss: '#b8d0ea',
+    marker: '!',
   },
 ];
 

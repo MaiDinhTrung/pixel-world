@@ -10,6 +10,7 @@ import {
   VILLAGE_NPCS,
   type NpcRole,
 } from '../config/economyConfig';
+import { ELDER_DIALOGUE_PAGES, ELDER_INPUT_LOCK_MS } from '../config/elderDialogue';
 import {
   GEAR_INFO,
   GEAR_SLOT_LABELS,
@@ -81,13 +82,18 @@ export class VillageShopScene extends Phaser.Scene {
   private message = '';
   private messageColor = TEXT_COLOR;
   private closing = false;
+  private dialoguePage = 0; // trang hội thoại hiện tại của Trưởng làng (0-based)
+  private inputLockUntil = 0; // mốc (Date.now) trước đó bỏ qua input chuyển trang
 
   constructor() {
     super(SCENE_KEYS.villageShop);
   }
 
   init(data?: { role?: NpcRole }): void {
-    this.role = data?.role === 'blacksmith' ? 'blacksmith' : 'merchant';
+    this.role =
+      data?.role === 'blacksmith' || data?.role === 'elder' ? data.role : 'merchant';
+    this.dialoguePage = 0;
+    this.inputLockUntil = 0;
     this.tab = 'buy';
     this.page = 0;
     this.selectedGear = null;
@@ -134,15 +140,17 @@ export class VillageShopScene extends Phaser.Scene {
       })
       .setDepth(2);
 
-    this.goldText = this.add
-      .text(PANEL_X + PANEL_WIDTH - 20, PANEL_Y + 18, '', {
-        fontFamily: 'monospace',
-        fontSize: '18px',
-        color: GOLD,
-        fontStyle: 'bold',
-      })
-      .setOrigin(1, 0)
-      .setDepth(2);
+    if (this.role !== 'elder') {
+      this.goldText = this.add
+        .text(PANEL_X + PANEL_WIDTH - 20, PANEL_Y + 18, '', {
+          fontFamily: 'monospace',
+          fontSize: '18px',
+          color: GOLD,
+          fontStyle: 'bold',
+        })
+        .setOrigin(1, 0)
+        .setDepth(2);
+    }
 
     if (this.role === 'merchant') {
       this.createMerchantTabs();
@@ -152,7 +160,9 @@ export class VillageShopScene extends Phaser.Scene {
       .text(
         DESIGN_WIDTH / 2,
         PANEL_Y + PANEL_HEIGHT - 8,
-        'ESC / TAB / NÚT X ĐỂ ĐÓNG',
+        this.role === 'elder'
+          ? 'F / CHẠM ĐỂ TIẾP · ESC / TAB / X ĐỂ ĐÓNG'
+          : 'ESC / TAB / NÚT X ĐỂ ĐÓNG',
         { fontFamily: 'monospace', fontSize: '9px', color: MUTED },
       )
       .setOrigin(0.5, 1)
@@ -168,11 +178,71 @@ export class VillageShopScene extends Phaser.Scene {
       }
     });
 
+    if (this.role === 'elder') {
+      this.inputLockUntil = Date.now() + ELDER_INPUT_LOCK_MS;
+
+      for (const eventName of ['keydown-F', 'keydown-ENTER', 'keydown-SPACE']) {
+        keyboard?.on(eventName, (event: KeyboardEvent) => {
+          if (!event.repeat) {
+            this.advanceDialogue();
+          }
+        });
+      }
+    }
+
     if (this.role === 'blacksmith') {
       this.selectedGear = this.getUpgradableGear()[0] ?? null;
     }
 
     this.render();
+  }
+
+  /** Sang trang kế của Trưởng làng; ở trang cuối thì đóng. Bỏ qua trong khoảng khóa đầu. */
+  private advanceDialogue(): void {
+    if (this.closing || Date.now() < this.inputLockUntil) {
+      return;
+    }
+
+    if (this.dialoguePage >= ELDER_DIALOGUE_PAGES.length - 1) {
+      this.close();
+      return;
+    }
+
+    this.dialoguePage += 1;
+    this.render();
+  }
+
+  private renderElder(): void {
+    const total = ELDER_DIALOGUE_PAGES.length;
+    const page = Math.min(this.dialoguePage, total - 1);
+    const isLast = page >= total - 1;
+
+    this.addText(
+      PANEL_X + 50,
+      BODY_Y + 30,
+      ELDER_DIALOGUE_PAGES[page],
+      TEXT_COLOR,
+      20,
+      0,
+      PANEL_WIDTH - 100,
+    );
+    this.addText(
+      PANEL_X + PANEL_WIDTH / 2,
+      PANEL_Y + PANEL_HEIGHT - 150,
+      `${page + 1}/${total}`,
+      MUTED,
+      16,
+      0.5,
+    );
+    this.addButton(
+      PANEL_X + PANEL_WIDTH / 2 - 110,
+      PANEL_Y + PANEL_HEIGHT - 120,
+      220,
+      60,
+      isLast ? 'ĐÓNG' : 'TIẾP >',
+      true,
+      () => this.time.delayedCall(0, () => this.advanceDialogue()),
+    );
   }
 
   // ---- Khung chung ----
@@ -250,6 +320,12 @@ export class VillageShopScene extends Phaser.Scene {
   private render(): void {
     this.content?.destroy(true);
     this.content = this.add.container(0, 0).setDepth(10);
+
+    if (this.role === 'elder') {
+      this.renderElder();
+      return;
+    }
+
     this.goldText?.setText(`VÀNG ${this.world.getVillage().getGold()}`);
 
     for (const tab of MERCHANT_TABS) {

@@ -138,7 +138,27 @@ export const LIGHT_SOURCES: Readonly<
 > = {
   campfire: { offsetY: -18, radius: 190, alpha: 0.5, fogClearRadius: 260 },
   lamppost: { offsetY: -56, radius: 150, alpha: 0.38, fogClearRadius: 180 },
+  /** Lò rèn: nguồn sáng mạnh nhất trong các công trình (lửa lò). */
+  blacksmith: { offsetY: -40, radius: 130, alpha: 0.55, fogClearRadius: 170 },
+  /** Quán: ánh đèn ấm qua cửa sổ. */
+  tavern: { offsetY: -34, radius: 120, alpha: 0.4, fogClearRadius: 150 },
+  /** Nhà thờ: ánh nến yếu, dịu. */
+  church: { offsetY: -30, radius: 90, alpha: 0.25, fogClearRadius: 110 },
 };
+
+/**
+ * Viền khu làng an toàn + biển tên (đồng trầm, không neon).
+ * fillColor/strokeColor: mã màu 0xRRGGBB; fillAlpha/strokeAlpha/textAlpha: 0..1;
+ * strokeWidth: px; textColor: chuỗi CSS '#rrggbb'.
+ */
+export const VILLAGE_MARKER = {
+  fillColor: 0xb89a5a,
+  fillAlpha: 0.03,
+  strokeWidth: 3,
+  strokeAlpha: 0.28,
+  textColor: '#c2a463',
+  textAlpha: 0.8,
+} as const;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 2c — TINT MÔI TRƯỜNG (runtime, nhân màu; KHÔNG sửa PNG).
@@ -156,6 +176,8 @@ export const ENVIRONMENT_TINT = {
   flag: 0xa89880,
   /** Sạp chợ (mái sọc đỏ trắng): giảm độ vui mắt, giữ asset hiện tại. */
   market: 0xb8a898,
+  /** Công trình (ngói đỏ, tường sáng): hạ độ sáng, ngả nâu đất/xám đá. Giá trị khởi điểm, tinh chỉnh khi xem game. */
+  building: 0xb4a898,
 } as const;
 
 /** Khóa asset (trong `VILLAGE`) → màu tint nhân. */
@@ -168,4 +190,13 @@ export const TINT_BY_ASSET: Readonly<Record<string, number>> = {
   flower: ENVIRONMENT_TINT.foliage,
   flag: ENVIRONMENT_TINT.flag,
   market: ENVIRONMENT_TINT.market,
+  tavern: ENVIRONMENT_TINT.building,
+  shop: ENVIRONMENT_TINT.building,
+  blacksmith: ENVIRONMENT_TINT.building,
+  church: ENVIRONMENT_TINT.building,
+  stable: ENVIRONMENT_TINT.building,
+  windmill: ENVIRONMENT_TINT.building,
+  cottageA: ENVIRONMENT_TINT.building,
+  cottageB: ENVIRONMENT_TINT.building,
+  well: ENVIRONMENT_TINT.building,
 };
