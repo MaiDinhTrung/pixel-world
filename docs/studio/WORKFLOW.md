@@ -38,14 +38,16 @@ Yêu cầu → AI Lead: phạm vi, tra PROJECT_MAP
         → ghi DECISIONS.md → BASELINE Git (§6a: cây tracked phải sạch)
         → Game Developer (ĐƯỢC SỬA / ĐƯỢC TẠO đã khai báo)
         → QA Tester (nhận baseline + 2 danh sách, tự git diff/status) ── lỗi → Developer sửa → QA kiểm lại (tối đa 2 vòng, baseline giữ nguyên)
-        → ◆ CỔNG 2: người dùng xem kết quả, đồng ý chốt/commit ◆
+        → PLAYTEST (§9a): Lead hướng dẫn chạy game + checklist → người dùng chơi thử
+        → có phản hồi → FEEDBACK LOOP (§9b): phân tích → đề xuất + tiêu chí → ◆ người dùng duyệt ◆ → Developer sửa → QA kiểm lại → người dùng chơi thử lại (lặp tới khi nghiệm thu)
+        → ◆ CỔNG 2: người dùng đã nghiệm thu, đồng ý chốt/commit ◆
         → cập nhật PROJECT_MAP/catalog, báo cáo, nói rõ "đã xong"
 ```
 
 ## 5. Hai cổng duyệt
 
 - **Cổng 1 (trước khi code):** AI Lead nêu phương án, khuyến nghị, đánh đổi. Người dùng: duyệt / sửa / bỏ. Chưa duyệt → không gọi Developer.
-- **Cổng 2 (trước khi chốt):** AI Lead báo kết quả QA và file đã đổi. Commit, push, xóa/đổi tên asset chỉ làm khi người dùng đồng ý.
+- **Cổng 2 (trước khi chốt):** AI Lead báo kết quả QA, kết quả Playtest (§9a–§9b) và file đã đổi. Chỉ chốt sau khi người dùng đã chơi thử và nghiệm thu. Commit, push, xóa/đổi tên asset chỉ làm khi người dùng đồng ý.
 - Việc nhỏ: gộp thành một câu xác nhận.
 
 ## 6. Mẫu bàn giao
@@ -125,6 +127,27 @@ Baseline lập **một lần cho cả nhiệm vụ** và giữ nguyên qua hai v
 4. Tối đa **2 vòng**; vòng 3 AI Lead dừng và hỏi người dùng (thường là lỗi thiết kế).
 5. Lỗi không chặn: người dùng có thể chấp nhận và ghi vào danh sách "đã biết".
 
+## 9a. Playtest (sau khi QA đạt)
+
+QA và Developer không chơi được game; phần hình ảnh, cảm giác, cân bằng và cảm ứng chỉ người dùng kiểm được. Khi QA đạt (không còn lỗi Chặn), AI Lead **không** chốt mà đưa người dùng đi chơi thử:
+1. **Cách chạy:** `npm run dev`, mở địa chỉ Vite in ra ở terminal. Nêu rõ điều kiện cần để thấy tính năng (nhân vật, vũ khí/kỹ năng cần có và cách lấy, vị trí trong game) và tham số URL hữu ích nếu liên quan (ví dụ `?time=night`, `?perf`, phím N đổi ngày/đêm).
+2. **Checklist chơi thử:** mỗi dòng một hành động + kết quả mong đợi. Lấy từ tiêu chí nghiệm thu loại "phải chơi thật" và mọi mục QA ghi "Chưa kiểm bằng cách chơi thật"; thêm ca biên và hồi quy liên quan (vũ khí/hệ thống lân cận), PC và cảm ứng nếu có.
+3. **Giới hạn nói thẳng:** agent không chơi được game; thông số mới chỉ là giá trị khởi điểm (nêu file `src/config/` để chỉnh); lỗi đã biết còn tồn đọng.
+4. **Mẫu phản hồi:** từng mục Đạt / Chưa đạt + mô tả cảm nhận hoặc bước tái hiện (ảnh chụp nếu có).
+AI Lead không tuyên bố "đạt" phần hình ảnh/cảm giác khi người dùng chưa xác nhận; `DECISIONS.md` ghi trạng thái "chờ chơi thử" cho tới khi nghiệm thu.
+
+## 9b. Feedback Loop (phản hồi sau Playtest)
+
+1. **Tiếp nhận:** ghi lại nguyên phản hồi, phân loại: *Lỗi* (sai tiêu chí đã duyệt) · *Chỉnh thông số* (giá trị ở `src/config/`) · *Đổi thiết kế* (khác thiết kế đã duyệt) · *Ngoài phạm vi* (ghi lại, không làm lần này).
+2. **Phân tích:** AI Lead đọc code liên quan, nêu nguyên nhân; cần chuyên môn hình ảnh/cân bằng thì gọi Designer tương ứng (chỉ đọc).
+3. **Đề xuất:** phương án + đánh đổi + khuyến nghị, danh sách ĐƯỢC SỬA / ĐƯỢC TẠO (cập nhật brief) và **tiêu chí nghiệm thu mới kiểm chứng được**.
+4. **◆ Chờ người dùng duyệt.** Chưa duyệt → không gọi Developer. Đổi thiết kế thì ghi `DECISIONS.md`; chỉnh thông số nhỏ có thể gộp thành một câu xác nhận (§5).
+5. **Developer sửa** đúng phạm vi đã duyệt. Baseline: nếu tính năng chưa commit thì giữ baseline cũ kèm hash các file đang dơ (§6a); đã commit thì lập baseline mới.
+6. **QA kiểm lại:** phần đã sửa + build/test + hồi quy + phạm vi (§6a).
+7. **Người dùng chơi thử lại** (§9a rút gọn: mục đã sửa + hồi quy). Chưa đạt → quay lại bước 1; đạt → **nghiệm thu**.
+Mỗi vòng phản hồi là vòng riêng, không tính vào trần 2 vòng sửa lỗi của §9.
+Nghiệm thu xong mới sang Cổng 2; `DECISIONS.md` cập nhật "đã triển khai, đã nghiệm thu".
+
 ## 10. Knowledge Base
 
 - Quyết định → một mục trong `DECISIONS.md` (sau Cổng 1). Chỉ AI Lead ghi.
@@ -134,4 +157,4 @@ Baseline lập **một lần cho cả nhiệm vụ** và giữ nguyên qua hai v
 
 ## 11. Kết thúc nhiệm vụ
 
-Danh sách kiểm: build qua · tiêu chí đạt · PROJECT_MAP/catalog đã cập nhật nếu cần · quyết định đã ghi. Báo cáo 5 dòng: đã làm gì · file đã đổi · kết quả QA · việc tồn đọng · **câu "đã xong" rõ ràng**.
+Danh sách kiểm: build qua · tiêu chí đạt · người dùng đã chơi thử và nghiệm thu (§9a–§9b) · PROJECT_MAP/catalog đã cập nhật nếu cần · quyết định đã ghi. Báo cáo 5 dòng: đã làm gì · file đã đổi · kết quả QA · việc tồn đọng · **câu "đã xong" rõ ràng**.
