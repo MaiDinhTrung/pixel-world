@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { CHARACTERS, type CharacterId } from '../config/characters';
 import { createDefaultSave, type CharacterSave } from './CharacterProgress';
 import { ProgressNotReadyError, ProgressStore } from './ProgressStore';
@@ -138,6 +138,173 @@ describe('ProgressStore', () => {
     expect(golds[golds.length - 1]).toBe(5);
   });
 
+  it('nhiều commit liên tiếp khi repo chậm được gộp: ít lần save hơn số commit, bản cuối là mới nhất', async () => {
+    const repo = new FakeRepo();
+
+    repo.delayMs = 5;
+
+    const { store } = await readyStore(repo);
+    const commits = 6;
+
+    for (let gold = 1; gold <= commits; gold += 1) {
+      const save = createDefaultSave(id);
+
+      save.gold = gold;
+      store.commit(id, save);
+    }
+
+    await store.flush();
+
+    const forId = repo.saved.filter((entry) => entry.id === id);
+
+    expect(forId.length).toBeLessThan(commits);
+    expect(forId[forId.length - 1]?.gold).toBe(commits);
+  });
+
+  it('repo.save ném đồng bộ: cache giữ, onError phát, persistent=false, hàng đợi vẫn chạy', async () => {
+    const repo = new FakeRepo();
+    const { store } = await readyStore(repo);
+    const errors: string[] = [];
+
+    repo.save = () => {
+      throw new Error('sync boom');
+    };
+    store.onError((message) => errors.push(message));
+
+    const save = createDefaultSave(id);
+
+    save.gold = 31;
+    store.commit(id, save);
+    await store.flush();
+
+    expect(errors).toEqual(['sync boom']);
+    expect(store.persistent).toBe(false);
+    expect(store.lastError).toBe('sync boom');
+    expect(store.get(id).gold).toBe(31);
+  });
+
+  it('repo.save reject: cache giữ, onError phát, persistent=false', async () => {
+    const repo = new FakeRepo();
+    const { store } = await readyStore(repo);
+    const errors: string[] = [];
+
+    repo.save = () => Promise.reject(new Error('async boom'));
+    store.onError((message) => errors.push(message));
+
+    const save = createDefaultSave(id);
+
+    save.gold = 32;
+    store.commit(id, save);
+    await store.flush();
+
+    expect(errors).toEqual(['async boom']);
+    expect(store.persistent).toBe(false);
+    expect(store.get(id).gold).toBe(32);
+  });
+
+  it('commit id B ghi lại bản id A từng lỗi', async () => {
+    const idB = ids[1];
+
+    expect(idB).toBeDefined();
+
+    const repo = new FakeRepo();
+    const { store } = await readyStore(repo);
+
+    repo.failSave = true;
+
+    const a = createDefaultSave(id);
+
+    a.gold = 10;
+    store.commit(id, a);
+    await store.flush();
+    expect(store.persistent).toBe(false);
+
+    repo.failSave = false;
+
+    const b = createDefaultSave(idB);
+
+    b.gold = 20;
+    store.commit(idB, b);
+    await store.flush();
+
+    expect(repo.saved).toContainEqual({ id, gold: 10 });
+    expect(repo.saved).toContainEqual({ id: idB, gold: 20 });
+    expect(store.persistent).toBe(true);
+  });
+
+  it('persistent về true sau khi id từng lỗi được ghi thành công (không cần commit id khác)', async () => {
+    const repo = new FakeRepo();
+
+    repo.delayMs = 5;
+
+    const { store } = await readyStore(repo);
+    let failures = 1;
+    const originalSave = repo.save.bind(repo);
+
+    repo.save = async (saveId, data) => {
+      if (failures > 0) {
+        failures -= 1;
+        await new Promise((resolve) => setTimeout(resolve, 5));
+
+        return { ok: false, reason: 'io', message: 'first fail' };
+      }
+
+      return originalSave(saveId, data);
+    };
+
+    const first = createDefaultSave(id);
+
+    first.gold = 1;
+    store.commit(id, first); // đang ghi, sẽ lỗi
+
+    const second = createDefaultSave(id);
+
+    second.gold = 2;
+    store.commit(id, second); // vào hàng đợi trong lúc lần 1 còn chạy
+
+    await store.flush();
+
+    expect(repo.saved).toEqual([{ id, gold: 2 }]);
+    expect(store.persistent).toBe(true);
+  });
+
+  it('listener onError ném lỗi: hàng đợi không kẹt, flush resolve, listener sau vẫn được gọi, ghi sau vẫn chạy', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    try {
+      const repo = new FakeRepo();
+      const { store } = await readyStore(repo);
+      const later: string[] = [];
+
+      store.onError(() => {
+        throw new Error('listener boom');
+      });
+      store.onError((message) => later.push(message));
+      repo.failSave = true;
+
+      const save = createDefaultSave(id);
+
+      save.gold = 5;
+      store.commit(id, save);
+      await store.flush();
+
+      expect(later).toEqual(['write fail']);
+
+      repo.failSave = false;
+
+      const next = createDefaultSave(id);
+
+      next.gold = 6;
+      store.commit(id, next);
+      await store.flush();
+
+      expect(repo.saved).toContainEqual({ id, gold: 6 });
+      expect(store.persistent).toBe(true);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it('save lỗi: cache giữ nguyên, onError kêu, commit kế tiếp ghi lại được', async () => {
     const repo = new FakeRepo();
     const { store } = await readyStore(repo);
@@ -170,10 +337,19 @@ describe('ProgressStore', () => {
 
   it('flush chỉ resolve khi hàng đợi rỗng', async () => {
     const repo = new FakeRepo();
-
-    repo.delayMs = 5;
-
     const { store } = await readyStore(repo);
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+
+    repo.save = async (saveId, data) => {
+      await gate;
+      repo.saved.push({ id: saveId, gold: data.gold });
+
+      return { ok: true };
+    };
+
     const save = createDefaultSave(id);
 
     save.gold = 9;
@@ -184,9 +360,13 @@ describe('ProgressStore', () => {
       done = true;
     });
 
-    expect(done).toBe(false);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(done).toBe(false); // repo còn đang chờ
+    expect(repo.saved).toHaveLength(0);
+
+    release();
     await flushed;
-    expect(repo.saved).toHaveLength(1);
-    expect(repo.running).toBe(0);
+    expect(done).toBe(true);
+    expect(repo.saved).toEqual([{ id, gold: 9 }]);
   });
 });

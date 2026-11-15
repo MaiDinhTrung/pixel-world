@@ -166,6 +166,8 @@ export class ProgressStore {
       )
       .then((outcome) => {
         if (outcome.ok) {
+          this.failed.delete(id);
+
           if (this.failed.size === 0) {
             this.persistent = this.state === 'ready';
           }
@@ -175,7 +177,11 @@ export class ProgressStore {
           this.failed.add(id);
 
           for (const listener of this.listeners) {
-            listener(outcome.message, id);
+            try {
+              listener(outcome.message, id);
+            } catch (listenerError) {
+              console.warn('ProgressStore: listener onError ném lỗi', listenerError);
+            }
           }
         }
 
