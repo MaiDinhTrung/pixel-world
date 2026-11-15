@@ -205,6 +205,7 @@ import type {
 import { InputController } from '../systems/InputController';
 import { CorpseManager } from '../systems/CorpseManager';
 import { MinionManager } from '../systems/MinionManager';
+import { PlayerState } from '../systems/PlayerState';
 import { VillageService, type VillageHost } from '../systems/VillageService';
 import {
   NEC_COLOR,
@@ -366,8 +367,8 @@ export class WorldScene extends Phaser.Scene {
   private statsAllocation: StatAllocation = createEmptyAllocation();
   /** Mục tiêu auto-aim đang khoá khi cầm Kiếm (xem `updateAutoAim`). */
   private autoAimTarget: EnemyBase | null = null;
-  private inventory: WeaponId[] = [];
-  private equipped: [WeaponId | null, WeaponId | null] = ['sword', 'shield'];
+  /** Chủ duy nhất của vũ khí (túi + 2 ô) từ C2a; trang bị/cấp còn ở scene tới C2b. */
+  private playerState!: PlayerState;
   private gearInventory: GearId[] = [];
   private equippedGear: Record<GearSlot, GearId | null> =
     createEmptyGearLoadout();
@@ -711,28 +712,15 @@ export class WorldScene extends Phaser.Scene {
     });
     this.statPoints = save.statPoints;
     this.statsAllocation = { ...save.stats };
-    // Lọc vũ khí không thuộc lớp (save cũ), bảo đảm luôn có vũ khí khởi đầu.
-    const allowed = this.character.allowedWeapons;
-
-    this.inventory = save.inventory.filter((id) => allowed.includes(id));
-
-    for (const starting of this.character.startingWeapons) {
-      if (!this.inventory.includes(starting)) {
-        this.inventory.push(starting);
-      }
-    }
-
-    const keepIfAllowed = (id: WeaponId | null): WeaponId | null =>
-      id && allowed.includes(id) ? id : null;
-    const firstEquip = keepIfAllowed(save.equipped[0]);
-    const secondEquip = keepIfAllowed(save.equipped[1]);
-
-    this.equipped = [
-      firstEquip ?? (secondEquip === this.character.startingWeapons[0]
-        ? this.character.startingWeapons[1]
-        : this.character.startingWeapons[0]),
-      secondEquip === firstEquip ? null : secondEquip,
-    ];
+    // Vũ khí: PlayerState lọc ngoài lớp, bảo đảm có vũ khí khởi đầu, chọn lại hai ô.
+    this.playerState = PlayerState.fromSave(
+      progressStore.get(this.characterId),
+      {
+        allowedWeapons: this.character.allowedWeapons,
+        startingWeapons: this.character.startingWeapons,
+        startingGear: this.character.startingGear,
+      },
+    );
     this.gearInventory = [...save.gearInventory];
     this.equippedGear = { ...save.equippedGear };
     this.gearLevels = { ...save.gearLevels };
@@ -1272,7 +1260,7 @@ export class WorldScene extends Phaser.Scene {
       this.spawnEnemy();
     }
 
-    this.weapons = this.equipped.map((id) =>
+    this.weapons = this.playerState.getEquippedWeapons().map((id) =>
       id ? this.createWeaponById(id) : null,
     );
 
@@ -2523,8 +2511,8 @@ export class WorldScene extends Phaser.Scene {
       version: SAVE_VERSION,
       statPoints: this.statPoints,
       stats: { ...this.statsAllocation },
-      inventory: [...this.inventory],
-      equipped: [this.equipped[0], this.equipped[1]],
+      inventory: this.playerState.getWeapons(),
+      equipped: this.playerState.getEquippedWeapons(),
       gearInventory: [...this.gearInventory],
       equippedGear: { ...this.equippedGear },
       gearLevels: { ...this.gearLevels },
@@ -2833,25 +2821,23 @@ export class WorldScene extends Phaser.Scene {
   }
 
   equipWeaponFromInventory(weaponId: WeaponId, slot: 0 | 1): boolean {
-    if (!this.character.allowedWeapons.includes(weaponId)) {
-      this.hud.showToast(
-        `${this.character.name} KHÔNG DÙNG ĐƯỢC ${WEAPON_INFO[weaponId].name}`,
-        '#ff6b6b',
-      );
-      return false;
-    }
+    const result = this.playerState.equipWeapon(weaponId, slot);
 
-    if (!this.inventory.includes(weaponId)) {
-      return false;
-    }
+    if (!result.ok) {
+      if (result.reason === 'not_allowed') {
+        this.hud.showToast(
+          `${this.character.name} KHÔNG DÙNG ĐƯỢC ${WEAPON_INFO[weaponId].name}`,
+          '#ff6b6b',
+        );
+      } else if (result.reason === 'in_other_slot') {
+        const otherSlot: 0 | 1 = slot === 0 ? 1 : 0;
 
-    const otherSlot: 0 | 1 = slot === 0 ? 1 : 0;
+        this.hud.showToast(
+          `${WEAPON_INFO[weaponId].name} ĐÃ Ở Ô ${otherSlot + 1}`,
+          '#8b8fa3',
+        );
+      }
 
-    if (this.equipped[otherSlot] === weaponId) {
-      this.hud.showToast(
-        `${WEAPON_INFO[weaponId].name} ĐÃ Ở Ô ${otherSlot + 1}`,
-        '#8b8fa3',
-      );
       return false;
     }
 
@@ -2863,7 +2849,6 @@ export class WorldScene extends Phaser.Scene {
     const weapon = this.createWeaponById(weaponId);
 
     this.weapons[slot] = weapon;
-    this.equipped[slot] = weaponId;
     weapon.setActive(slot === this.activeWeaponIndex);
     this.attackWasDown = false;
     this.saveProgress();
@@ -2885,7 +2870,7 @@ export class WorldScene extends Phaser.Scene {
     weapon.setActive(false);
     weapon.destroy();
     this.weapons[slot] = null;
-    this.equipped[slot] = null;
+    this.playerState.unequipWeapon(slot);
     this.attackWasDown = false;
 
     if (this.activeWeaponIndex === slot) {
@@ -2946,16 +2931,16 @@ export class WorldScene extends Phaser.Scene {
   }
 
   discardWeapon(weaponId: WeaponId): boolean {
-    if (!this.inventory.includes(weaponId)) {
+    const result = this.playerState.discardWeapon(weaponId);
+
+    if (!result.ok) {
+      if (result.reason === 'equipped') {
+        this.hud.showToast('HÃY THÁO RA TRƯỚC KHI VỨT BỎ', '#ff8fa3');
+      }
+
       return false;
     }
 
-    if (this.equipped.includes(weaponId)) {
-      this.hud.showToast('HÃY THÁO RA TRƯỚC KHI VỨT BỎ', '#ff8fa3');
-      return false;
-    }
-
-    this.inventory = this.inventory.filter((id) => id !== weaponId);
     this.saveProgress();
     this.hud.showToast(
       `${WEAPON_INFO[weaponId].name} ĐÃ VỨT BỎ`,
@@ -3042,8 +3027,8 @@ export class WorldScene extends Phaser.Scene {
     equipped: [WeaponId | null, WeaponId | null];
   } {
     return {
-      inventory: [...this.inventory],
-      equipped: [this.equipped[0], this.equipped[1]],
+      inventory: this.playerState.getWeapons(),
+      equipped: this.playerState.getEquippedWeapons(),
     };
   }
 
@@ -3056,22 +3041,23 @@ export class WorldScene extends Phaser.Scene {
     gearInventory: GearId[];
   } {
     const equippedGearIds = Object.values(this.equippedGear);
+    const equippedWeapons = this.playerState.getEquippedWeapons();
 
     return {
       characterName: this.character.name,
       level: this.levelSystem.getLevel(),
       weapons: [
-        { slot: 0, weaponId: this.equipped[0] },
-        { slot: 1, weaponId: this.equipped[1] },
+        { slot: 0, weaponId: equippedWeapons[0] },
+        { slot: 1, weaponId: equippedWeapons[1] },
       ],
       gear: [
         { slot: 'hat', gearId: this.equippedGear.hat },
         { slot: 'armor', gearId: this.equippedGear.armor },
         { slot: 'boots', gearId: this.equippedGear.boots },
       ],
-      weaponInventory: this.inventory.filter(
-        (weaponId) => !this.equipped.includes(weaponId),
-      ),
+      weaponInventory: this.playerState
+        .getWeapons()
+        .filter((weaponId) => !equippedWeapons.includes(weaponId)),
       gearInventory: this.gearInventory.filter(
         (gearId) => !equippedGearIds.includes(gearId),
       ),
@@ -3512,10 +3498,12 @@ export class WorldScene extends Phaser.Scene {
     weapons: { id: WeaponId; equipped: boolean; starting: boolean }[];
     gear: { id: GearId; equipped: boolean; level: number }[];
   } {
+    const equippedWeapons = this.playerState.getEquippedWeapons();
+
     return {
-      weapons: this.inventory.map((id) => ({
+      weapons: this.playerState.getWeapons().map((id) => ({
         id,
-        equipped: this.equipped.includes(id),
+        equipped: equippedWeapons.includes(id),
         starting: this.character.startingWeapons.includes(id),
       })),
       gear: this.gearInventory.map((id) => ({
@@ -3534,13 +3522,13 @@ export class WorldScene extends Phaser.Scene {
     return {
       getAllowedWeapons: () => this.character.allowedWeapons,
       isStartingWeapon: (id) => this.character.startingWeapons.includes(id),
-      ownsWeapon: (id) => this.inventory.includes(id),
-      isWeaponEquipped: (id) => this.equipped.includes(id),
+      ownsWeapon: (id) => this.playerState.ownsWeapon(id),
+      isWeaponEquipped: (id) => this.playerState.getEquippedWeapons().includes(id),
       addWeapon: (id) => {
-        this.inventory.push(id);
+        this.playerState.addWeapon(id);
       },
       removeWeapon: (id) => {
-        this.inventory = this.inventory.filter((item) => item !== id);
+        this.playerState.removeWeapon(id);
       },
       ownsGear: (id) => this.gearInventory.includes(id),
       isGearEquipped: (id) => Object.values(this.equippedGear).includes(id),
@@ -3864,7 +3852,7 @@ export class WorldScene extends Phaser.Scene {
       return;
     }
 
-    if (this.inventory.includes(id)) {
+    if (!this.playerState.addWeapon(id).ok) {
       this.hud.showToast(
         `${WEAPON_INFO[id].name} ĐÃ SỞ HỮU`,
         '#8b8fa3',
@@ -3872,7 +3860,6 @@ export class WorldScene extends Phaser.Scene {
       return;
     }
 
-    this.inventory.push(id);
     this.saveProgress();
     this.hud.showToast(
       `${WEAPON_INFO[id].name} ĐÃ THÊM VÀO TÚI ĐỒ`,

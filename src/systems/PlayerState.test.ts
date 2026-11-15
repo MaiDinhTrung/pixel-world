@@ -919,9 +919,15 @@ function runSequence(
       }
       case 'rewardGear': {
         const g = pickG();
+        const isNew = !model.gearInventory.includes(g);
 
         expected = model.rewardGear(g, tier);
         actual = resultOf(state.rewardGear(g, tier));
+
+        if (isNew) {
+          coverage.set('rewardGear:new', (coverage.get('rewardGear:new') ?? 0) + 1);
+        }
+
         break;
       }
       default: {
@@ -950,19 +956,33 @@ function runSequence(
 }
 
 describe('PlayerState: đối chiếu mô hình tham chiếu (logic cũ của WorldScene)', () => {
-  const coverage = new Map<string, number>();
-
   it.each(CHARACTER_IDS)(
     `${SEQUENCE_COUNT} chuỗi thao tác xác định trên save mặc định của %s khớp dạng v7`,
     (id) => {
+      const coverage = new Map<string, number>();
+
       for (let seq = 0; seq < SEQUENCE_COUNT; seq += 1) {
         runSequence(id, seq, coverage);
       }
     },
   );
 
+  // Độc lập thứ tự chạy: tự chạy lại mọi chuỗi (xác định) để lấy độ phủ, không dùng kết quả test khác.
   it('các chuỗi phủ cả nhánh ok lẫn từng lý do từ chối chính', () => {
+    const coverage = new Map<string, number>();
+
+    for (const id of CHARACTER_IDS) {
+      for (let seq = 0; seq < SEQUENCE_COUNT; seq += 1) {
+        runSequence(id, seq, coverage);
+      }
+    }
+
     const must = [
+      'removeWeapon:not_owned',
+      'removeWeapon:equipped',
+      'removeGear:not_owned',
+      'removeGear:equipped',
+      'rewardGear:new',
       'equipWeapon:ok',
       'equipWeapon:not_allowed',
       'equipWeapon:not_owned',
@@ -1316,7 +1336,7 @@ describe('PlayerState: ok:false không đổi trạng thái, không throw với 
       expect(s.equipWeapon(w, 1)).toEqual({ ok: false, reason: 'not_allowed' });
       expect(s.setGearLevel(g, 3)).toEqual({ ok: false, reason: 'not_owned' });
       expect(s.removeGear(g)).toEqual({ ok: false, reason: 'not_owned' });
-      expect(s.equipGear(g)).toEqual({ ok: false, reason: 'not_owned' });
+      expect(s.equipGear(g)).toEqual({ ok: false, reason: 'unknown_id' });
       expect(s.discardGear(g)).toEqual({ ok: false, reason: 'not_owned' });
       expect(s.unequipWeapon(5 as unknown as 0)).toEqual({ ok: false, reason: 'empty' });
       expect(s.unequipGear('xx' as unknown as GearSlot)).toEqual({
@@ -1333,6 +1353,200 @@ describe('PlayerState: ok:false không đổi trạng thái, không throw với 
 
     s.addWeapon(K_EXTRA);
     expect(snap(s)).not.toBe(before);
+  });
+});
+
+describe('PlayerState: id không tồn tại -> unknown_id', () => {
+  const BAD_IDS: unknown[] = [
+    'khong_ton_tai',
+    '',
+    'toString',
+    'constructor',
+    '__proto__',
+    undefined,
+    null,
+    42,
+  ];
+  const helm = K.startingGear.hat;
+
+  type Act = (s: PlayerState, bad: unknown) => { ok: boolean; reason?: string };
+  const acts: [string, Act][] = [
+    ['addWeapon', (s, b) => s.addWeapon(b as WeaponId)],
+    ['addGear', (s, b) => s.addGear(b as GearId)],
+    ['rewardGear', (s, b) => s.rewardGear(b as GearId, 3)],
+    ['rewardGear (tier NaN)', (s, b) => s.rewardGear(b as GearId, Number.NaN)],
+    ['equipGear', (s, b) => s.equipGear(b as GearId)],
+  ];
+
+  for (const [name, act] of acts) {
+    it(`${name}: ok:false unknown_id, không ném, trạng thái y nguyên, toSave vẫn hợp lệ`, () => {
+      for (const bad of BAD_IDS) {
+        const s = stateOf('knight');
+
+        s.addWeapon(K_EXTRA);
+        s.rewardGear(helm, 3);
+
+        const before = snap(s);
+        let result: { ok: boolean; reason?: string } | undefined;
+
+        expect(() => {
+          result = act(s, bad);
+        }, String(bad)).not.toThrow();
+        expect(result, String(bad)).toEqual({ ok: false, reason: 'unknown_id' });
+        expect(snap(s), String(bad)).toBe(before);
+        expect(() => s.toSave(ECON, makeBase('knight'))).not.toThrow();
+        expect(validateSaveV8(s.toSave(ECON, makeBase('knight')))).toEqual([]);
+      }
+    });
+  }
+
+  it('id của loại kia (vũ khí đưa cho hàm trang bị và ngược lại) cũng là unknown_id', () => {
+    const s = stateOf('knight');
+    const before = snap(s);
+
+    expect(s.addGear(KSW as unknown as GearId)).toEqual({ ok: false, reason: 'unknown_id' });
+    expect(s.addWeapon(helm as unknown as WeaponId)).toEqual({
+      ok: false,
+      reason: 'unknown_id',
+    });
+    expect(snap(s)).toBe(before);
+  });
+
+  it('id hợp lệ không bị nhận nhầm là unknown_id', () => {
+    const s = stateOf('knight');
+
+    expect(s.addWeapon(K_EXTRA)).toEqual({ ok: true });
+    expect(s.addGear(gearOfSlot('hat', helm))).toEqual({ ok: true });
+  });
+});
+
+describe('PlayerState.toSave: sao chép sâu, sửa tại chỗ', () => {
+  function fixture() {
+    const base = makeBase('knight');
+
+    base.stats.power = 5;
+    base.skillLevels['x' as never] = 2 as never;
+    base.extraSkills[0] = base.skillLoadout[0];
+
+    const econ = makeEconomy();
+
+    econ.gems[GEM_IDS[0]!] = 3;
+
+    return { base, econ };
+  }
+
+  it('sửa kết quả tại chỗ không đổi đầu vào lẫn trạng thái nội bộ', () => {
+    const { base, econ } = fixture();
+    const baseCopy = clone(base);
+    const econCopy = clone(econ);
+    const s = stateOf('knight');
+    const out = s.toSave(econ, base);
+
+    out.stats.power = 99;
+    out.skillLoadout[0] = out.skillLoadout[1];
+    out.extraSkills[0] = null;
+    out.extraSkills.push(null);
+    out.skillLevels['x' as never] = 77 as never;
+    out.gems[GEM_IDS[0]!] = 99;
+    out.bag.length = 0;
+    out.equippedWeapons[0] = null;
+    Object.values(out.items).forEach((it) => {
+      if (it.kind === 'gear') it.sockets.push(null);
+    });
+
+    expect(base).toEqual(baseCopy);
+    expect(econ).toEqual(econCopy);
+    expect(s.toSave(econCopy, baseCopy)).toEqual(
+      stateOf('knight').toSave(clone(econCopy), clone(baseCopy)),
+    );
+    expect(s.getWeapons()).toEqual([KSW, KSH]);
+    expect(s.getEquippedWeapons()).toEqual([KSW, KSH]);
+  });
+
+  it('sửa đầu vào sau khi toSave không đổi kết quả đã trả', () => {
+    const { base, econ } = fixture();
+    const s = stateOf('knight');
+    const out = s.toSave(econ, base);
+    const outCopy = clone(out);
+
+    base.stats.power = 50;
+    base.skillLoadout[0] = base.skillLoadout[1];
+    base.extraSkills[0] = null;
+    base.skillLevels['x' as never] = 40 as never;
+    econ.gems[GEM_IDS[0]!] = 40;
+    for (const list of Object.values(econ.sockets)) list?.push(null);
+
+    expect(out).toEqual(outCopy);
+  });
+});
+
+describe('PlayerState: clampLevel (qua setGearLevel / rewardGear)', () => {
+  const helm = K.startingGear.hat;
+  const otherHat = gearOfSlot('hat', helm);
+
+  it.each([
+    [Number.NaN, 1],
+    [2.9, 2],
+    [1.5, 1],
+    [-3, 1],
+    [-0.5, 1],
+    [0, 1],
+    [MAX_GEAR_LEVEL + 0.5, MAX_GEAR_LEVEL],
+    [MAX_GEAR_LEVEL + 100, MAX_GEAR_LEVEL],
+    [Number.POSITIVE_INFINITY, MAX_GEAR_LEVEL],
+    [Number.NEGATIVE_INFINITY, 1],
+  ])('setGearLevel(%s) -> cấp %s', (input, expected) => {
+    const s = stateOf('knight');
+
+    expect(s.setGearLevel(helm, input)).toEqual({ ok: true });
+    expect(s.getGearLevel(helm)).toBe(expected);
+  });
+
+  it.each([
+    [Number.NaN, 2], // tier NaN coi là 0 -> max(1, 2)
+    [2.7, 3], // max(3.7, 2) -> floor
+    [-5, 2],
+    [Number.NEGATIVE_INFINITY, 2],
+    [MAX_GEAR_LEVEL + 10, MAX_GEAR_LEVEL],
+    [Number.POSITIVE_INFINITY, MAX_GEAR_LEVEL],
+  ])('rewardGear món mới với tier %s -> cấp %s', (tier, expected) => {
+    const s = stateOf('knight');
+
+    expect(s.rewardGear(otherHat, tier)).toEqual({ ok: true, level: expected });
+    expect(s.getGearLevel(otherHat)).toBe(expected);
+  });
+});
+
+describe('PlayerState: lý do từ chối của removeWeapon/removeGear/rewardGear (độc lập)', () => {
+  const helm = K.startingGear.hat;
+  const otherHat = gearOfSlot('hat', helm);
+
+  it('removeWeapon: not_owned, equipped, rồi ok', () => {
+    const s = stateOf('knight');
+
+    expect(s.removeWeapon(K_EXTRA)).toEqual({ ok: false, reason: 'not_owned' });
+    expect(s.removeWeapon(KSW)).toEqual({ ok: false, reason: 'equipped' });
+    s.addWeapon(K_EXTRA);
+    expect(s.removeWeapon(K_EXTRA)).toEqual({ ok: true });
+    expect(s.ownsWeapon(K_EXTRA)).toBe(false);
+  });
+
+  it('removeGear: not_owned, equipped, rồi ok', () => {
+    const s = stateOf('knight');
+
+    expect(s.removeGear(otherHat)).toEqual({ ok: false, reason: 'not_owned' });
+    expect(s.removeGear(helm)).toEqual({ ok: false, reason: 'equipped' });
+    s.addGear(otherHat);
+    expect(s.removeGear(otherHat)).toEqual({ ok: true });
+    expect(s.ownsGear(otherHat)).toBe(false);
+  });
+
+  it('rewardGear món mới: thêm vào cuối túi, chưa mặc, cấp theo tier', () => {
+    const s = stateOf('knight');
+
+    expect(s.rewardGear(otherHat, 2)).toEqual({ ok: true, level: 3 });
+    expect(s.getGear()[s.getGear().length - 1]).toBe(otherHat);
+    expect(s.getEquippedGear().hat).toBe(helm);
   });
 });
 

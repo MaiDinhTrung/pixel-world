@@ -1,7 +1,9 @@
 import type { WeaponId } from '../combat/Weapon';
+import { WEAPON_INFO, isWeaponId } from '../config/weaponInfo';
 import {
   GEAR_INFO,
   MAX_GEAR_LEVEL,
+  isGearId,
   type GearId,
   type GearLevels,
   type GearSlot,
@@ -43,6 +45,17 @@ export interface PlayerEconomy {
 }
 
 type WeaponSlot = 0 | 1;
+
+/** isWeaponId/isGearId dùng `in` nên nhận cả khóa prototype (toString...); ở đây chỉ nhận khóa sở hữu. */
+function knownWeapon(id: unknown): id is WeaponId {
+  return (
+    isWeaponId(id) && Object.prototype.hasOwnProperty.call(WEAPON_INFO, id)
+  );
+}
+
+function knownGear(id: unknown): id is GearId {
+  return isGearId(id) && Object.prototype.hasOwnProperty.call(GEAR_INFO, id);
+}
 
 function cloneJson<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
@@ -224,7 +237,11 @@ export class PlayerState {
     return this.getEquippedWeapons().includes(id);
   }
 
-  addWeapon(id: WeaponId): { ok: true } | Fail<'owned'> {
+  addWeapon(id: WeaponId): { ok: true } | Fail<'owned' | 'unknown_id'> {
+    if (!knownWeapon(id)) {
+      return { ok: false, reason: 'unknown_id' };
+    }
+
     if (this.ownsWeapon(id)) {
       return { ok: false, reason: 'owned' };
     }
@@ -406,7 +423,11 @@ export class PlayerState {
     return item;
   }
 
-  addGear(id: GearId): { ok: true } | Fail<'owned'> {
+  addGear(id: GearId): { ok: true } | Fail<'owned' | 'unknown_id'> {
+    if (!knownGear(id)) {
+      return { ok: false, reason: 'unknown_id' };
+    }
+
     if (this.ownsGear(id)) {
       return { ok: false, reason: 'owned' };
     }
@@ -417,7 +438,14 @@ export class PlayerState {
   }
 
   /** Luật grantBossLoot: lên max(tier+1, cấp hiện tại+1), kẹp MAX; thêm món nếu chưa có. */
-  rewardGear(id: GearId, tier: number): { ok: true; level: number } {
+  rewardGear(
+    id: GearId,
+    tier: number,
+  ): { ok: true; level: number } | Fail<'unknown_id'> {
+    if (!knownGear(id)) {
+      return { ok: false, reason: 'unknown_id' };
+    }
+
     const item = this.gearItem(id) ?? this.insertGear(id);
     const safeTier = Number.isNaN(tier) ? 0 : tier;
     const level = PlayerState.clampLevel(
@@ -448,7 +476,13 @@ export class PlayerState {
   /** Thứ tự kiểm đúng như WorldScene.equipGearFromInventory. */
   equipGear(
     id: GearId,
-  ): { ok: true; slot: GearSlot } | Fail<'not_owned' | 'already_equipped'> {
+  ):
+    | { ok: true; slot: GearSlot }
+    | Fail<'unknown_id' | 'not_owned' | 'already_equipped'> {
+    if (!knownGear(id)) {
+      return { ok: false, reason: 'unknown_id' };
+    }
+
     const item = this.gearItem(id);
 
     if (!item) {
