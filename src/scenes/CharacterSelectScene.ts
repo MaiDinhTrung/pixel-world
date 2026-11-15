@@ -7,8 +7,8 @@ import {
   type CharacterDefinition,
 } from '../config/characters';
 import { DESIGN_HEIGHT, DESIGN_WIDTH, SCENE_KEYS } from '../config/constants';
-import type { ProgressData } from '../progression/CharacterProgress';
 import { progressStore } from '../progression/ProgressStore';
+import type { ProgressDataV8 } from '../progression/saveV8';
 import { toDisplayEnergy, toDisplayHealth } from '../config/scaleConfig';
 import { getSkill } from '../skills/skills';
 
@@ -20,7 +20,7 @@ const CARD_Y = 76;
 /** Màn chọn nhân vật: 3 class, level đã lưu và trạng thái skill. */
 export class CharacterSelectScene extends Phaser.Scene {
   private resolved = false;
-  private progress: ProgressData = {};
+  private progress: ProgressDataV8 = {};
 
   constructor() {
     super(SCENE_KEYS.characterSelect);

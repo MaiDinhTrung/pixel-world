@@ -4,7 +4,13 @@ export const PROGRESS_STORAGE_KEY = 'pixel-world:progress:v1';
 /** Tiền tố khóa sao lưu chuỗi JSON hỏng; khóa đầy đủ = tiền tố + timestamp. Không bao giờ bị ghi đè/xóa. */
 export const PROGRESS_CORRUPT_BACKUP_PREFIX = `${PROGRESS_STORAGE_KEY}:corrupt-`;
 
-/** Phiên bản save v8 (Item Instance + uid + revision). Chưa dùng ở runtime: SAVE_VERSION thật vẫn là 7 (B1 chỉ thêm module thuần). */
+/**
+ * Khóa sao lưu NGUYÊN VĂN chuỗi blob v7 trước lần ghi v8 đầu tiên (B2b).
+ * Chỉ ghi khi khóa chưa tồn tại; không bao giờ bị ghi đè hay xóa.
+ */
+export const PROGRESS_BACKUP_V7_KEY = 'pixel-world:progress:v1:backup-v7';
+
+/** Phiên bản save v8 (Item Instance + uid + revision). Đĩa ghi v8 qua cầu nối ở biên lưu trữ (B2b); SAVE_VERSION trong CharacterProgress vẫn là 7 (dạng cầu nối của scene). */
 export const SAVE_VERSION_V8 = 8;
 
 /** Tiền tố định danh nhân vật v8: characterUid = tiền tố + CharacterId + '_1'. */

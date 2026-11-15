@@ -429,6 +429,96 @@ describe('(7) idempotent', () => {
   });
 });
 
+describe('(9) sao chép sâu, migrationLog, nhân vật khác knight (bổ sung từ QA B2a)', () => {
+  it('stats, gems, skillLevels, skillLoadout, extraSkills là bản sao sâu hai chiều; next không bị mutate', () => {
+    const prev = toV8('mage', build('mage', 3));
+    const next = build('mage', 4);
+    const nextSnap = clone(next);
+    const save = apply(prev, next);
+
+    // Ca thành công: next không bị mutate.
+    expect(next).toEqual(nextSnap);
+
+    const saveSnap = clone(save);
+
+    // Sửa kết quả -> next không đổi.
+    (save.stats as unknown as Record<string, unknown>).zzz = 1;
+    (save.gems as unknown as Record<string, unknown>).zzz = 1;
+    (save.skillLevels as unknown as Record<string, unknown>).zzz = 1;
+    save.skillLoadout[0] = 'khong_co' as never;
+    save.extraSkills.push('khong_co' as never);
+    expect(next).toEqual(nextSnap);
+
+    // Sửa next -> kết quả (bản snapshot) không đổi.
+    const again = apply(prev, next);
+
+    expect(again).toEqual(saveSnap);
+    (next.stats as unknown as Record<string, unknown>).zzz = 2;
+    (next.gems as unknown as Record<string, unknown>).zzz = 2;
+    (next.skillLevels as unknown as Record<string, unknown>).zzz = 2;
+    next.skillLoadout[1] = 'khong_co' as never;
+    next.extraSkills.push('khac' as never);
+    expect(again).toEqual(saveSnap);
+  });
+
+  it('prev.migrationLog có phần tử thì được giữ nguyên (bản sao), prev không bị đổi', () => {
+    const base = toV8('ranger', build('ranger', 2));
+    const prev: CharacterSaveV8 = { ...base, migrationLog: ['gearLevels.x: bỏ', 'ghi chú 2'] };
+    const prevSnap = clone(prev);
+    const save = apply(prev, build('ranger', 5));
+
+    expect(save.migrationLog).toEqual(['gearLevels.x: bỏ', 'ghi chú 2']);
+    expect(save.migrationLog).not.toBe(prev.migrationLog);
+    save.migrationLog.push('thêm');
+    expect(prev).toEqual(prevSnap);
+  });
+
+  for (const id of ['mage', 'ranger'] as CharacterId[]) {
+    it(`tạo/bỏ/thêm lại đồ trên ${id}: uid mới đúng nextItemSeq, không tái dùng, round-trip đúng`, () => {
+      const prev = toV8(id, build(id, 1));
+      const shape = v8ToV7Shape(prev);
+      const newWeapon = WEAPON_IDS.find((w) => !shape.inventory.includes(w)) as WeaponId;
+      const newGear = GEAR_IDS.find((g) => !shape.gearInventory.includes(g)) as GearId;
+      const added: CharacterSave = {
+        ...shape,
+        inventory: [...shape.inventory, newWeapon],
+        gearInventory: [...shape.gearInventory, newGear],
+      };
+      const step1 = apply(prev, added);
+
+      expect(uidOf(step1, 'weapon', newWeapon)).toBe(`w${prev.nextItemSeq.toString(36)}`);
+      expect(uidOf(step1, 'gear', newGear)).toBe(`g${(prev.nextItemSeq + 1).toString(36)}`);
+      expect(step1.nextItemSeq).toBe(prev.nextItemSeq + 2);
+      expect(v8ToV7Shape(step1)).toEqual(added);
+      expect(step1.characterUid).toBe(prev.characterUid);
+
+      // Bỏ món mới thêm (gồm bỏ khỏi ô trang bị nếu đang mặc).
+      const removed: CharacterSave = {
+        ...added,
+        inventory: shape.inventory,
+        gearInventory: shape.gearInventory,
+      };
+      const step2 = apply(step1, removed);
+      const oldGearUid = uidOf(step1, 'gear', newGear) as string;
+
+      expect(uidOf(step2, 'gear', newGear)).toBeUndefined();
+      expect(step2.nextItemSeq).toBe(step1.nextItemSeq);
+      expect(v8ToV7Shape(step2)).toEqual(removed);
+
+      // Thêm lại cùng defId: uid MỚI.
+      const step3 = apply(step2, added);
+      const readdUid = uidOf(step3, 'gear', newGear) as string;
+
+      expect(readdUid).not.toBe(oldGearUid);
+      // Vũ khí thêm lại nhận seq trước, trang bị nhận seq kế tiếp.
+      expect(readdUid).toBe(`g${(step2.nextItemSeq + 1).toString(36)}`);
+      expect(step3.nextItemSeq).toBe(step2.nextItemSeq + 2);
+      expect(step3.items[oldGearUid]).toBeUndefined();
+      expect(validateSaveV8(step3)).toEqual([]);
+    });
+  }
+});
+
 describe('(8) JSON round-trip', () => {
   it('kết quả ổn định qua JSON và apply lại trên bản đã parse', () => {
     for (const a of cases) {

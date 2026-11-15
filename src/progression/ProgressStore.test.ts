@@ -1,15 +1,33 @@
 import { describe, expect, it, vi } from 'vitest';
 import { CHARACTERS, type CharacterId } from '../config/characters';
-import { createDefaultSave, type CharacterSave } from './CharacterProgress';
+import {
+  PROGRESS_BACKUP_V7_KEY,
+  PROGRESS_STORAGE_KEY,
+} from '../config/progressConfig';
+import { createDefaultSave } from './CharacterProgress';
+import { LocalStorageRepository } from './LocalStorageRepository';
 import { ProgressNotReadyError, ProgressStore } from './ProgressStore';
 import type {
   ProgressRepository,
   RawProgress,
   SaveResult,
 } from './ProgressRepository';
+import { migrateToLatest } from './saveMigration';
+import type { CharacterSaveV8 } from './saveV8';
 
 const ids = Object.keys(CHARACTERS) as CharacterId[];
 const id = ids[0];
+
+/** Save v8 mặc định của một nhân vật (revision 1). */
+function v8Default(characterId: CharacterId): CharacterSaveV8 {
+  const result = migrateToLatest(characterId, undefined);
+
+  if (!result.ok) {
+    throw new Error(result.errors.join('; '));
+  }
+
+  return result.save;
+}
 
 class FakeRepo implements ProgressRepository {
   raw: RawProgress = {};
@@ -20,6 +38,7 @@ class FakeRepo implements ProgressRepository {
   running = 0;
   overlapped = false;
   saved: Array<{ id: CharacterId; gold: number }> = [];
+  calls: Array<{ id: CharacterId; expected: number; revision: number }> = [];
 
   loadAll(): Promise<RawProgress> {
     this.loadCalls += 1;
@@ -29,7 +48,16 @@ class FakeRepo implements ProgressRepository {
       : Promise.resolve(this.raw);
   }
 
-  async save(saveId: CharacterId, data: CharacterSave): Promise<SaveResult> {
+  async save(
+    saveId: CharacterId,
+    data: CharacterSaveV8,
+    expectedRevision: number,
+  ): Promise<SaveResult> {
+    this.calls.push({
+      id: saveId,
+      expected: expectedRevision,
+      revision: data.revision,
+    });
     this.running += 1;
 
     if (this.running > 1) {
@@ -63,7 +91,7 @@ describe('ProgressStore', () => {
 
     expect(() => store.get(id)).toThrow(ProgressNotReadyError);
     expect(() => store.getAll()).toThrow(ProgressNotReadyError);
-    expect(() => store.commit(id, createDefaultSave(id))).toThrow(
+    expect(() => store.commit(id, v8Default(id))).toThrow(
       ProgressNotReadyError,
     );
   });
@@ -93,7 +121,7 @@ describe('ProgressStore', () => {
     expect(store.getState()).toBe('degraded');
     expect(store.persistent).toBe(false);
     expect(store.lastError).toBe('read fail');
-    expect(store.get(id)).toEqual(createDefaultSave(id));
+    expect(store.get(id)).toEqual(v8Default(id));
   });
 
   it('get trả bản sao: sửa kết quả không đổi cache', async () => {
@@ -106,7 +134,7 @@ describe('ProgressStore', () => {
 
   it('commit rồi get thấy ngay', async () => {
     const { store } = await readyStore();
-    const save = createDefaultSave(id);
+    const save = v8Default(id);
 
     save.gold = 4321;
     store.commit(id, save);
@@ -122,7 +150,7 @@ describe('ProgressStore', () => {
     const { store } = await readyStore(repo);
 
     for (let gold = 1; gold <= 5; gold += 1) {
-      const save = createDefaultSave(id);
+      const save = v8Default(id);
 
       save.gold = gold;
       store.commit(id, save);
@@ -147,7 +175,7 @@ describe('ProgressStore', () => {
     const commits = 6;
 
     for (let gold = 1; gold <= commits; gold += 1) {
-      const save = createDefaultSave(id);
+      const save = v8Default(id);
 
       save.gold = gold;
       store.commit(id, save);
@@ -171,7 +199,7 @@ describe('ProgressStore', () => {
     };
     store.onError((message) => errors.push(message));
 
-    const save = createDefaultSave(id);
+    const save = v8Default(id);
 
     save.gold = 31;
     store.commit(id, save);
@@ -191,7 +219,7 @@ describe('ProgressStore', () => {
     repo.save = () => Promise.reject(new Error('async boom'));
     store.onError((message) => errors.push(message));
 
-    const save = createDefaultSave(id);
+    const save = v8Default(id);
 
     save.gold = 32;
     store.commit(id, save);
@@ -212,7 +240,7 @@ describe('ProgressStore', () => {
 
     repo.failSave = true;
 
-    const a = createDefaultSave(id);
+    const a = v8Default(id);
 
     a.gold = 10;
     store.commit(id, a);
@@ -221,7 +249,7 @@ describe('ProgressStore', () => {
 
     repo.failSave = false;
 
-    const b = createDefaultSave(idB);
+    const b = v8Default(idB);
 
     b.gold = 20;
     store.commit(idB, b);
@@ -252,12 +280,12 @@ describe('ProgressStore', () => {
       return originalSave(saveId, data);
     };
 
-    const first = createDefaultSave(id);
+    const first = v8Default(id);
 
     first.gold = 1;
     store.commit(id, first); // đang ghi, sẽ lỗi
 
-    const second = createDefaultSave(id);
+    const second = v8Default(id);
 
     second.gold = 2;
     store.commit(id, second); // vào hàng đợi trong lúc lần 1 còn chạy
@@ -282,7 +310,7 @@ describe('ProgressStore', () => {
       store.onError((message) => later.push(message));
       repo.failSave = true;
 
-      const save = createDefaultSave(id);
+      const save = v8Default(id);
 
       save.gold = 5;
       store.commit(id, save);
@@ -292,7 +320,7 @@ describe('ProgressStore', () => {
 
       repo.failSave = false;
 
-      const next = createDefaultSave(id);
+      const next = v8Default(id);
 
       next.gold = 6;
       store.commit(id, next);
@@ -313,7 +341,7 @@ describe('ProgressStore', () => {
     store.onError((message) => errors.push(message));
     repo.failSave = true;
 
-    const save = createDefaultSave(id);
+    const save = v8Default(id);
 
     save.gold = 77;
     store.commit(id, save);
@@ -325,7 +353,7 @@ describe('ProgressStore', () => {
 
     repo.failSave = false;
 
-    const next = createDefaultSave(id);
+    const next = v8Default(id);
 
     next.gold = 88;
     store.commit(id, next);
@@ -350,7 +378,7 @@ describe('ProgressStore', () => {
       return { ok: true };
     };
 
-    const save = createDefaultSave(id);
+    const save = v8Default(id);
 
     save.gold = 9;
     store.commit(id, save);
@@ -369,4 +397,373 @@ describe('ProgressStore', () => {
     expect(done).toBe(true);
     expect(repo.saved).toEqual([{ id, gold: 9 }]);
   });
+});
+
+class FakeStorage implements Storage {
+  data = new Map<string, string>();
+  setCalls = 0;
+
+  get length(): number {
+    return this.data.size;
+  }
+  clear(): void {
+    this.data.clear();
+  }
+  getItem(key: string): string | null {
+    return this.data.get(key) ?? null;
+  }
+  key(index: number): string | null {
+    return [...this.data.keys()][index] ?? null;
+  }
+  removeItem(key: string): void {
+    this.data.delete(key);
+  }
+  setItem(key: string, value: string): void {
+    this.setCalls += 1;
+    this.data.set(key, value);
+  }
+}
+
+function storeOn(storage: FakeStorage): ProgressStore {
+  return new ProgressStore(new LocalStorageRepository(() => storage));
+}
+
+function seed(storage: FakeStorage, blob: Record<string, unknown>): string {
+  const text = JSON.stringify(blob);
+
+  storage.data.set(PROGRESS_STORAGE_KEY, text);
+
+  return text;
+}
+
+describe('ProgressStore v8: hydrate lười, revision, khóa chỉ-đọc', () => {
+  it('hydrate v7 -> cache v8 revision 1, không save nào được gọi, không sao lưu', async () => {
+    const repo = new FakeRepo();
+    const v7 = createDefaultSave(id);
+
+    v7.gold = 55;
+    repo.raw = { [id]: v7 };
+
+    const { store } = await readyStore(repo);
+
+    expect(store.get(id)).toMatchObject({ version: 8, revision: 1, gold: 55 });
+    expect(repo.calls).toHaveLength(0);
+
+    const storage = new FakeStorage();
+    const text = seed(storage, { [id]: v7 });
+    const real = storeOn(storage);
+
+    await real.hydrate();
+    expect(real.get(id).revision).toBe(1);
+    expect(storage.setCalls).toBe(0);
+    expect(storage.data.get(PROGRESS_STORAGE_KEY)).toBe(text);
+    expect(storage.data.has(PROGRESS_BACKUP_V7_KEY)).toBe(false);
+  });
+
+  it('commit đầu: save(expected = 0), revision ghi = 2', async () => {
+    const repo = new FakeRepo();
+
+    repo.raw = { [id]: createDefaultSave(id) };
+
+    const { store } = await readyStore(repo);
+
+    store.commit(id, store.get(id));
+    await store.flush();
+
+    expect(repo.calls).toEqual([{ id, expected: 0, revision: 2 }]);
+    expect(store.get(id).revision).toBe(2);
+  });
+
+  it('nhiều commit gộp: expected khớp revision đã ghi trước đó, revision tăng đơn điệu', async () => {
+    const repo = new FakeRepo();
+
+    repo.delayMs = 5;
+
+    const { store } = await readyStore(repo);
+
+    for (let n = 0; n < 6; n += 1) {
+      const save = store.get(id);
+
+      save.gold = n + 1;
+      store.commit(id, save);
+    }
+
+    await store.flush();
+
+    expect(repo.calls.length).toBeLessThan(6);
+    expect(repo.calls[0]?.expected).toBe(0);
+
+    for (let i = 1; i < repo.calls.length; i += 1) {
+      expect(repo.calls[i].expected).toBe(repo.calls[i - 1].revision);
+      expect(repo.calls[i].revision).toBeGreaterThan(repo.calls[i - 1].revision);
+    }
+
+    expect(repo.calls[repo.calls.length - 1]?.revision).toBe(7);
+    expect(store.get(id).gold).toBe(6);
+  });
+
+  it('lỗi io rồi thử lại: expected không đổi', async () => {
+    const repo = new FakeRepo();
+    const { store } = await readyStore(repo);
+
+    repo.failSave = true;
+    store.commit(id, store.get(id));
+    await store.flush();
+    repo.failSave = false;
+    store.commit(id, store.get(id));
+    await store.flush();
+    store.commit(id, store.get(id));
+    await store.flush();
+
+    expect(repo.calls.map((c) => c.expected)).toEqual([0, 0, 3]);
+    expect(repo.calls.map((c) => c.revision)).toEqual([2, 3, 4]);
+  });
+
+  it('hai store dùng chung Storage: B commit sau A -> conflict, B khóa, đĩa chỉ còn của A, lỗi đúng một lần', async () => {
+    const storage = new FakeStorage();
+
+    seed(storage, { [id]: createDefaultSave(id) });
+
+    const a = storeOn(storage);
+    const b = storeOn(storage);
+
+    await a.hydrate();
+    await b.hydrate();
+
+    const errors: Array<[string | undefined, string | undefined]> = [];
+
+    b.onError((_m, errId, reason) => errors.push([errId, reason]));
+
+    const saveA = a.get(id);
+
+    saveA.gold = 111;
+    a.commit(id, saveA);
+    await a.flush();
+
+    const afterA = storage.data.get(PROGRESS_STORAGE_KEY);
+
+    const saveB = b.get(id);
+
+    saveB.gold = 222;
+    b.commit(id, saveB);
+    await b.flush();
+
+    expect(errors).toEqual([[id, 'conflict']]);
+    expect(storage.data.get(PROGRESS_STORAGE_KEY)).toBe(afterA);
+    expect(JSON.parse(afterA ?? '{}')[id].gold).toBe(111);
+
+    const setsBefore = storage.setCalls;
+
+    saveB.gold = 333;
+    b.commit(id, saveB);
+    await b.flush();
+
+    expect(storage.setCalls).toBe(setsBefore);
+    expect(storage.data.get(PROGRESS_STORAGE_KEY)).toBe(afterA);
+    expect(errors).toHaveLength(1);
+    expect(b.get(id).gold).toBe(333);
+
+    // Nhân vật khác của B vẫn ghi bình thường.
+    const other = ids[1];
+    const otherSave = b.get(other);
+
+    otherSave.gold = 77;
+    b.commit(other, otherSave);
+    await b.flush();
+    expect(JSON.parse(storage.data.get(PROGRESS_STORAGE_KEY) ?? '{}')[other].gold).toBe(77);
+    expect(errors).toHaveLength(1);
+  });
+
+  const brokenCases: Array<[string, (valid: CharacterSaveV8) => unknown]> = [
+    ['v8 hỏng (thiếu items)', (v) => ({ ...v, items: undefined })],
+    ['characterUid không khớp', (v) => ({ ...v, characterUid: 'ch_nguoi_la_1' })],
+    ['version 9', (v) => ({ ...v, version: 9 })],
+  ];
+
+  for (const [name, make] of brokenCases) {
+    it(`${name}: khóa, đĩa không bị ghi, get vẫn trả cache hiển thị được`, async () => {
+      const storage = new FakeStorage();
+      const text = seed(storage, { [id]: make(v8Default(id)) });
+      const store = storeOn(storage);
+      const errors: Array<[string | undefined, string | undefined]> = [];
+
+      store.onError((_m, errId, reason) => errors.push([errId, reason]));
+      await store.hydrate();
+
+      expect(store.get(id)).toEqual(v8Default(id));
+
+      const save = store.get(id);
+
+      save.gold = 9;
+      store.commit(id, save);
+      store.commit(id, save);
+      await store.flush();
+
+      expect(storage.setCalls).toBe(0);
+      expect(storage.data.get(PROGRESS_STORAGE_KEY)).toBe(text);
+      expect(storage.data.has(PROGRESS_BACKUP_V7_KEY)).toBe(false);
+      expect(errors).toEqual([[id, 'readonly']]);
+      expect(store.get(id).gold).toBe(9);
+
+      // Nhân vật khác vẫn ghi bình thường.
+      const other = ids[1];
+
+      store.commit(other, store.get(other));
+      await store.flush();
+      expect(
+        JSON.parse(storage.data.get(PROGRESS_STORAGE_KEY) ?? '{}')[other],
+      ).toBeDefined();
+      expect(JSON.parse(storage.data.get(PROGRESS_STORAGE_KEY) ?? '{}')[id]).toEqual(
+        JSON.parse(text)[id],
+      );
+    });
+  }
+
+  it('repo trả readonly: nhân vật bị khóa, commit sau không gọi repo', async () => {
+    const repo = new FakeRepo();
+    const { store } = await readyStore(repo);
+    let calls = 0;
+    const errors: Array<string | undefined> = [];
+
+    repo.save = () => {
+      calls += 1;
+
+      return Promise.resolve({ ok: false, reason: 'readonly', message: 'không sao lưu được' });
+    };
+    store.onError((_m, _id, reason) => errors.push(reason));
+
+    store.commit(id, store.get(id));
+    await store.flush();
+    store.commit(id, store.get(id));
+    await store.flush();
+
+    expect(calls).toBe(1);
+    expect(errors).toEqual(['readonly']);
+    expect(store.isLocked(id)).toBe(true);
+    expect(store.getLockReason(id)).toBe('readonly');
+  });
+
+  it('hydrate lỗi (loadAll reject): mọi nhân vật khóa, commit không gọi repo.save, lỗi readonly đúng một lần mỗi nhân vật', async () => {
+    const repo = new FakeRepo();
+
+    repo.failLoad = true;
+
+    const store = new ProgressStore(repo);
+    const errors: Array<[string | undefined, string | undefined]> = [];
+
+    store.onError((_m, errId, reason) => errors.push([errId, reason]));
+    await store.hydrate();
+
+    expect(store.getState()).toBe('degraded');
+    expect(store.persistent).toBe(false);
+    expect(store.lastError).toBe('read fail');
+
+    for (const each of ids) {
+      expect(store.isLocked(each)).toBe(true);
+      expect(store.getLockReason(each)).toBe('load-failed');
+
+      const save = store.get(each);
+
+      save.gold = 123;
+      store.commit(each, save);
+      store.commit(each, save);
+      expect(store.get(each).gold).toBe(123);
+    }
+
+    await store.flush();
+
+    expect(repo.calls).toHaveLength(0);
+    expect(errors).toEqual(ids.map((each) => [each, 'readonly']));
+    expect(store.persistent).toBe(false);
+  });
+
+  it('getItem lỗi lúc hydrate rồi hết lỗi, đĩa có v7: blob và khóa đĩa không đổi một byte sau nhiều commit', async () => {
+    class FlakyStorage extends FakeStorage {
+      failGet = true;
+
+      getItem(key: string): string | null {
+        if (this.failGet) {
+          throw new Error('getItem fail');
+        }
+
+        return super.getItem(key);
+      }
+    }
+
+    const storage = new FlakyStorage();
+    const v7 = createDefaultSave(id);
+
+    v7.gold = 77;
+
+    const text = seed(storage, { [id]: v7 });
+    const store = storeOn(storage);
+
+    await store.hydrate();
+    expect(store.getState()).toBe('degraded');
+
+    storage.failGet = false;
+
+    for (let n = 0; n < 4; n += 1) {
+      const save = store.get(id);
+
+      save.gold = 1000 + n;
+      store.commit(id, save);
+    }
+
+    await store.flush();
+
+    expect(storage.setCalls).toBe(0);
+    expect(storage.data.get(PROGRESS_STORAGE_KEY)).toBe(text);
+    expect(storage.data.has(PROGRESS_BACKUP_V7_KEY)).toBe(false);
+    expect([...storage.data.keys()]).toEqual([PROGRESS_STORAGE_KEY]);
+  });
+
+  it('phiên hydrate thành công vẫn ghi bình thường (không hồi quy), isLocked false', async () => {
+    const repo = new FakeRepo();
+    const { store } = await readyStore(repo);
+
+    for (const each of ids) {
+      expect(store.isLocked(each)).toBe(false);
+      expect(store.getLockReason(each)).toBeNull();
+    }
+
+    store.commit(id, store.get(id));
+    await store.flush();
+    expect(repo.calls).toHaveLength(1);
+  });
+
+  it('getLockReason: conflict', async () => {
+    const storage = new FakeStorage();
+
+    seed(storage, { [id]: createDefaultSave(id) });
+
+    const a = storeOn(storage);
+    const b = storeOn(storage);
+
+    await a.hydrate();
+    await b.hydrate();
+    a.commit(id, a.get(id));
+    await a.flush();
+    expect(b.isLocked(id)).toBe(false);
+    b.commit(id, b.get(id));
+    await b.flush();
+    expect(b.isLocked(id)).toBe(true);
+    expect(b.getLockReason(id)).toBe('conflict');
+    expect(b.isLocked(ids[1])).toBe(false);
+  });
+
+  for (const [name, make] of brokenCases) {
+    it(`getLockReason: ${name} -> corrupt, khóa ngay sau hydrate`, async () => {
+      const storage = new FakeStorage();
+
+      seed(storage, { [id]: make(v8Default(id)) });
+
+      const store = storeOn(storage);
+
+      await store.hydrate();
+      expect(store.isLocked(id)).toBe(true);
+      expect(store.getLockReason(id)).toBe('corrupt');
+      expect(store.isLocked(ids[1])).toBe(false);
+    });
+  }
 });

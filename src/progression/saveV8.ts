@@ -1,3 +1,4 @@
+import type { CharacterId } from '../config/characters';
 import {
   GEAR_INFO,
   GEAR_SLOTS,
@@ -38,6 +39,9 @@ export type CharacterSaveV8 = Omit<
   /** Rỗng nếu không có gì bị loại khi migrate. */
   migrationLog: string[];
 };
+
+/** Toàn bộ tiến trình dạng v8, theo nhân vật. */
+export type ProgressDataV8 = Partial<Record<CharacterId, CharacterSaveV8>>;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);

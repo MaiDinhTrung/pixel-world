@@ -160,8 +160,10 @@ import { Player } from '../entities/Player';
 import { RangedEnemy } from '../entities/RangedEnemy';
 import { WeaponChest } from '../entities/WeaponChest';
 import { createPlaceholderPlayerSheet } from '../utils/placeholderPlayer';
-import { SAVE_VERSION } from '../progression/CharacterProgress';
+import { SAVE_VERSION, type CharacterSave } from '../progression/CharacterProgress';
 import { progressStore } from '../progression/ProgressStore';
+import { applyV7ShapeToV8 } from '../progression/saveBridge';
+import { v8ToV7Shape } from '../progression/saveMigration';
 import { LevelSystem } from '../progression/LevelSystem';
 import { XP_PER_KILL } from '../progression/progressionConfig';
 import { StatSheet } from '../progression/StatSheet';
@@ -395,6 +397,8 @@ export class WorldScene extends Phaser.Scene {
   private portalCooldownUntil = 0;
   private portalChargeStartedAt: number | null = null;
   private portalTraveling = false;
+  /** Đã báo lỗi cầu nối save v8 trong lần vào scene này (reset ở create). */
+  private saveBridgeFailureToasted = false;
   private lastPortalToastAt = 0;
 
   private nextAfterimageAt = 0;
@@ -683,8 +687,13 @@ export class WorldScene extends Phaser.Scene {
     if (isPerfOverlayEnabled()) {
       new PerfOverlay(this);
     }
+    // Hủy đăng ký lỗi lưu trữ khi scene tắt (đăng ký sau khi hud được tạo, bên dưới).
+    let unsubscribeProgressError: (() => void) | null = null;
+
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.events.off(Phaser.Scenes.Events.POST_UPDATE, this.updateWeaponsAfterPhysics, this);
+      unsubscribeProgressError?.();
+      unsubscribeProgressError = null;
       this.fortress?.end(false);
       this.fortress = null;
       this.inputController.destroy();
@@ -692,7 +701,8 @@ export class WorldScene extends Phaser.Scene {
       this.minions.clear();
     });
 
-    const save = progressStore.get(this.characterId);
+    // Cầu nối v8 -> dạng v7: scene giữ cấu trúc nội bộ theo defId như cũ.
+    const save = v8ToV7Shape(progressStore.get(this.characterId));
 
     this.levelSystem = new LevelSystem({
       level: save.level,
@@ -780,6 +790,41 @@ export class WorldScene extends Phaser.Scene {
         this.assignSkillToSlot(skillId, slot);
       },
     });
+
+    // Lỗi lưu trữ kiểu khóa (conflict/readonly) của nhân vật đang chơi: báo một lần mỗi lần vào scene.
+    let progressErrorToasted = false;
+
+    this.saveBridgeFailureToasted = false;
+
+    const toastProgressLocked = (): void => {
+      if (progressErrorToasted) {
+        return;
+      }
+
+      progressErrorToasted = true;
+      this.hud?.showToast(
+        progressStore.getLockReason(this.characterId) === 'conflict'
+          ? 'DỮ LIỆU ĐÃ THAY ĐỔI Ở NƠI KHÁC — TIẾN TRÌNH KHÔNG ĐƯỢC LƯU. HÃY TẢI LẠI TRANG'
+          : 'TIẾN TRÌNH KHÔNG ĐƯỢC LƯU. HÃY TẢI LẠI TRANG',
+        '#ff8fa3',
+      );
+    };
+
+    unsubscribeProgressError = progressStore.onError((_message, id, reason) => {
+      if (
+        id !== this.characterId ||
+        (reason !== 'conflict' && reason !== 'readonly')
+      ) {
+        return;
+      }
+
+      toastProgressLocked();
+    });
+
+    // Nhân vật đã bị khóa từ trước (lỗi đã phát khi scene khác/chưa có): vẫn báo khi vào scene.
+    if (progressStore.isLocked(this.characterId)) {
+      toastProgressLocked();
+    }
 
     this.hud.setGold(this.village.getGold());
     this.createDayNightControl();
@@ -2473,7 +2518,7 @@ export class WorldScene extends Phaser.Scene {
   private saveProgress(): void {
     const levelState = this.levelSystem.getState();
 
-    progressStore.commit(this.characterId, {
+    const shape: CharacterSave = {
       ...levelState,
       version: SAVE_VERSION,
       statPoints: this.statPoints,
@@ -2493,7 +2538,23 @@ export class WorldScene extends Phaser.Scene {
       ],
       extraSkills: [...this.extraLoadout],
       skillLevels: { ...this.skillLevels },
-    });
+    };
+    // Cầu nối dạng v7 -> v8; không áp được thì không ghi, không ném.
+    const result = applyV7ShapeToV8(progressStore.get(this.characterId), shape);
+
+    if (result.ok) {
+      progressStore.commit(this.characterId, result.save);
+    } else {
+      console.error('saveProgress: không áp được save v8, bỏ qua lần ghi', result.errors);
+
+      if (!this.saveBridgeFailureToasted) {
+        this.saveBridgeFailureToasted = true;
+        this.hud?.showToast(
+          'LƯU TIẾN TRÌNH THẤT BẠI — HÃY BÁO LỖI VÀ TẢI LẠI TRANG',
+          '#ff8fa3',
+        );
+      }
+    }
   }
 
   openCharacterPanel(
