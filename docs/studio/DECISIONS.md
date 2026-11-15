@@ -16,6 +16,15 @@ Mẫu mục:
 
 ---
 
+### 2026-11-15 — Cưỡng chế quyền Agent ở tầng harness + baseline Git cho QA
+- **Quyết định:** (1) `.claude/settings.json` là policy dùng chung, được commit: `git clean` bị deny, đọc `~/.claude/.credentials.json` bị deny, các lệnh git ghi (`add/commit/push/reset/checkout/restore/stash/rebase/merge/branch -D`) ở mức ask, cho phép sẵn một số lệnh chỉ-đọc/build/test. (2) Hook PreToolUse `.claude/hooks/studio-guard.mjs` kiểm toàn bộ chuỗi Bash theo allowlist cho `qa-tester`, `game-developer` và mọi subagent khác; chỉ `game-developer` được Edit/Write, trừ vùng cấm; subagent thiếu `agent_type`/payload hỏng/lỗi hook → chặn (fail-closed); AI Lead không bị hook can thiệp. (3) Bỏ quyền Read rộng `~/.claude/**`, chỉ giữ `skills/synced/**` ở `settings.local.json`. (4) Cây tracked phải sạch trước khi giao Developer; nếu người dùng cho phép vẫn tiếp tục thì baseline kèm hash từng file. (5) Brief có BASELINE + ĐƯỢC SỬA + ĐƯỢC TẠO; QA nhận nguyên và tự đối chiếu `git diff`/`git status`/`git hash-object`; baseline giữ nguyên qua 2 vòng sửa. (6) Developer không tự quyết commit/push. (7) Không làm manifest `active-task` (Gói C).
+- **Lý do:** audit 2026-11-15 (R1, R2) cho thấy các ràng buộc chỉ nằm trong prompt, và QA không có danh sách phạm vi để tự đối chiếu.
+- **Phương án bị loại:** `disallowedTools: Bash(...)` trong frontmatter (một mục có specifier gỡ cả công cụ Bash); sandbox OS (không hỗ trợ Windows native); chỉ dựa vào luật `deny` pattern (dễ lách bằng `git -C`, `bash -c`); manifest `active-task` (thêm trạng thái phải quản lý, để sau).
+- **Ảnh hưởng:** `.claude/settings.json`, `.claude/settings.local.json`, `.claude/hooks/*`, `.claude/agents/qa-tester.md`, `.claude/agents/game-developer.md`, `docs/studio/WORKFLOW.md` (§6, §6a, §8, §9), `docs/PROJECT_MAP.md` (6b).
+- **Kiểm chứng bằng subagent thật (2026-11-15):** `qa-tester` và `Explore` bị chặn `echo`, cho `git rev-parse`; `game-developer` bị chặn ghi `.claude/` và `DECISIONS.md`, ghi/sửa được file thử trong danh sách, không xóa được; `qa-tester` phát hiện đúng file lạc phạm vi. Còn chưa kiểm chứng: luật `ask` với AI Lead, `onFailure: block`, các subagent chỉ-đọc khác.
+- **Trạng thái:** Đã duyệt, đã triển khai.
+- **Tài liệu liên quan:** `docs/studio/WORKFLOW.md` §6a, §8
+
 ### 2026-11-15 — Mô hình điều phối AI Studio
 - **Quyết định:** Hub-and-spoke: AI Lead (session chính) điều phối Visual Designer, Gameplay Designer, Game Developer, QA Tester. Hai cổng duyệt của người dùng (trước khi code, trước khi chốt), trần 2 vòng sửa lỗi, chỉ Developer (và Lead) được ghi code, chỉ Lead ghi Knowledge Base.
 - **Lý do:** Phù hợp quy mô một người dùng + 4 subagent; tránh xung đột file và quy trình quá nặng.

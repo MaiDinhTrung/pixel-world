@@ -200,6 +200,8 @@ Ngoài ra chưa có mục nào được xác nhận trong repo. Hiện không c�
 ## 6b. Studio / Agents
 - Quy trình điều phối AI Lead + subagent: `docs/studio/WORKFLOW.md`; nhật ký quyết định thiết kế: `docs/studio/DECISIONS.md`.
 - Subagent ở `.claude/agents/`: `visual-designer` (đọc), `gameplay-designer` (đọc), `game-developer` (ghi code), `qa-tester` (chạy build/test, không sửa code).
+- Quyền và cưỡng chế (WORKFLOW §6a, §8): `.claude/settings.json` (được commit: allow lệnh chỉ-đọc/build/test, ask các lệnh git ghi, deny `git clean` và đọc credentials, khai báo hook), `.claude/hooks/studio-guard.mjs` (PreToolUse hook: allowlist Bash theo từng subagent, vùng cấm khi Developer ghi file, fail-closed với subagent), `.claude/hooks/studio-guard.selftest.mjs` (chạy: `node --test .claude/hooks/studio-guard.selftest.mjs`; không thuộc `npm test`, cố ý không đặt tên `*.test.mjs` vì vitest sẽ quét nhầm). `.claude/settings.local.json` là cấu hình máy cá nhân, bị git bỏ qua.
+- Baseline Git + hai danh sách ĐƯỢC SỬA / ĐƯỢC TẠO + QA tự đối chiếu `git diff`/`git status`: `docs/studio/WORKFLOW.md` §6a.
 
 ## 7. Mở rộng lớp (dự kiến)
 Thiết kế Necromancer + Druid, lộ trình GĐ0–8: `docs/CLASS_EXPANSION.md`. Đã làm: GĐ1–3 và GĐ4 (Triệu Hồn Sư `necromancer`: `skills/necromancerSkills.ts`, `config/necromancerConfig.ts`, `entities/Minion.ts`, `systems/MinionManager.ts`; dùng sprite pháp sư đổi màu; đồng minh có máu, bị quái đánh (contact) và quái đổi mục tiêu sang đồng minh trong tầm 150 px). Chưa có skill nào dùng các trạng thái này. Lớp `druid` **chưa tồn tại** trong code.

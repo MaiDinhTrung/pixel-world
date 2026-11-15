@@ -35,8 +35,9 @@ Mô hình hub-and-spoke: **AI Lead** (session chính) là trung tâm duy nhất;
 Yêu cầu → AI Lead: phạm vi, tra PROJECT_MAP
         → Visual ∥ Gameplay (chỉ đọc) → AI Lead tổng hợp, xử lý mâu thuẫn
         → ◆ CỔNG 1: người dùng duyệt thiết kế ◆
-        → ghi DECISIONS.md → Game Developer (file đã khai báo)
-        → QA Tester ── lỗi → Developer sửa → QA kiểm lại (tối đa 2 vòng)
+        → ghi DECISIONS.md → BASELINE Git (§6a: cây tracked phải sạch)
+        → Game Developer (ĐƯỢC SỬA / ĐƯỢC TẠO đã khai báo)
+        → QA Tester (nhận baseline + 2 danh sách, tự git diff/status) ── lỗi → Developer sửa → QA kiểm lại (tối đa 2 vòng, baseline giữ nguyên)
         → ◆ CỔNG 2: người dùng xem kết quả, đồng ý chốt/commit ◆
         → cập nhật PROJECT_MAP/catalog, báo cáo, nói rõ "đã xong"
 ```
@@ -53,18 +54,46 @@ Yêu cầu → AI Lead: phạm vi, tra PROJECT_MAP
 ```
 Mục tiêu:
 Thiết kế đã được người dùng duyệt: (nêu tóm tắt / link mục DECISIONS)
-File ĐƯỢC PHÉP sửa: (danh sách)
+BASELINE: (dán nguyên văn dòng baseline từ §6a)
+File ĐƯỢC SỬA (đã tồn tại): (danh sách đường dẫn)
+File ĐƯỢC TẠO (chưa tồn tại): (đường dẫn hoặc mẫu; gồm cả PROJECT_MAP/catalog nếu cần cập nhật)
 Số liệu đặt ở: src/config/… (tên hằng số)
 Tiêu chí nghiệm thu:
-Không được làm:
+Không được làm: (luôn gồm: commit/push; sửa hoặc tạo ngoài hai danh sách; vùng cấm ở §8)
 ```
-**Brief cho QA:** tiêu chí nghiệm thu, file đã đổi, lệnh cần chạy (`npm run build`, `npm test`).
+**Brief cho QA** (bắt buộc đủ): tiêu chí nghiệm thu · BASELINE nguyên văn · hai danh sách ĐƯỢC SỬA / ĐƯỢC TẠO nguyên văn như đã duyệt · lệnh cần chạy (`npm run build`, `npm test`, `npx tsc --noEmit`). **Không** đưa danh sách "file đã đổi" do Developer khai: QA tự lấy từ git (§6a) để phép kiểm không bị vòng tròn.
 
 **Báo lỗi (QA):** Mức (Chặn/Không chặn) · Bước tái hiện · Kết quả thực · Kết quả mong đợi · File nghi ngờ.
 
 **Báo cáo Designer:** Phạm vi / Hiện trạng / (Tái dùng) / Đề xuất / Tiêu chí nghiệm thu / Rủi ro.
 
 Brief phải tự đủ ý và trỏ tới file cụ thể; subagent không nhớ hội thoại trước.
+
+## 6a. Baseline Git và kiểm phạm vi
+
+**Lead lập baseline trước khi giao Developer:**
+1. Chạy `git rev-parse HEAD`, `git branch --show-current`, `git status --porcelain --untracked-files=no`.
+2. **Cây tracked phải sạch** (lệnh thứ ba không in gì). Chưa sạch → Lead **không** gọi Developer: báo người dùng file nào đang dơ và xin ý kiến (commit / stash / hoàn tác / chấp nhận). Lead không tự quyết.
+   - **Ngoại lệ có chủ đích:** nếu người dùng chỉ thị rõ vẫn tiếp tục khi cây chưa sạch, baseline phải liệt kê từng file tracked đang dơ kèm `git hash-object <file>` (và hash của file untracked mà Developer được phép SỬA). QA đối chiếu hash từng file; file không đổi hash coi như không bị đụng. Ghi ngoại lệ này vào báo cáo.
+3. Chạy `git ls-files --others --exclude-standard` để biết file untracked có sẵn; ghi dưới dạng mẫu thư mục (ví dụ `docs/references/visual/**`, kèm số lượng). Đây không phải kết quả của Developer.
+4. Dán một dòng vào mọi brief của nhiệm vụ:
+```
+BASELINE: HEAD=<sha đầy đủ> · nhánh=<tên> · tracked sạch · untracked có sẵn: <mẫu> (<số lượng>)
+```
+Baseline lập **một lần cho cả nhiệm vụ** và giữ nguyên qua hai vòng sửa lỗi (§9); chỉ lập lại khi bắt đầu nhiệm vụ mới.
+
+**QA tự kiểm phạm vi** (không dùng lời khai của Developer):
+1. `git rev-parse HEAD` phải bằng HEAD trong baseline. Khác = có commit ngoài ý muốn → lỗi **Chặn**.
+2. `git diff --name-status HEAD` → file tracked bị sửa / xóa / đổi tên.
+3. `git ls-files --others --exclude-standard` (hoặc `git status --porcelain --untracked-files=all`) → file mới; **trừ** các mẫu untracked có sẵn trong baseline. Lưu ý: git bọc đường dẫn có ký tự ngoài ASCII hoặc khoảng trắng trong dấu `"` kèm escape; bỏ dấu `"` đầu dòng khi so với mẫu baseline, kẻo file cũ bị tính nhầm là file mới.
+4. Phân loại từng đường dẫn đã đổi:
+   - file tracked nằm trong ĐƯỢC SỬA, hoặc file mới nằm trong ĐƯỢC TẠO → Đạt;
+   - ngoài cả hai danh sách → lỗi **Chặn** "ngoài phạm vi";
+   - thuộc vùng cấm (§8) → lỗi **Chặn**, kể cả khi có trong brief;
+   - có trong danh sách nhưng không đổi, hoặc đặt sai danh sách (mới mà ở ĐƯỢC SỬA, v.v.) → ghi chú, không phải lỗi chặn.
+5. Giới hạn phải ghi vào mục "Chưa kiểm được": file bị `.gitignore` (`dist/`, `*.local`) không hiện trong git. `git diff` cũng **không thấy** file untracked bị sửa; với file untracked trong ĐƯỢC SỬA hoặc trong baseline, QA so `git hash-object` với hash ghi trong baseline.
+6. **Dọn file tạm:** Developer và QA không có công cụ xóa. File tạm/thử nghiệm do Developer tạo (nếu có trong ĐƯỢC TẠO) do AI Lead xóa sau khi QA xong và đã báo người dùng; file đã xóa không còn là bằng chứng nên Lead ghi tên file vào báo cáo trước khi xóa. Lead chỉ xóa đúng các đường dẫn nằm trong ĐƯỢC TẠO.
+7. Brief thiếu BASELINE hoặc thiếu một trong hai danh sách → tiêu chí phạm vi là "Chưa kiểm được"; QA không tự suy ra danh sách.
 
 ## 7. Khi hai Agent mâu thuẫn
 
@@ -73,17 +102,26 @@ Brief phải tự đủ ý và trỏ tới file cụ thể; subagent không nh�
 3. Không phân định được → trình bày cả hai phương án + khuyến nghị cho người dùng chọn.
 4. Ghi quyết định và lý do loại phương án kia vào `DECISIONS.md`.
 
-## 8. Chống sửa chồng file
+## 8. Chống sửa chồng file và cưỡng chế quyền
 
 - Chỉ Developer và AI Lead có quyền ghi code; Designer và QA chỉ đọc.
-- Brief có danh sách file sở hữu; hai Developer song song không được trùng file.
-- Developer cần file ngoài danh sách → dừng, báo AI Lead cập nhật brief.
+- Brief có hai danh sách ĐƯỢC SỬA / ĐƯỢC TẠO; hai Developer song song không được trùng file.
+- Developer cần file ngoài hai danh sách → dừng, báo AI Lead cập nhật brief.
+- **Developer không tự quyết commit/push.** Commit chỉ ở Cổng 2, do AI Lead làm sau khi người dùng đồng ý.
+
+**Cưỡng chế ở tầng harness** (`.claude/settings.json` + hook `.claude/hooks/studio-guard.mjs`, không chỉ dựa vào prompt):
+- `qa-tester`, `game-developer` và mọi subagent khác chỉ chạy được Bash trong allowlist: `npm test`, `npm run build`, `npx tsc --noEmit`, `npx vitest run --root . [src/**/*.test.ts]`, và git chỉ-đọc (`status`, `diff`, `log`, `show`, `ls-files`, `rev-parse`, `hash-object`, `branch --show-current`). Hook kiểm **toàn bộ chuỗi lệnh**: không ghép lệnh (`; & |`), không chuyển hướng (`< >`), không `$()`/backtick, không dấu nháy/xuống dòng, không `git -C`/`-c`, không tham số ghi file (`--output`…), không PowerShell. Cần lệnh khác → báo AI Lead.
+- Chỉ `game-developer` được Edit/Write. Vùng cấm với Developer: `.claude/`, `CLAUDE.md`, `docs/studio/DECISIONS.md`, `.git/`, `package.json`, `package-lock.json`, `tsconfig*.json`, `vite.config.*`, `.env*`, `.gitignore`, `node_modules/`, `dist/`. Hook **không** kiểm hai danh sách ĐƯỢC SỬA/ĐƯỢC TẠO; phần đó do brief + QA đối chiếu (§6a).
+- Subagent thiếu `agent_type`, payload hỏng hoặc hook lỗi → chặn (fail-closed). AI Lead không bị hook can thiệp; luật quyền trong settings vẫn áp dụng cho Lead.
+- `git clean` bị deny; `git add/commit/push/reset/checkout/restore/stash/rebase/merge/branch -D` ở mức ask.
+- Hook **không phải sandbox**: Developer vẫn viết được mã chạy qua `npm test`/`npm run build`. Lớp phát hiện còn lại là QA đối chiếu git diff với danh sách đã duyệt.
+- Đổi `.claude/settings.json`, hook hoặc Agent là việc của AI Lead/người dùng qua Cổng 1, Developer không được sửa.
 
 ## 9. Khi QA phát hiện lỗi
 
 1. QA báo theo mẫu, phân loại Chặn / Không chặn.
 2. AI Lead chuyển cho Developer kèm tiêu chí nghiệm thu gốc.
-3. Developer sửa → QA kiểm lại phần lỗi + build/test.
+3. Developer sửa → QA kiểm lại phần lỗi + build/test + phạm vi (§6a). **Baseline và hai danh sách giữ nguyên** qua cả hai vòng; muốn đổi danh sách thì AI Lead cập nhật brief và báo người dùng.
 4. Tối đa **2 vòng**; vòng 3 AI Lead dừng và hỏi người dùng (thường là lỗi thiết kế).
 5. Lỗi không chặn: người dùng có thể chấp nhận và ghi vào danh sách "đã biết".
 
