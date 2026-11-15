@@ -1,7 +1,7 @@
 # PROJECT_MAP — Pixel World
 
 Bản đồ định vị file. Stack: Phaser 4.2.1 + TypeScript + Vite (`npm run dev` / `npm run build`). Mọi đường dẫn bên dưới đã được kiểm tra tồn tại (cập nhật lần cuối: 2026-11-12).
-Chi tiết gameplay/điều khiển/số liệu cho người chơi: xem `README.md` (không lặp lại ở đây). Thiết kế lớp/cơ động: `docs/CLASS_REDESIGN.md`.
+Chi tiết gameplay/điều khiển/số liệu cho người chơi: xem `README.md` (không lặp lại ở đây). Thiết kế lớp/cơ động: `docs/CLASS_REDESIGN.md`. Định hướng thiết kế tổng thể (4 trụ cột): `docs/DESIGN_PILLARS.md`.
 
 Không liệt kê chi tiết: `node_modules/`, `dist/`, `package-lock.json`, ảnh trong `public/assets/village/` (37 file, gồm PNG + LICENSE/README).
 

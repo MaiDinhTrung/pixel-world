@@ -1,7 +1,9 @@
 # Pixel World
 
-Game **action real-time top-down roguelike** phong cách pixel art, lấy cảm hứng từ
-Soul Knight, xây dựng với **Phaser 4 + TypeScript + Vite**.
+Game **MMORPG 2D / Action RPG top-down** phong cách pixel art Grim Dark Fantasy,
+xây dựng với **Phaser 4 + TypeScript + Vite**. Cảm hứng: hình ảnh Soul Knight,
+thế giới Ngọc Rồng Online, chiến đấu Diablo; IP và tài sản nguyên bản
+(xem `docs/DESIGN_PILLARS.md`).
 
 ## Yêu cầu môi trường
 

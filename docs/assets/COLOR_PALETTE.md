@@ -1,5 +1,7 @@
 # Bảng màu & quyết định nghệ thuật — Pixel World
 
+Định hướng tổng thể: xem `docs/DESIGN_PILLARS.md` (Grim Dark là bản sắc; Soul Knight là cách thể hiện silhouette/animation).
+
 Định hướng chính thức: **Grim Dark Fantasy Pixel Art** (thư viện ảnh tham chiếu ghi là "Diablo-inspired Dark Fantasy"; chỉ học nguyên tắc, không sao chép tài sản độc quyền — xem `docs/references/visual/README.md`).
 
 Tài liệu này chỉ ghi **quyết định đã được người dùng duyệt** (mục 1–3) và **quyết định đã duyệt nhưng chưa triển khai** (mục 4). Mọi đề xuất chưa duyệt nằm ở mục 5 và **không phải** quy chuẩn.

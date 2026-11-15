@@ -16,6 +16,14 @@ Mẫu mục:
 
 ---
 
+### 2026-11-15 — Định hướng thiết kế tổng thể (Design Pillars)
+- **Quyết định (người dùng chỉ đạo):** Visual lấy cảm hứng Soul Knight (silhouette rõ, animation sinh động); World & Gameplay kiểu MMORPG 2D lấy cảm hứng Ngọc Rồng Online; Combat & Skills kiểu Action RPG lấy cảm hứng Diablo; Identity giữ Grim Dark Fantasy, IP/hình ảnh/kỹ năng nguyên bản, không sao chép tài sản game tham khảo.
+- **Lý do:** có một nguồn định hướng chung cho Designer và Developer.
+- **Phương án bị loại:** ghi vào `CLAUDE.md` (file đó chỉ chứa quy trình).
+- **Ảnh hưởng:** chỉ tài liệu: `docs/DESIGN_PILLARS.md` (mới, nguồn chính), `docs/PROJECT_MAP.md`, `README.md` (dòng mô tả), `docs/assets/COLOR_PALETTE.md` (dòng trỏ). Không đổi code, cân bằng hay quyết định đã có. Grim Dark = bản sắc, Soul Knight = cách thể hiện.
+- **Trạng thái:** Đã duyệt, đã ghi tài liệu.
+- **Tài liệu liên quan:** `docs/DESIGN_PILLARS.md`
+
 ### 2026-11-15 — Boss Arena: bản đồ Boss riêng + cổng dịch chuyển
 - **Quyết định (người dùng chốt):** (1) **Kiến trúc A:** `BossArenaScene` là scene Phaser riêng, không dùng `mapMode` trong `WorldScene`. (2) Cổng vào đặt **bên ngoài Làng Khởi Nguyên**. (3) **Khóa cổng trở về khi Boss còn sống.** (4) **Sau khi hạ Boss, người chơi được chọn ở lại Arena** để đánh quái con và cày cấp. (5) **Ánh sáng Arena cố định**, không theo chu kỳ ngày/đêm.
 - **Giữ từ đề xuất (người dùng chưa phản đối, nhưng chưa xác nhận riêng):** đồng hồ boss chạy toàn cục, boss chỉ xuất hiện trong Arena (`bossReady` khi hết giờ ở map chính); cơ chế và số liệu `BOSS_*` của `BossEnemy` không đổi; chết thì về map chính, run reset như cũ; không lưu map hiện tại vào save; Arena 50×34 tile, cổng vào đỏ / cổng về xanh ngọc; số liệu mới ở `src/config/bossArenaConfig.ts`.
