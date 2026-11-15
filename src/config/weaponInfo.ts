@@ -121,7 +121,7 @@ export const WEAPON_INFO: Record<WeaponId, WeaponInfo> = {
     type: 'CẬN CHIẾN',
     rarity: 'special',
     description:
-      'Nâng búa rồi giáng xuống: chậm nhưng nặng, đập vỡ mặt đất, gây sát thương vùng và đẩy lùi kẻ địch.',
+      'GIÁNG BÚA (nhấn): đập vùng, choáng và đẩy lùi. CHẤN ĐỊA KÍCH (giữ 1 giây rồi thả): vùng lớn, sát thương nặng, choáng dài.',
     colorCss: WEAPON_RARITY_COLORS.special,
     energyCost: 0,
     textureKey: TEXTURE_KEYS.hammer,

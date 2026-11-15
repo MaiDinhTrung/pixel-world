@@ -745,11 +745,16 @@ export class WorldScene extends Phaser.Scene {
         this.player.playAttack(time, aim);
       }
     } else if (weapon && this.attackWasDown && !this.player.isDead()) {
-      const released = weapon.releaseAttack?.(time, aim) ?? false;
+      if (attackInput && weapon.cancelAttack) {
+        // Nút bị KHÓA (vào làng/đang nhảy) chứ không phải thả thật: hủy sạch, không ra đòn.
+        weapon.cancelAttack();
+      } else {
+        const released = weapon.releaseAttack?.(time, aim) ?? false;
 
-      if (released) {
-        this.player.breakStealth();
-        this.player.playAttack(time, aim);
+        if (released) {
+          this.player.breakStealth();
+          this.player.playAttack(time, aim);
+        }
       }
     }
 

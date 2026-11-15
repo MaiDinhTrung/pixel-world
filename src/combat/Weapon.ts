@@ -34,6 +34,9 @@ export interface Weapon {
   /** Vũ khí cần thả chuột để bắn (Cung) cài đặt hàm này. */
   releaseAttack?(time: number, aim: Phaser.Math.Vector2): boolean;
 
+  /** Hủy sạch đòn/tích lực đang dở (khóa nút do vào làng/đang nhảy), không ra đòn. Búa cài đặt hàm này. */
+  cancelAttack?(): void;
+
   /** Vùng ảnh hưởng tồn tại (Void Staff), chạy sau AI quái mỗi frame. */
   applyField?(enemies: EnemyBase[], time: number): void;
 

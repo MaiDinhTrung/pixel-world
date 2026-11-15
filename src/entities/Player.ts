@@ -86,6 +86,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private guardAngle = 0;
   /** Hệ số tốc chạy / sát thương nhận từ kỹ năng duy trì (Song Thủ Khiên). */
   private moveSpeedFactor = 1;
+  /** Hệ số tốc chạy do vũ khí đặt (Búa nặng khi tích lực/giáng); tách riêng khỏi moveSpeedFactor của Song Thủ Khiên/Tàng hình. */
+  private weaponMoveFactor = 1;
   private damageTakenFactor = 1;
   /** Tăng tốc hồi giáp (0.2 = hồi nhanh hơn 20%), từ passive Ý Chí Sắt. */
   private armorRegenSpeed = 0;
@@ -319,6 +321,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       this.config.speedMultiplier *
       this.stats.moveSpeedMultiplier *
       this.moveSpeedFactor *
+      this.weaponMoveFactor *
       boost;
 
     this.setVelocity(direction.x * speed, direction.y * speed);
@@ -1037,6 +1040,11 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
   setMoveSpeedFactor(factor: number): void {
     this.moveSpeedFactor = Math.max(0.1, factor);
+  }
+
+  /** Vũ khí đặt hệ số tốc chạy (kẹp 0.1–1); đặt 1 khi hủy/đổi vũ khí/chết. */
+  setWeaponMoveFactor(factor: number): void {
+    this.weaponMoveFactor = Math.min(1, Math.max(0.1, factor));
   }
 
   setDamageTakenFactor(factor: number): void {

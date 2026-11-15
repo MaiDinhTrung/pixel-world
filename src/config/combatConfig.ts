@@ -502,18 +502,37 @@ export const DUAL_BLADES_FINISHER_HIT_MULT = 0.25; // đòn kết có 4 nhát (2
 export const DUAL_BLADES_TRAIL_FADE_MS = 110; // vệt chém mờ dần sau khi dao chém xong (ms)
 export const DUAL_BLADES_TRAIL_THICKNESS = 5; // độ dày tối đa ở giữa vệt chém (px)
 
-/** Búa (Đấu sĩ): đập chậm, nặng; sát thương vùng tròn tại điểm đầu búa chạm đất. */
-export const HAMMER_DAMAGE = 6; // sát thương
+/** Búa (Đấu sĩ): đập chậm, nặng; sát thương vùng tròn tại điểm đầu búa chạm đất. Có 2 kiểu: GIÁNG BÚA (nhấn) và CHẤN ĐỊA KÍCH (giữ rồi thả). */
+export const HAMMER_DAMAGE = 8; // sát thương đòn thường
 export const HAMMER_REACH = 40; // khoảng cách từ người chơi tới tâm điểm va chạm (px)
-export const HAMMER_IMPACT_RADIUS = 36; // bán kính vùng va chạm (px)
-export const HAMMER_COOLDOWN_MS = 720; // thời gian chờ giữa hai đòn (ms)
+export const HAMMER_IMPACT_RADIUS = 44; // bán kính vùng va chạm đòn thường (px)
+export const HAMMER_COOLDOWN_MS = 560; // thời gian chờ giữa hai đòn thường, tính từ lúc BẮT ĐẦU giáng (ms)
 export const HAMMER_WINDUP_MS = 170; // nâng búa ra sau (ms)
 export const HAMMER_SWING_MS = 80; // vung xuống tới lúc va chạm; sát thương gây ở cuối pha này (ms)
-export const HAMMER_RECOVER_MS = 150; // kéo búa về tư thế nghỉ (ms)
+export const HAMMER_RECOVER_MS = 230; // khựng va chạm rồi kéo búa về tư thế nghỉ, đã bao gồm khựng (ms)
 export const HAMMER_PUSH_SPEED = 240; // lực đẩy lùi kẻ địch bị trúng (px/giây)
 export const HAMMER_REST_DEGREES = 70; // góc búa gác lên vai khi nghỉ (độ, lệch khỏi hướng ngắm)
 export const HAMMER_RAISE_DEGREES = 120; // góc nâng cao nhất lúc lấy đà (độ)
 export const HAMMER_STRIKE_DEGREES = 25; // góc cuối lúc giáng xuống (độ, lệch về phía dưới)
+export const HAMMER_STUN_MS = 450; // thời gian choáng kẻ địch trúng đòn thường (ms)
+export const HAMMER_CHARGE_READY_MS = 1000; // giữ nút đủ thời gian này (tính từ lúc nhấn) thì búa sẵn sàng CHẤN ĐỊA KÍCH (ms)
+export const HAMMER_CHARGED_DAMAGE = 24; // sát thương đòn tích lực
+export const HAMMER_CHARGED_REACH = 52; // khoảng cách từ người chơi tới tâm va chạm đòn tích lực (px)
+export const HAMMER_CHARGED_IMPACT_RADIUS = 84; // bán kính vùng va chạm đòn tích lực (px)
+export const HAMMER_CHARGED_STUN_MS = 1200; // thời gian choáng kẻ địch trúng đòn tích lực (ms)
+export const HAMMER_CHARGED_PUSH_SPEED = 360; // lực đẩy lùi đòn tích lực (px/giây)
+export const HAMMER_CHARGED_SWING_MS = 100; // vung xuống đòn tích lực tới lúc va chạm (ms)
+export const HAMMER_CHARGED_RECOVER_MS = 300; // khựng va chạm rồi kéo về sau đòn tích lực, đã bao gồm khựng (ms)
+export const HAMMER_CHARGED_COOLDOWN_MS = 700; // thời gian chờ sau đòn tích lực, tính từ lúc BẮT ĐẦU giáng (ms)
+export const HAMMER_CHARGED_STRIKE_DEGREES = 35; // góc cuối lúc giáng đòn tích lực (độ, lớn hơn đòn thường)
+export const HAMMER_CHARGED_LAUNCH_HEIGHT = 36; // độ cao hất tung kẻ địch (px, chỉ hiển thị)
+export const HAMMER_CHARGED_LAUNCH_MS = 450; // thời gian kẻ địch bị hất tung bay lên rồi rơi (ms)
+export const HAMMER_CHARGED_MAX_LAUNCHED = 8; // số kẻ địch gần nhất tối đa bị hất tung (không tính boss)
+export const HAMMER_CHARGE_MOVE_FACTOR = 0.6; // hệ số tốc chạy khi nâng/giữ/sẵn sàng tích lực
+export const HAMMER_SWING_MOVE_FACTOR = 0.4; // hệ số tốc chạy khi giáng/hồi đòn thường
+export const HAMMER_CHARGED_SWING_MOVE_FACTOR = 0.2; // hệ số tốc chạy khi giáng/hồi đòn tích lực
+export const HAMMER_IMPACT_HOLD_MS = 50; // búa khựng ở góc va chạm đòn thường, nằm trong HAMMER_RECOVER_MS (ms)
+export const HAMMER_CHARGED_IMPACT_HOLD_MS = 90; // búa khựng ở góc va chạm đòn tích lực, nằm trong HAMMER_CHARGED_RECOVER_MS (ms)
 
 /** Trượng: bắn orb lớn, xuyên rất nhiều quái. */
 export const STAFF_DAMAGE = 3; // sát thương
