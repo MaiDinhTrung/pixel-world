@@ -1,6 +1,6 @@
 # WORKFLOW — Quy trình AI Studio
 
-Mô hình hub-and-spoke: **AI Lead** (session chính) là trung tâm duy nhất; subagent không gọi nhau, mọi bàn giao đi qua AI Lead. Giữ nhẹ: việc nhỏ không cần đủ quy trình.
+Mô hình hub-and-spoke: **AI Lead** (session chính) là trung tâm duy nhất; subagent không gọi nhau, mọi bàn giao đi qua AI Lead. Giữ nhẹ: việc nhỏ không cần đủ quy trình; phân cấp S/M/L/XL (Lean) ở §12.
 
 ## 1. Vai trò
 
@@ -158,3 +158,48 @@ Nghiệm thu xong mới sang Cổng 2; `DECISIONS.md` cập nhật "đã triển
 ## 11. Kết thúc nhiệm vụ
 
 Danh sách kiểm: build qua · tiêu chí đạt · người dùng đã chơi thử và nghiệm thu (§9a–§9b) · PROJECT_MAP/catalog đã cập nhật nếu cần · quyết định đã ghi. Báo cáo 5 dòng: đã làm gì · file đã đổi · kết quả QA · việc tồn đọng · **câu "đã xong" rõ ràng**.
+
+## 12. Lean AI Workflow (phân cấp S/M/L/XL)
+
+Trạng thái: **ĐÃ DUYỆT (người dùng, 2026-11-17)**. Mục tiêu: giảm token, tránh agent đọc/phân tích lặp. §12 **thu hẹp** (không thay) §2–§4: luồng đầy đủ ở §4 là luồng của cấp L/XL. Mọi quy tắc lõi giữ nguyên: hai cổng (§5), baseline Git và kiểm phạm vi (§6a), vùng cấm và quyền (§8), playtest (§9a–9b), Knowledge Base (§10).
+Hiệu lực: chỉ cho nhiệm vụ **bắt đầu sau khi duyệt**; không đổi nhiệm vụ đã xong (P0b, P1 chạy theo luồng cũ). Nhiệm vụ đầu tiên áp dụng: từ P2 trở đi.
+
+### 12.1 Phân cấp nhiệm vụ
+
+| Cấp | Dùng khi | Ai làm | Kiểm tra | Cổng |
+|---|---|---|---|---|
+| **S** | Sửa nhỏ, rõ, ≤ ~2 file, không thuộc "rủi ro cao" | Developer (hoặc Lead nếu quá nhỏ) triển khai và **tự kiểm** (tsc/test/build + đọc `git diff`) | Không QA độc lập | Một câu xác nhận (§5) |
+| **M** | Một hệ thống, ≤ ~5 file, tiêu chí rõ | Developer triển khai | QA **kiểm mục tiêu khi cần** (tiêu chí + phạm vi + hồi quy liên quan); Lead ghi lý do gọi/không gọi QA | Cổng 1 gọn + Cổng 2 |
+| **L** | Nhiều file/hệ thống, hoặc **rủi ro cao** | Developer | **QA độc lập đầy đủ** (§6a, hai danh sách) | Cổng 1 + Cổng 2 + playtest |
+| **XL** | Tính năng lớn, đổi kiến trúc, nhiều gói | **Lead điều phối**, Designer khi cần, Developer | QA độc lập từng gói | Cổng 1 + Cổng 2 + playtest, chia gói |
+
+- **Rủi ro cao (luôn ≥ L)** [đã duyệt cùng §12]: đụng `WorldScene.ts`/`CharacterPanelScene.ts`; save/`progression/`; số liệu cân bằng chiến đấu (`combatConfig.ts`, `enemyConfig.ts`); `.claude/` hoặc hook; quyết định kiến trúc đã duyệt; đổi tên/di chuyển hàng loạt. Nghi ngờ thì chọn cấp cao hơn.
+- **Lead phân cấp** và ghi cấp vào brief; người dùng có thể đổi cấp bất cứ lúc nào.
+- Baseline (§6a) lập mỗi khi **subagent** Developer sửa file (cấp S giao subagent vẫn lập, chỉ một dòng); Lead tự sửa thì không cần.
+
+### 12.2 Vai trò
+- **Lead:** điều phối, xác định phạm vi, phân cấp, viết brief, tổng hợp; làm việc có thể xong bằng một lần Grep/Read thay vì gọi agent.
+- **Developer:** chịu trách nhiệm chính về triển khai và tự kiểm kỹ thuật.
+- **QA:** kiểm độc lập, tập trung vào phạm vi thay đổi.
+- **Visual/Gameplay Designer:** chỉ gọi khi nhiệm vụ thực sự cần chuyên môn của họ (hình ảnh/asset; cơ chế/cân bằng); không gọi để "xác nhận" việc đã rõ.
+
+### 12.3 Tối ưu context và token
+- Không đọc lại toàn bộ dự án; chỉ đọc tài liệu/source liên quan trực tiếp (tra `docs/PROJECT_MAP.md`, Grep rồi đọc theo offset/limit).
+- **Một Feature Brief + một QA Plan dùng chung** (Developer và QA cùng đọc, không viết brief riêng cho từng bên): mẫu ở `docs/studio/lean-handoff/` (`QA_PLAN_TEMPLATE.md`, `REPORT_TEMPLATE.md`; `M4_FEATURE_BRIEF.md` là ví dụ cho Feature Brief). Brief tự đủ ý, trỏ tới file cụ thể, không chép lại spec đã có.
+- Việc tuần tự được thì không gọi nhiều agent song song; không để hai agent phân tích cùng một thứ. Hỏi tiếp việc cùng phạm vi bằng `SendMessage` tới agent cũ (còn context) thay vì gọi agent mới.
+- **Báo cáo agent tối đa 10 dòng** (thay giới hạn ~40 dòng trong mẫu thử nghiệm): mỗi mục một dòng, kết luận trước, lỗi Chặn trước. Vì định nghĩa agent ở `.claude/agents/` chưa đổi, **Lead ghi giới hạn này vào từng brief**.
+- **Tối đa 2 vòng tự sửa** rồi báo vấn đề cho Lead (§9); Lead vòng 3 thì dừng và hỏi người dùng.
+
+### 12.4 QA lean
+- QA kiểm dựa trên **Feature Brief, tiêu chí nghiệm thu, `git diff` và QA Plan**; không khảo sát lại toàn dự án, không dựa vào danh sách file do Developer khai (§6a).
+- Cấp L/XL: QA luôn độc lập. Cấp M: QA khi tiêu chí không tự kiểm được bằng máy hoặc vùng liên quan hồi quy.
+- **Không bỏ hồi quy liên quan** (hệ thống/vũ khí lân cận, gameplay invariants); danh sách hồi quy nằm trong QA Plan mục C.
+
+### 12.5 Playtest (giữ nguyên)
+Theo §9a–9b và quy trình playtest-handover: Developer tự kiểm kỹ thuật, QA xong trước khi bàn giao; Lead tạo checklist riêng cho người dùng (ID ổn định, một hành vi một mục, thao tác, mong đợi, PASS/FAIL/NOT TESTED) ở `docs/studio/playtests/`, kèm bản tick được khi hữu ích; người dùng chơi và nghiệm thu; có lỗi thì Lead tiếp nhận, sửa, tạo checklist kiểm lại chỉ gồm mục bị ảnh hưởng và hồi quy. Lead không tự đánh dấu PASS thay người dùng.
+
+### 12.6 Quyền hạn (giữ nguyên)
+Không tự đổi kiến trúc đã duyệt; không commit/push khi chưa được đồng ý; không xóa/sửa thay đổi ngoài phạm vi.
+
+### 12.7 Đo lường
+Chỉ ghi số liệu **có thật**, vào `docs/studio/lean-handoff/TOKEN_LOG.md` (mỗi nhiệm vụ một hàng): input tokens, cache read/write, output tokens, token subagent. Nguồn hiện có: thông báo hoàn tất của subagent (`subagent_tokens`, `tool_uses`, `duration_ms`). Số của session chính (input/cache/output) **chỉ ghi khi người dùng cung cấp** (ví dụ từ `/cost`); không có thì để trống, không suy đoán. Số liệu chỉ để so sánh xu hướng, không dùng để kết luận chất lượng.
