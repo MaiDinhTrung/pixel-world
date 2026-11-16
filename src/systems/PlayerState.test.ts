@@ -24,16 +24,60 @@ import {
 } from '../progression/CharacterProgress';
 import { migrateV7ToV8, v8ToV7Shape } from '../progression/saveMigration';
 import { validateSaveV8, type CharacterSaveV8 } from '../progression/saveV8';
+import { LevelSystem } from '../progression/LevelSystem';
+import { StatSheet } from '../progression/StatSheet';
+import {
+  STAT_DEFINITIONS,
+  STAT_POINTS_PER_LEVEL,
+  createEmptyAllocation,
+  type StatAllocation,
+  type StatId,
+} from '../config/statConfig';
+import type { SkillId } from '../skills/skills';
+import { getClassSkillNodes } from '../skills/tree/skillTreeData';
+import {
+  FREE_RESPEC_MAX_LEVEL,
+  canRespecFree,
+  getSpentSkillPoints,
+  getTotalSkillPoints,
+  learnSkill,
+  respecAll,
+} from '../skills/tree/skillTreeRules';
+import type { SkillLevels, SkillNodeId } from '../skills/tree/skillTreeTypes';
 import {
   PlayerState,
   type PlayerEconomy,
   type PlayerRules,
+  type SkillRule,
 } from './PlayerState';
 
 const CHARACTER_IDS = Object.keys(CHARACTERS) as CharacterId[];
 
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
+}
+
+/**
+ * Luật kỹ năng thử: SkillDefinition thật nằm trong module nhập Phaser nên test
+ * dựng bảng riêng từ id thật của CHARACTERS. Kỹ năng thường mở ở level 1, 3, 5...;
+ * kỹ năng cây gắn node thật của lớp (xoay vòng) và mở ở level 1, 2, 3...
+ */
+function skillRulesOf(id: CharacterId): PlayerRules['skills'] {
+  const c = CHARACTERS[id];
+  const nodes = getClassSkillNodes(id);
+  const out: Partial<Record<SkillId, SkillRule>> = {};
+
+  c.skills.forEach((skill, i) => {
+    out[skill] = { unlockLevel: 1 + 2 * i };
+  });
+  c.treeSkills.forEach((skill, i) => {
+    out[skill] = {
+      unlockLevel: 1 + i,
+      requiresNode: nodes[(i * 3) % nodes.length]!.id,
+    };
+  });
+
+  return out;
 }
 
 function rulesOf(id: CharacterId): PlayerRules {
@@ -43,6 +87,7 @@ function rulesOf(id: CharacterId): PlayerRules {
     allowedWeapons: c.allowedWeapons,
     startingWeapons: c.startingWeapons,
     startingGear: c.startingGear,
+    skills: skillRulesOf(id),
   };
 }
 
@@ -824,7 +869,8 @@ function runSequence(
   const rules = rulesOf(id);
   const v7 = createDefaultSave(id);
   const base = makeBase(id);
-  const state = PlayerState.fromSave(defaultV8(id), rules);
+  // Tiến trình do PlayerState giữ nên state nạp từ chính `base` (cùng cấp/điểm/kỹ năng với nền của mô hình).
+  const state = PlayerState.fromSave(base, rules);
   const model = new RefModel(v7, rules);
 
   for (let t = 0; t < STEPS; t += 1) {
@@ -1557,5 +1603,1022 @@ describe('PlayerState: thuần', () => {
     const b = snap(s, 'necromancer');
 
     expect(a).toBe(b);
+  });
+});
+
+// ================================================================ GÓI C3: tiến trình
+
+const CHARACTER_PAIRS = CHARACTER_IDS.map((id, i) => [
+  id,
+  CHARACTER_IDS[(i + 1) % CHARACTER_IDS.length]!,
+]) as [CharacterId, CharacterId][];
+
+function progSave(
+  id: CharacterId,
+  patch: Partial<CharacterSaveV8> = {},
+): CharacterSaveV8 {
+  return { ...clone(defaultV8(id)), ...clone(patch) };
+}
+
+function progState(
+  id: CharacterId,
+  patch: Partial<CharacterSaveV8> = {},
+): PlayerState {
+  return PlayerState.fromSave(progSave(id, patch), rulesOf(id));
+}
+
+/** Ảnh chụp mọi trường tiến trình qua getter (không qua toSave, nên dùng được với dữ liệu thử chưa hợp lệ). */
+function snapP(s: PlayerState): string {
+  return JSON.stringify([
+    s.getLevelSystem().getState(),
+    s.getStatPoints(),
+    s.getAllocation(),
+    s.getSlotIds(),
+    s.getSkillLevels(),
+    s.getSkillPointSummary(),
+  ]);
+}
+
+/** Node cây học được ngay (không đòi nhánh/level) của một lớp, tìm bằng skillTreeRules. */
+function learnableNode(id: CharacterId): SkillNodeId {
+  const node = getClassSkillNodes(id).find(
+    (n) => learnSkill(n.id, 30, {}).ok,
+  );
+
+  if (!node) {
+    throw new Error(`lớp ${id} không có node học được`);
+  }
+
+  return node.id;
+}
+
+const KNIGHT_SKILLS = K.skills; // shield_bash(Lv1) dual_guard(3) fortress_stand(5) whirlwind(7) ground_slam(9) iron_will(11)...
+const KNIGHT_TREE = K.treeSkills; // living_fortress(Lv1) cyclone(2) sword_tempest(3) grapple_chain(4) titan_roar(5)
+const KNIGHT_NODES = getClassSkillNodes('knight');
+const KNIGHT_DEFAULT_LOADOUT: [SkillId, SkillId, SkillId] = [
+  'shield_bash',
+  'whirlwind',
+  'ground_slam',
+];
+
+describe('PlayerState C3: dữ liệu thử', () => {
+  it('giả định của test khớp CHARACTERS, luật điểm và cây kỹ năng thật', () => {
+    expect(KNIGHT_SKILLS.slice(0, 6)).toEqual([
+      'shield_bash',
+      'dual_guard',
+      'fortress_stand',
+      'whirlwind',
+      'ground_slam',
+      'iron_will',
+    ]);
+    expect(K.defaultSkillLoadout).toEqual(KNIGHT_DEFAULT_LOADOUT);
+    expect(KNIGHT_TREE.length).toBeGreaterThanOrEqual(3);
+    expect(STAT_POINTS_PER_LEVEL).toBe(5);
+    expect(FREE_RESPEC_MAX_LEVEL).toBe(10);
+    expect(STAT_DEFINITIONS.length).toBe(6);
+
+    for (const id of CHARACTER_IDS) {
+      if (getClassSkillNodes(id).length > 0) {
+        expect(learnSkill(learnableNode(id), 30, {}).ok).toBe(true);
+      }
+    }
+  });
+});
+
+describe('PlayerState C3: nạp từ save', () => {
+  it('lấy đúng cấp/XP, điểm chỉ số, bảng điểm, ô kỹ năng, cấp node từ save', () => {
+    const node = learnableNode('knight');
+    const s = progState('knight', {
+      level: 6,
+      xp: 7,
+      xpToNext: 31,
+      statPoints: 9,
+      stats: { ...createEmptyAllocation(), power: 3, haste: 1 },
+      skillLoadout: ['dual_guard', 'whirlwind', 'iron_will'],
+      extraSkills: ['shield_bash', null, 'war_cry', null],
+      skillLevels: { [node]: 2 },
+    });
+
+    expect(s.getLevelSystem().getState()).toEqual({ level: 6, xp: 7, xpToNext: 31 });
+    expect(s.getLevel()).toBe(6);
+    expect(s.getStatPoints()).toBe(9);
+    expect(s.getAllocation()).toEqual({ ...createEmptyAllocation(), power: 3, haste: 1 });
+    expect(s.getSlotIds()).toEqual([
+      'dual_guard',
+      'whirlwind',
+      'iron_will',
+      'shield_bash',
+      null,
+      'war_cry',
+      null,
+    ]);
+    expect(s.getSkillLevels()).toEqual({ [node]: 2 });
+    expect(s.getSkillLevel(node)).toBe(2);
+  });
+
+  it('StatSheet do PlayerState giữ tính CombatStats từ đúng bảng điểm', () => {
+    const alloc = { ...createEmptyAllocation(), vitality: 2, power: 4, agility: 1 };
+    const s = progState('knight', { stats: alloc });
+
+    expect(s.getStatSheet().getCombatStats()).toEqual(new StatSheet(alloc).getCombatStats());
+  });
+
+  it('không dùng chung tham chiếu với save nạp vào', () => {
+    const save = progSave('knight', {
+      skillLevels: { [learnableNode('knight')]: 1 },
+      extraSkills: ['dual_guard', null, null, null],
+    });
+    const s = PlayerState.fromSave(save, rulesOf('knight'));
+    const before = snapP(s);
+
+    save.stats.power = 99;
+    save.skillLevels['x' as never] = 5 as never;
+    save.extraSkills[1] = 'war_cry';
+    save.skillLoadout[0] = 'iron_will';
+    save.level = 50;
+    expect(snapP(s)).toBe(before);
+  });
+
+  it('getter trả bản sao: sửa kết quả không đổi state', () => {
+    const s = progState('knight', { statPoints: 2 });
+    const before = snapP(s);
+
+    s.getAllocation().power = 50;
+    s.getSkillLevels()['x' as never] = 1 as never;
+    s.getSlotIds()[0] = 'iron_will';
+    expect(snapP(s)).toBe(before);
+  });
+});
+
+describe('PlayerState C3: cộng điểm chỉ số (ma trận luật)', () => {
+  it('hết điểm -> no_points, không đổi gì', () => {
+    const s = progState('knight', { statPoints: 0 });
+    const before = snapP(s);
+
+    expect(s.spendStatPoint('power')).toEqual({ ok: false, reason: 'no_points' });
+    expect(snapP(s)).toBe(before);
+  });
+
+  it.each(STAT_DEFINITIONS.map((d) => d.id))(
+    'có điểm: tiêu 1 điểm, cộng đúng 1 vào %s, chỉ số khác giữ nguyên',
+    (stat: StatId) => {
+      const s = progState('knight', { statPoints: 3 });
+
+      expect(s.spendStatPoint(stat)).toEqual({ ok: true });
+      expect(s.getStatPoints()).toBe(2);
+      expect(s.getAllocation()).toEqual({ ...createEmptyAllocation(), [stat]: 1 });
+    },
+  );
+
+  it('tiêu hết điểm rồi lần kế tiếp bị từ chối', () => {
+    const s = progState('knight', { statPoints: 2 });
+
+    expect(s.spendStatPoint('guard').ok).toBe(true);
+    expect(s.spendStatPoint('guard').ok).toBe(true);
+    expect(s.spendStatPoint('guard')).toEqual({ ok: false, reason: 'no_points' });
+    expect(s.getAllocation().guard).toBe(2);
+    expect(s.getStatPoints()).toBe(0);
+  });
+
+  it('CombatStats đổi theo điểm đã cộng (qua StatSheet giữ bên trong)', () => {
+    const s = progState('knight', { statPoints: 5 });
+
+    for (let i = 0; i < 5; i += 1) s.spendStatPoint(i % 2 === 0 ? 'vitality' : 'haste');
+
+    const ref = new StatSheet({ ...createEmptyAllocation(), vitality: 3, haste: 2 });
+
+    expect(s.getStatSheet().getCombatStats()).toEqual(ref.getCombatStats());
+  });
+
+  it('id chỉ số sai: không throw, không đổi (unknown_stat); hết điểm thì no_points trước', () => {
+    const s = progState('knight', { statPoints: 2 });
+    const before = snapP(s);
+
+    for (const bad of ['toString', '__proto__', 'x', '', undefined, null, 5]) {
+      expect(s.spendStatPoint(bad as never)).toEqual({ ok: false, reason: 'unknown_stat' });
+    }
+
+    expect(snapP(s)).toBe(before);
+    expect(progState('knight').spendStatPoint('x' as never)).toEqual({
+      ok: false,
+      reason: 'no_points',
+    });
+  });
+
+  it('addStatPoints cộng số dương, bỏ qua <= 0 / NaN / vô hạn', () => {
+    const s = progState('knight', { statPoints: 1 });
+
+    s.addStatPoints(4);
+    expect(s.getStatPoints()).toBe(5);
+
+    for (const bad of [0, -3, Number.NaN, Infinity, -Infinity]) s.addStatPoints(bad);
+    expect(s.getStatPoints()).toBe(5);
+  });
+});
+
+describe('PlayerState C3: kinh nghiệm và lên cấp', () => {
+  it('chưa đủ XP: không lên cấp, không cộng điểm', () => {
+    const s = progState('knight');
+    const r = s.grantExperience(5);
+
+    expect(r).toEqual({ previousLevel: 1, level: 1, levelsGained: 0, statPointsGained: 0 });
+    expect(s.getLevelSystem().getState()).toEqual({ level: 1, xp: 5, xpToNext: 20 });
+    expect(s.getStatPoints()).toBe(0);
+  });
+
+  it('đủ XP một cấp: +STAT_POINTS_PER_LEVEL điểm, XP dư, xpToNext theo LevelSystem', () => {
+    const s = progState('knight', { statPoints: 2 });
+    const ref = new LevelSystem({ level: 1, xp: 0, xpToNext: 20 });
+    const gained = ref.addXp(23);
+    const r = s.grantExperience(23);
+
+    expect(gained).toBe(1);
+    expect(r).toEqual({ previousLevel: 1, level: 2, levelsGained: 1, statPointsGained: 5 });
+    expect(s.getLevelSystem().getState()).toEqual(ref.getState());
+    expect(s.getStatPoints()).toBe(2 + 5);
+  });
+
+  it('nhiều cấp trong một lần: điểm = số cấp * STAT_POINTS_PER_LEVEL', () => {
+    const s = progState('knight');
+    const ref = new LevelSystem({ level: 1, xp: 0, xpToNext: 20 });
+    const gained = ref.addXp(500);
+    const r = s.grantExperience(500);
+
+    expect(gained).toBeGreaterThan(2);
+    expect(r.levelsGained).toBe(gained);
+    expect(r.previousLevel).toBe(1);
+    expect(r.level).toBe(ref.getLevel());
+    expect(s.getStatPoints()).toBe(gained * STAT_POINTS_PER_LEVEL);
+    expect(s.getLevelSystem().getState()).toEqual(ref.getState());
+  });
+
+  it('điểm kỹ năng suy ra từ level: lên cấp tăng earned, không lưu bộ đếm', () => {
+    const s = progState('knight');
+
+    expect(s.getSkillPointSummary()).toEqual({ earned: 0, spent: 0, available: 0 });
+    s.grantExperience(500);
+
+    const level = s.getLevel();
+
+    expect(s.getSkillPointSummary()).toEqual({
+      earned: level - 1,
+      spent: 0,
+      available: level - 1,
+    });
+  });
+
+  it('getLevelSystem là đối tượng sống của state (Hud đọc), không phải bản sao', () => {
+    const s = progState('knight');
+    const ls = s.getLevelSystem();
+
+    s.grantExperience(25);
+    expect(ls.getLevel()).toBe(2);
+    expect(ls).toBe(s.getLevelSystem());
+  });
+});
+
+describe('PlayerState C3: học / nâng / hồi điểm kỹ năng', () => {
+  it('node không thuộc lớp -> "Kỹ năng không thuộc lớp này", không đổi', () => {
+    const foreign = learnableNode('mage');
+    const s = progState('knight', { level: 20 });
+    const before = snapP(s);
+
+    expect(s.learnSkillNode(foreign, 'knight')).toEqual({
+      ok: false,
+      reason: 'Kỹ năng không thuộc lớp này',
+    });
+    expect(snapP(s)).toBe(before);
+  });
+
+  it('id node sai/lạ: không throw, báo không thuộc lớp', () => {
+    const s = progState('knight', { level: 20 });
+
+    for (const bad of ['toString', '__proto__', 'zzz', '', undefined, null]) {
+      expect(s.learnSkillNode(bad as never, 'knight')).toEqual({
+        ok: false,
+        reason: 'Kỹ năng không thuộc lớp này',
+      });
+    }
+  });
+
+  it('level 1 (0 điểm) -> lý do của skillTreeRules ("Hết điểm kỹ năng")', () => {
+    const s = progState('knight');
+    const node = learnableNode('knight');
+
+    expect(learnSkill(node, 1, {})).toEqual({ ok: false, reason: 'Hết điểm kỹ năng' });
+    expect(s.learnSkillNode(node, 'knight')).toEqual({ ok: false, reason: 'Hết điểm kỹ năng' });
+    expect(s.getSkillLevels()).toEqual({});
+  });
+
+  it('học thành công: cấp 1, tiêu 1 điểm kỹ năng; nâng tiếp tới cấp tối đa rồi bị từ chối', () => {
+    const node = learnableNode('knight');
+    const s = progState('knight', { level: 30 });
+    const max = KNIGHT_NODES.find((n) => n.id === node)!.maxLevel;
+
+    for (let i = 1; i <= max; i += 1) {
+      expect(s.learnSkillNode(node, 'knight')).toEqual({ ok: true });
+      expect(s.getSkillLevel(node)).toBe(i);
+      expect(s.getSkillPointSummary().spent).toBe(i);
+    }
+
+    expect(s.learnSkillNode(node, 'knight')).toEqual({ ok: false, reason: 'Đã đạt cấp tối đa' });
+    expect(s.getSkillLevel(node)).toBe(max);
+  });
+
+  it('node chưa mở khoá: trả đúng lý do đầu tiên của getUnlockStatus, không đổi', () => {
+    const locked = KNIGHT_NODES.find((n) => !learnSkill(n.id, 30, {}).ok);
+
+    if (!locked) return;
+
+    const s = progState('knight', { level: 30 });
+    const ref = learnSkill(locked.id, 30, {});
+    const before = snapP(s);
+
+    expect(ref.ok).toBe(false);
+    expect(s.learnSkillNode(locked.id, 'knight')).toEqual(ref);
+    expect(snapP(s)).toBe(before);
+  });
+
+  it('khớp skillTreeRules khi học liên tiếp nhiều node (mô hình độc lập)', () => {
+    const s = progState('knight', { level: 12 });
+    let levels: SkillLevels = {};
+
+    for (let i = 0; i < 40; i += 1) {
+      const node = KNIGHT_NODES[(i * 5) % KNIGHT_NODES.length]!.id;
+      const ref = learnSkill(node, 12, levels);
+
+      if (ref.ok) levels = { ...ref.levels };
+
+      expect(s.learnSkillNode(node, 'knight')).toEqual(
+        ref.ok ? { ok: true } : { ok: false, reason: ref.reason },
+      );
+      expect(s.getSkillLevels()).toEqual(levels);
+    }
+
+    expect(s.getSkillPointSummary().spent).toBe(getSpentSkillPoints(levels));
+  });
+
+  it('getSkillPointSummary: earned = level-1, spent = tổng cấp node, available kẹp >= 0', () => {
+    const node = learnableNode('knight');
+    const s = progState('knight', { level: 4, skillLevels: { [node]: 5 } });
+
+    expect(s.getSkillPointSummary()).toEqual({
+      earned: getTotalSkillPoints(4),
+      spent: 5,
+      available: 0,
+    });
+    expect(progState('knight', { level: 4, skillLevels: { [node]: 1 } }).getSkillPointSummary()).toEqual({
+      earned: 3,
+      spent: 1,
+      available: 2,
+    });
+  });
+
+  it('hồi điểm: miễn phí tới đúng Lv10, xóa sạch cấp node', () => {
+    const node = learnableNode('knight');
+
+    for (const level of [1, 5, FREE_RESPEC_MAX_LEVEL]) {
+      const s = progState('knight', { level, skillLevels: { [node]: 1 } });
+
+      expect(canRespecFree(level)).toBe(true);
+      expect(s.respecSkills()).toEqual({ ok: true });
+      expect(s.getSkillLevels()).toEqual(respecAll());
+    }
+  });
+
+  it('hồi điểm từ Lv11: từ chối not_free, không đổi', () => {
+    const node = learnableNode('knight');
+    const s = progState('knight', {
+      level: FREE_RESPEC_MAX_LEVEL + 1,
+      skillLevels: { [node]: 2 },
+    });
+    const before = snapP(s);
+
+    expect(s.respecSkills()).toEqual({ ok: false, reason: 'not_free' });
+    expect(snapP(s)).toBe(before);
+  });
+
+  it('hồi điểm trả lại điểm: học lại được sau khi hồi', () => {
+    const node = learnableNode('knight');
+    const s = progState('knight', { level: 3 });
+
+    expect(s.learnSkillNode(node, 'knight').ok).toBe(true);
+    expect(s.respecSkills().ok).toBe(true);
+    expect(s.getSkillPointSummary().available).toBe(2);
+    expect(s.learnSkillNode(node, 'knight').ok).toBe(true);
+  });
+});
+
+describe('PlayerState C3: ô kỹ năng (ma trận luật)', () => {
+  /** Knight Lv20: mọi kỹ năng thường mở; kỹ năng cây cần học node. */
+  const hi = (patch: Partial<CharacterSaveV8> = {}): PlayerState =>
+    progState('knight', { level: 20, ...patch });
+
+  it('getSlotIds: 3 ô chính rồi 4 ô phụ, là bản sao', () => {
+    const s = hi({ extraSkills: [null, 'war_cry', null, null] });
+
+    expect(s.getSlotIds()).toEqual([...KNIGHT_DEFAULT_LOADOUT, null, 'war_cry', null, null]);
+    expect(s.getSlotIds().length).toBe(7);
+  });
+
+  it('gán kỹ năng chưa có vào ô phụ trống: ok, ô chính giữ nguyên', () => {
+    const s = hi();
+
+    expect(s.assignSkill('war_cry', 3)).toEqual({ ok: true });
+    expect(s.getSlotIds()).toEqual([...KNIGHT_DEFAULT_LOADOUT, 'war_cry', null, null, null]);
+  });
+
+  it('gán kỹ năng mới vào ô chính: kỹ năng cũ rời khỏi ô', () => {
+    const s = hi();
+
+    expect(s.assignSkill('war_cry', 1)).toEqual({ ok: true });
+    expect(s.getSlotIds().slice(0, 3)).toEqual(['shield_bash', 'war_cry', 'ground_slam']);
+    expect(s.getSlotIds()).not.toContain('whirlwind');
+  });
+
+  it('hoán đổi hai ô chính', () => {
+    const s = hi();
+
+    expect(s.assignSkill('shield_bash', 2)).toEqual({ ok: true });
+    expect(s.getSlotIds().slice(0, 3)).toEqual(['ground_slam', 'whirlwind', 'shield_bash']);
+  });
+
+  it('chuyển kỹ năng ô phụ vào ô chính: hoán đổi, ô chính nhận kỹ năng phụ', () => {
+    const s = hi({ extraSkills: ['war_cry', null, null, null] });
+
+    expect(s.assignSkill('war_cry', 0)).toEqual({ ok: true });
+    expect(s.getSlotIds()).toEqual(['war_cry', 'whirlwind', 'ground_slam', 'shield_bash', null, null, null]);
+  });
+
+  it('chuyển kỹ năng ô phụ sang ô phụ trống: kỹ năng đổi chỗ, ô cũ thành trống', () => {
+    const s = hi({ extraSkills: ['war_cry', null, null, null] });
+
+    expect(s.assignSkill('war_cry', 5)).toEqual({ ok: true });
+    expect(s.getSlotIds().slice(3)).toEqual([null, null, 'war_cry', null]);
+  });
+
+  it('hoán đổi hai ô phụ đều có kỹ năng', () => {
+    const s = hi({ extraSkills: ['war_cry', 'iron_will', null, null] });
+
+    expect(s.assignSkill('war_cry', 4)).toEqual({ ok: true });
+    expect(s.getSlotIds().slice(3)).toEqual(['iron_will', 'war_cry', null, null]);
+  });
+
+  it('ô chính không được trống: kỹ năng ô chính -> ô phụ trống bị từ chối, không đổi', () => {
+    const s = hi();
+    const before = snapP(s);
+
+    expect(s.assignSkill('shield_bash', 4)).toEqual({ ok: false, reason: 'main_slot_empty' });
+    expect(snapP(s)).toBe(before);
+  });
+
+  it('kỹ năng ô chính -> ô phụ đang có kỹ năng: hoán đổi được (ô chính không trống)', () => {
+    const s = hi({ extraSkills: [null, null, 'war_cry', null] });
+
+    expect(s.assignSkill('shield_bash', 5)).toEqual({ ok: true });
+    expect(s.getSlotIds()).toEqual(['war_cry', 'whirlwind', 'ground_slam', null, null, 'shield_bash', null]);
+  });
+
+  it('gán vào chính ô đang giữ nó -> same_slot, không đổi', () => {
+    const s = hi({ extraSkills: [null, 'war_cry', null, null] });
+    const before = snapP(s);
+
+    expect(s.assignSkill('whirlwind', 1)).toEqual({ ok: false, reason: 'same_slot' });
+    expect(s.assignSkill('war_cry', 4)).toEqual({ ok: false, reason: 'same_slot' });
+    expect(snapP(s)).toBe(before);
+  });
+
+  it('chưa đủ level -> level_locked', () => {
+    const s = progState('knight', { level: 5 });
+    const before = snapP(s);
+
+    expect(s.assignSkill('iron_will', 3)).toEqual({ ok: false, reason: 'level_locked' });
+    expect(snapP(s)).toBe(before);
+    expect(progState('knight', { level: 5 }).assignSkill('fortress_stand', 3)).toEqual({ ok: true });
+  });
+
+  it('kỹ năng cây chưa học node -> not_learned (kể cả đủ level)', () => {
+    const s = hi();
+    const before = snapP(s);
+
+    expect(s.assignSkill('living_fortress', 3)).toEqual({ ok: false, reason: 'not_learned' });
+    expect(snapP(s)).toBe(before);
+  });
+
+  it('vừa thiếu level vừa chưa học node -> not_learned (ưu tiên như toast cũ)', () => {
+    const s = progState('knight', { level: 1 });
+
+    expect(s.assignSkill('titan_roar', 3)).toEqual({ ok: false, reason: 'not_learned' });
+  });
+
+  it('đã học node nhưng chưa đủ level -> level_locked', () => {
+    const table = rulesOf('knight').skills;
+    const tree = KNIGHT_TREE.find((t) => table[t]!.unlockLevel >= 3)!;
+    const node = table[tree]!.requiresNode!;
+    const s = progState('knight', { level: 1, skillLevels: { [node]: 1 } });
+
+    expect(s.assignSkill(tree, 3)).toEqual({ ok: false, reason: 'level_locked' });
+  });
+
+  it('học node trong cây xong thì gán được kỹ năng cây', () => {
+    const table = rulesOf('knight').skills;
+    const tree = KNIGHT_TREE[0]!;
+    const node = table[tree]!.requiresNode!;
+    const s = progState('knight', { level: 30 });
+
+    expect(s.assignSkill(tree, 3)).toEqual({ ok: false, reason: 'not_learned' });
+    expect(s.learnSkillNode(node, 'knight')).toEqual({ ok: true });
+    expect(s.assignSkill(tree, 3)).toEqual({ ok: true });
+    expect(s.getSlotIds()[3]).toBe(tree);
+  });
+
+  it('chỉ số ô sai -> invalid_slot (âm, >= 7, số lẻ, NaN, vô hạn, không phải số)', () => {
+    const s = hi();
+    const before = snapP(s);
+
+    for (const bad of [-1, 7, 8, 1.5, Number.NaN, Infinity, '2', undefined, null]) {
+      expect(s.assignSkill('war_cry', bad as never)).toEqual({ ok: false, reason: 'invalid_slot' });
+    }
+
+    expect(snapP(s)).toBe(before);
+  });
+
+  it('kỹ năng không thuộc lớp / id lạ -> unknown_skill, không throw', () => {
+    const s = hi();
+    const before = snapP(s);
+
+    for (const bad of ['arcane_nova', 'toString', '__proto__', 'x', '', undefined, null]) {
+      expect(s.assignSkill(bad as never, 3)).toEqual({ ok: false, reason: 'unknown_skill' });
+    }
+
+    expect(snapP(s)).toBe(before);
+  });
+
+  it('bỏ kỹ năng khỏi ô phụ: ô thành trống, kỹ năng khác giữ nguyên', () => {
+    const s = hi({ extraSkills: ['war_cry', 'iron_will', null, null] });
+
+    expect(s.clearSkillSlot(3)).toEqual({ ok: true });
+    expect(s.getSlotIds().slice(3)).toEqual([null, 'iron_will', null, null]);
+  });
+
+  it('bỏ ô trống -> empty; ô chính (0-2) và ngoài phạm vi -> invalid_slot, không đổi', () => {
+    const s = hi({ extraSkills: ['war_cry', null, null, null] });
+    const before = snapP(s);
+
+    expect(s.clearSkillSlot(4)).toEqual({ ok: false, reason: 'empty' });
+
+    for (const bad of [0, 1, 2, -1, 7, 99, 3.5, Number.NaN, Infinity, '3', undefined, null]) {
+      expect(s.clearSkillSlot(bad as never)).toEqual({ ok: false, reason: 'invalid_slot' });
+    }
+
+    expect(snapP(s)).toBe(before);
+  });
+
+  it('ô chính luôn đủ 3 kỹ năng sau mọi thao tác hợp lệ', () => {
+    const s = hi();
+
+    s.assignSkill('war_cry', 3);
+    s.assignSkill('war_cry', 0);
+    s.clearSkillSlot(3);
+    s.assignSkill('iron_will', 2);
+    expect(s.getSlotIds().slice(0, 3).every((id) => id !== null)).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------- mô hình tham chiếu tiến trình
+
+/** Dựng lại đúng các phép toán hiện tại của WorldScene (addStatPoint, grantExperience, learnSkillNode, respecSkills, assignSkillToSlot, clearSkillSlot). */
+class ProgRef {
+  private readonly ls: LevelSystem;
+  private sheet: StatSheet;
+  statPoints: number;
+  alloc: StatAllocation;
+  loadout: [SkillId, SkillId, SkillId];
+  extra: (SkillId | null)[];
+  levels: SkillLevels;
+  private readonly characterId: CharacterId;
+  private readonly table: Readonly<Partial<Record<SkillId, SkillRule>>>;
+
+  constructor(v7: CharacterSave, characterId: CharacterId, table: PlayerRules['skills']) {
+    this.ls = new LevelSystem({ level: v7.level, xp: v7.xp, xpToNext: v7.xpToNext });
+    this.statPoints = v7.statPoints;
+    this.alloc = { ...v7.stats };
+    this.sheet = new StatSheet(this.alloc);
+    this.loadout = [v7.skillLoadout[0], v7.skillLoadout[1], v7.skillLoadout[2]];
+    this.extra = [...v7.extraSkills];
+    this.levels = { ...v7.skillLevels };
+    this.characterId = characterId;
+    this.table = table;
+  }
+
+  level(): number {
+    return this.ls.getLevel();
+  }
+
+  addStatPoint(statId: StatId): Outcome {
+    if (this.statPoints <= 0) return 'no_points';
+    this.statPoints -= 1;
+    this.sheet.addPoint(statId);
+    this.alloc = this.sheet.getAllocation();
+
+    return 'ok';
+  }
+
+  grantExperience(amount: number): Outcome {
+    const gained = this.ls.addXp(amount);
+
+    if (gained > 0) this.statPoints += gained * STAT_POINTS_PER_LEVEL;
+
+    return 'ok';
+  }
+
+  learnSkillNode(id: SkillNodeId): Outcome {
+    const node = getClassSkillNodes(this.characterId).find((e) => e.id === id);
+
+    if (!node) return 'Kỹ năng không thuộc lớp này';
+
+    const result = learnSkill(id, this.ls.getLevel(), this.levels);
+
+    if (!result.ok) return result.reason;
+    this.levels = { ...result.levels };
+
+    return 'ok';
+  }
+
+  respecSkills(): Outcome {
+    if (!canRespecFree(this.ls.getLevel())) return 'not_free';
+    this.levels = respecAll();
+
+    return 'ok';
+  }
+
+  slots(): (SkillId | null)[] {
+    return [...this.loadout, ...this.extra];
+  }
+
+  assignSkillToSlot(skillId: string, slot: number): Outcome {
+    if (!Number.isInteger(slot) || slot < 0 || slot >= 3 + this.extra.length) {
+      return 'invalid_slot';
+    }
+
+    if (!Object.keys(this.table).includes(skillId)) return 'unknown_skill';
+
+    const rule = this.table[skillId as SkillId]!;
+    const learned = !rule.requiresNode || (this.levels[rule.requiresNode] ?? 0) >= 1;
+
+    if (!(this.ls.getLevel() >= rule.unlockLevel && learned)) {
+      return rule.requiresNode && !learned ? 'not_learned' : 'level_locked';
+    }
+
+    const slots = this.slots();
+    const existing = slots.indexOf(skillId as SkillId);
+
+    if (existing === slot) return 'same_slot';
+
+    const replaced = slots[slot]!;
+
+    if (existing !== -1 && existing < 3 && replaced === null) return 'main_slot_empty';
+
+    slots[slot] = skillId as SkillId;
+
+    if (existing !== -1) slots[existing] = replaced;
+
+    this.loadout = [slots[0] as SkillId, slots[1] as SkillId, slots[2] as SkillId];
+    this.extra = slots.slice(3, 7);
+
+    return 'ok';
+  }
+
+  /** WorldScene.clearSkillSlot chỉ trả true/false; mô hình giữ đúng điều kiện và trả 'ok' | 'rejected'. */
+  clearSkillSlot(slot: number): Outcome {
+    if (slot < 3 || slot >= 3 + this.extra.length || !this.slots()[slot]) return 'rejected';
+
+    const slots = this.slots();
+
+    slots[slot] = null;
+    this.loadout = [slots[0] as SkillId, slots[1] as SkillId, slots[2] as SkillId];
+    this.extra = slots.slice(3, 7);
+
+    return 'ok';
+  }
+
+  /** Phần tiến trình của dạng v7 mà scene cũ dựng khi lưu. */
+  progressV7(): Partial<CharacterSave> {
+    const state = this.ls.getState();
+
+    return {
+      level: state.level,
+      xp: state.xp,
+      xpToNext: state.xpToNext,
+      statPoints: this.statPoints,
+      stats: { ...this.alloc },
+      skillLoadout: [this.loadout[0], this.loadout[1], this.loadout[2]],
+      extraSkills: [...this.extra],
+      skillLevels: { ...this.levels },
+    };
+  }
+}
+
+const PROG_OPS = [
+  'spend',
+  'xp',
+  'learn',
+  'assign',
+  'assign',
+  'clear',
+  'learn',
+  'respec',
+  'xp',
+  'assign',
+] as const;
+const PROG_SEQUENCES = 36;
+const PROG_STEPS = 64;
+const STAT_IDS = STAT_DEFINITIONS.map((d) => d.id);
+const SLOT_POOL = [0, 1, 2, 3, 4, 5, 6, 3, 4, 5, 6, -1, 7, 1.5, Number.NaN];
+
+function mapClear(r: { ok: true } | { ok: false; reason: string }): Outcome {
+  return r.ok ? 'ok' : 'rejected';
+}
+
+function runProgSequence(
+  id: CharacterId,
+  foreign: CharacterId,
+  seq: number,
+  coverage: Map<string, number>,
+): void {
+  const rules = rulesOf(id);
+  const ids = Object.keys(rules.skills) as SkillId[];
+  const start = [1, 3, 8, 10][seq % 4]!;
+  const loadout = CHARACTERS[id].defaultSkillLoadout;
+  const spare = ids.filter((s) => !loadout.includes(s));
+  const extraStart: (SkillId | null)[] =
+    seq % 3 === 0
+      ? [null, null, null, null]
+      : seq % 3 === 1
+        ? [spare[0] ?? null, null, spare[1] ?? null, null]
+        : [null, spare[2] ?? null, null, spare[3] ?? null];
+  const base = progSave(id, {
+    level: start,
+    xp: (seq * 3) % 15,
+    statPoints: [0, 3, 6, 1][seq % 4]!,
+    extraSkills: extraStart,
+  });
+  const state = PlayerState.fromSave(base, rules);
+  const model = new ProgRef(v8ToV7Shape(base), id, rules.skills);
+  const fresh = PlayerState.fromSave(base, rules);
+  const itemsOnly = v8ToV7Shape(fresh.toSave(ECON, base));
+  const ownNodes = getClassSkillNodes(id);
+  const nodePool = ownNodes.length > 0 ? ownNodes : getClassSkillNodes(foreign);
+  const foreignNodes = getClassSkillNodes(foreign);
+
+  for (let t = 0; t < PROG_STEPS; t += 1) {
+    const op = PROG_OPS[(seq * 5 + t * 7 + ((t * t) % 11)) % PROG_OPS.length]!;
+    const slot = SLOT_POOL[(seq * 3 + t * 5 + (t >> 1)) % SLOT_POOL.length]!;
+    const pickSkill = (): string => {
+      if (t % 9 === 4) return 'not_a_skill';
+      if (t % 6 === 5) return model.loadout[(seq + t) % 3]!;
+      if (t % 7 === 3) return model.slots()[Math.abs(Math.trunc(slot)) % 7] ?? ids[0]!;
+
+      return ids[(seq * 7 + t * 3) % ids.length]!;
+    };
+    const before = snapP(state);
+    let expected: Outcome;
+    let actual: Outcome;
+
+    switch (op) {
+      case 'spend': {
+        const stat = STAT_IDS[(seq + t * 2) % STAT_IDS.length]!;
+
+        expected = model.addStatPoint(stat);
+        actual = resultOf(state.spendStatPoint(stat));
+        break;
+      }
+      case 'xp': {
+        const amount = (seq * 13 + t * 29) % 97;
+
+        expected = model.grantExperience(amount);
+        state.grantExperience(amount);
+        actual = 'ok';
+        break;
+      }
+      case 'learn': {
+        const useForeign = t % 8 === 7 && foreignNodes.length > 0;
+        const pool = useForeign ? foreignNodes : nodePool;
+        const node = pool[(seq * 3 + t * 5) % pool.length]!.id;
+
+        expected = model.learnSkillNode(node);
+        actual = resultOf(state.learnSkillNode(node, id));
+        break;
+      }
+      case 'respec':
+        expected = model.respecSkills();
+        actual = resultOf(state.respecSkills());
+        break;
+      case 'assign': {
+        const skill = pickSkill();
+
+        expected = model.assignSkillToSlot(skill, slot);
+        actual = resultOf(state.assignSkill(skill as SkillId, slot));
+        break;
+      }
+      default:
+        expected = model.clearSkillSlot(slot);
+        actual = mapClear(state.clearSkillSlot(slot));
+        break;
+    }
+
+    const label = `${id} chuỗi ${seq} bước ${t} (${op})`;
+
+    expect(actual, label).toBe(expected);
+    coverage.set(`${op}:${actual}`, (coverage.get(`${op}:${actual}`) ?? 0) + 1);
+
+    if (actual !== 'ok') {
+      expect(snapP(state), `${label}: ok:false không đổi trạng thái`).toBe(before);
+    }
+
+    const saved = state.toSave(ECON, base);
+
+    expect(validateSaveV8(saved), label).toEqual([]);
+    expect(v8ToV7Shape(saved), label).toEqual({ ...itemsOnly, ...model.progressV7() });
+    expect(state.getStatPoints(), label).toBe(model.statPoints);
+    expect(state.getAllocation(), label).toEqual(model.alloc);
+    expect(state.getSlotIds(), label).toEqual(model.slots());
+    expect(state.getSkillLevels(), label).toEqual(model.levels);
+    expect(state.getLevel(), label).toBe(model.level());
+  }
+}
+
+describe('PlayerState C3: đối chiếu mô hình tham chiếu (logic cũ của WorldScene)', () => {
+  it.each(CHARACTER_PAIRS)(
+    `${PROG_SEQUENCES} chuỗi thao tác tiến trình trên save của %s khớp dạng v7`,
+    (id, foreign) => {
+      const coverage = new Map<string, number>();
+
+      for (let seq = 0; seq < PROG_SEQUENCES; seq += 1) {
+        runProgSequence(id, foreign, seq, coverage);
+      }
+    },
+  );
+
+  it('các chuỗi phủ nhánh ok lẫn từng lý do từ chối chính (mọi lớp)', () => {
+    const coverage = new Map<string, number>();
+
+    for (const [id, foreign] of CHARACTER_PAIRS) {
+      for (let seq = 0; seq < PROG_SEQUENCES; seq += 1) {
+        runProgSequence(id, foreign, seq, coverage);
+      }
+    }
+
+    const must = [
+      'spend:ok',
+      'spend:no_points',
+      'xp:ok',
+      'learn:ok',
+      'learn:Hết điểm kỹ năng',
+      'learn:Kỹ năng không thuộc lớp này',
+      'respec:ok',
+      'respec:not_free',
+      'assign:ok',
+      'assign:invalid_slot',
+      'assign:unknown_skill',
+      'assign:level_locked',
+      'assign:not_learned',
+      'assign:same_slot',
+      'assign:main_slot_empty',
+      'clear:ok',
+      'clear:rejected',
+    ];
+
+    for (const key of must) {
+      expect(coverage.get(key) ?? 0, key).toBeGreaterThan(0);
+    }
+  });
+
+  it('có ít nhất 30 chuỗi mỗi nhân vật', () => {
+    expect(PROG_SEQUENCES).toBeGreaterThanOrEqual(30);
+  });
+});
+
+describe('PlayerState C3: toSave / fromSave của tiến trình', () => {
+  it('toSave ghi tiến trình từ state, bỏ qua giá trị tiến trình trong base', () => {
+    const node = learnableNode('knight');
+    const s = progState('knight', {
+      level: 5,
+      statPoints: 2,
+      skillLevels: { [node]: 1 },
+    });
+    const base = progSave('knight', {
+      level: 99,
+      xp: 5,
+      xpToNext: 77,
+      statPoints: 55,
+      stats: { ...createEmptyAllocation(), guard: 9 },
+      skillLoadout: ['iron_will', 'war_cry', 'blade_storm'],
+      extraSkills: ['dual_guard', null, null, null],
+      skillLevels: {},
+    });
+    const out = s.toSave(ECON, base);
+
+    expect(out.level).toBe(5);
+    expect(out.xp).toBe(0);
+    expect(out.xpToNext).toBe(20);
+    expect(out.statPoints).toBe(2);
+    expect(out.stats).toEqual(createEmptyAllocation());
+    expect(out.skillLoadout).toEqual(KNIGHT_DEFAULT_LOADOUT);
+    expect(out.extraSkills).toEqual([null, null, null, null]);
+    expect(out.skillLevels).toEqual({ [node]: 1 });
+    expect(validateSaveV8(out)).toEqual([]);
+  });
+
+  it.each(CHARACTER_IDS)(
+    'toSave(fromSave(x)) = x và idempotent sau chuỗi thao tác (%s)',
+    (id) => {
+      const rules = rulesOf(id);
+      const base = progSave(id, { level: 4, statPoints: 7 });
+      const s = PlayerState.fromSave(base, rules);
+      const nodes = getClassSkillNodes(id);
+
+      s.grantExperience(300);
+      s.spendStatPoint('power');
+      s.spendStatPoint('agility');
+
+      if (nodes.length > 0) s.learnSkillNode(learnableNode(id), id);
+
+      const ids = Object.keys(rules.skills) as SkillId[];
+
+      s.assignSkill(ids[0]!, 3);
+      s.assignSkill(ids[1]!, 5);
+
+      const econ: PlayerEconomy = {
+        gold: base.gold,
+        gems: clone(base.gems),
+        sockets: v8ToV7Shape(base).gearSockets,
+      };
+      const x = s.toSave(econ, base);
+      const again = PlayerState.fromSave(x, rules);
+
+      expect(validateSaveV8(x)).toEqual([]);
+      expect(again.toSave(econ, x)).toEqual(x);
+      expect(s.toSave(econ, base)).toEqual(x);
+      expect(s.toSave(econ, x)).toEqual(x);
+      expect(snapP(again)).toBe(snapP(s));
+    },
+  );
+
+  it('toSave không chia sẻ tham chiếu với state: sửa kết quả không đổi state', () => {
+    const s = progState('knight', { statPoints: 3, level: 6 });
+    const before = snapP(s);
+    const out = s.toSave(ECON, defaultV8('knight'));
+
+    out.stats.power = 77;
+    out.skillLoadout[0] = 'iron_will';
+    out.extraSkills.push('war_cry');
+    out.skillLevels['x' as never] = 3 as never;
+    out.level = 40;
+    expect(snapP(s)).toBe(before);
+  });
+
+  it('thao tác tiến trình không đụng kho đồ: phần items/bag/trang bị của toSave không đổi', () => {
+    const base = defaultV8('knight');
+    const s = PlayerState.fromSave(base, rulesOf('knight'));
+    const items = (v: CharacterSaveV8) => [v.items, v.bag, v.equippedWeapons, v.equippedGear, v.nextItemSeq];
+    const before = items(s.toSave(ECON, base));
+
+    s.grantExperience(200);
+    s.spendStatPoint('guard');
+    s.assignSkill('war_cry', 3);
+    s.respecSkills();
+    expect(items(s.toSave(ECON, base))).toEqual(before);
+  });
+});
+
+describe('PlayerState C3: id sai không throw, không đổi', () => {
+  it('mọi thao tác tiến trình với đối số lạ không ném lỗi và ok:false không đổi trạng thái', () => {
+    const s = progState('knight', { level: 12, statPoints: 4 });
+    const before = snapP(s);
+    const junk: unknown[] = [undefined, null, 'toString', '__proto__', '', -1, 1.5, Number.NaN, {}, []];
+
+    for (const bad of junk) {
+      expect(() => s.spendStatPoint(bad as never)).not.toThrow();
+      expect(() => s.learnSkillNode(bad as never, 'knight')).not.toThrow();
+      expect(() => s.assignSkill(bad as never, bad as never)).not.toThrow();
+      expect(() => s.clearSkillSlot(bad as never)).not.toThrow();
+    }
+
+    expect(snapP(s)).toBe(before);
+  });
+});
+
+describe('PlayerState C3: thuần', () => {
+  it('nguồn PlayerState.ts không dùng phaser/window/localStorage/Math.random/Date', () => {
+    const files = import.meta.glob('./PlayerState.ts', {
+      query: '?raw',
+      import: 'default',
+      eager: true,
+    }) as Record<string, string>;
+    const source = Object.values(files)[0] ?? '';
+
+    expect(source.length).toBeGreaterThan(1000);
+    expect(source).not.toMatch(/phaser|window|localStorage|Math\.random|Date\./i);
   });
 });

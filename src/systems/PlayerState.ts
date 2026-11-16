@@ -1,4 +1,11 @@
 import type { WeaponId } from '../combat/Weapon';
+import type { CharacterId } from '../config/characters';
+import {
+  STAT_DEFINITIONS,
+  STAT_POINTS_PER_LEVEL,
+  type StatAllocation,
+  type StatId,
+} from '../config/statConfig';
 import { WEAPON_INFO, isWeaponId } from '../config/weaponInfo';
 import {
   GEAR_INFO,
@@ -19,20 +26,42 @@ import type {
   ItemInstance,
   WeaponInstance,
 } from '../progression/ItemInstance';
+import { LevelSystem } from '../progression/LevelSystem';
+import { StatSheet } from '../progression/StatSheet';
 import { validateSaveV8, type CharacterSaveV8 } from '../progression/saveV8';
+import type { SkillId } from '../skills/skills';
+import {
+  canRespecFree,
+  getSpentSkillPoints,
+  getTotalSkillPoints,
+  learnSkill,
+  respecAll,
+} from '../skills/tree/skillTreeRules';
+import { getClassSkillNodes } from '../skills/tree/skillTreeData';
+import type { SkillLevels, SkillNodeId } from '../skills/tree/skillTreeTypes';
 
 /**
  * PlayerState (Gói C1): luật kho đồ / trang bị / cấp đồ của người chơi, THUẦN.
- * Đã nối vào WorldScene: vũ khí từ C2a, trang bị + cấp đồ từ C2b. Không đụng engine đồ họa, không toast; mọi thao tác trả
+ * Đã nối vào WorldScene: vũ khí từ C2a, trang bị + cấp đồ từ C2b, tiến trình
+ * (cấp, điểm chỉ số, cây và ô kỹ năng) từ C3. Không đụng engine đồ họa, không toast; mọi thao tác trả
  * kết quả dạng { ok: true, ... } | { ok: false, reason }. API theo defId; uid
  * chỉ là định danh bên trong và trên đĩa. Không dùng ngẫu nhiên hay thời gian.
  */
+
+/** Luật gán một kỹ năng vào ô (lấy từ SkillDefinition lúc nối vào scene). */
+export interface SkillRule {
+  unlockLevel: number;
+  /** Kỹ năng từ cây: phải học node này (cấp >= 1) mới dùng/gán được. */
+  requiresNode?: SkillNodeId;
+}
 
 /** Luật theo lớp nhân vật (lấy từ CHARACTERS lúc nối vào scene). */
 export interface PlayerRules {
   allowedWeapons: readonly WeaponId[];
   startingWeapons: readonly [WeaponId, WeaponId];
   startingGear: Readonly<Record<GearSlot, GearId>>;
+  /** Mọi kỹ năng gán được của lớp (skills + treeSkills), khóa theo SkillId. */
+  skills: Readonly<Partial<Record<SkillId, SkillRule>>>;
 }
 
 export type Fail<R extends string> = { ok: false; reason: R };
@@ -69,6 +98,13 @@ export class PlayerState {
   private equippedGearUids: Record<GearSlot, string | null>;
   private nextItemSeq: number;
   private readonly rules: PlayerRules;
+  // Tiến trình (C3): mỗi trường chỉ một chủ là PlayerState.
+  private readonly levelSystem: LevelSystem;
+  private statPoints: number;
+  private readonly statSheet: StatSheet;
+  private skillLoadout: [SkillId, SkillId, SkillId];
+  private extraLoadout: (SkillId | null)[];
+  private skillLevels: SkillLevels;
 
   private constructor(
     items: Record<string, ItemInstance>,
@@ -77,6 +113,14 @@ export class PlayerState {
     equippedGearUids: Record<GearSlot, string | null>,
     nextItemSeq: number,
     rules: PlayerRules,
+    progress: {
+      levelSystem: LevelSystem;
+      statPoints: number;
+      statSheet: StatSheet;
+      skillLoadout: [SkillId, SkillId, SkillId];
+      extraLoadout: (SkillId | null)[];
+      skillLevels: SkillLevels;
+    },
   ) {
     this.items = items;
     this.bag = bag;
@@ -84,6 +128,12 @@ export class PlayerState {
     this.equippedGearUids = equippedGearUids;
     this.nextItemSeq = nextItemSeq;
     this.rules = rules;
+    this.levelSystem = progress.levelSystem;
+    this.statPoints = progress.statPoints;
+    this.statSheet = progress.statSheet;
+    this.skillLoadout = progress.skillLoadout;
+    this.extraLoadout = progress.extraLoadout;
+    this.skillLevels = progress.skillLevels;
   }
 
   /**
@@ -162,6 +212,22 @@ export class PlayerState {
       },
       nextItemSeq,
       rules,
+      {
+        levelSystem: new LevelSystem({
+          level: save.level,
+          xp: save.xp,
+          xpToNext: save.xpToNext,
+        }),
+        statPoints: save.statPoints,
+        statSheet: new StatSheet({ ...save.stats }),
+        skillLoadout: [
+          save.skillLoadout[0],
+          save.skillLoadout[1],
+          save.skillLoadout[2],
+        ],
+        extraLoadout: [...save.extraSkills],
+        skillLevels: { ...save.skillLevels },
+      },
     );
   }
 
@@ -547,10 +613,245 @@ export class PlayerState {
     return sockets;
   }
 
+  // ---------------------------------------------------------------- tiến trình (C3)
+
+  /** Đối tượng LevelSystem do PlayerState giữ (Hud đọc; không ai khác được giữ bản thứ hai). */
+  getLevelSystem(): LevelSystem {
+    return this.levelSystem;
+  }
+
+  getLevel(): number {
+    return this.levelSystem.getLevel();
+  }
+
+  /**
+   * Cộng XP. Lên cấp thì cộng STAT_POINTS_PER_LEVEL điểm chỉ số mỗi cấp.
+   * Điểm kỹ năng không lưu bộ đếm: luôn suy ra từ level.
+   */
+  grantExperience(amount: number): {
+    previousLevel: number;
+    level: number;
+    levelsGained: number;
+    statPointsGained: number;
+  } {
+    const previousLevel = this.levelSystem.getLevel();
+    const levelsGained = this.levelSystem.addXp(amount);
+    const statPointsGained = levelsGained * STAT_POINTS_PER_LEVEL;
+
+    if (levelsGained > 0) {
+      this.statPoints += statPointsGained;
+    }
+
+    return {
+      previousLevel,
+      level: this.levelSystem.getLevel(),
+      levelsGained,
+      statPointsGained,
+    };
+  }
+
+  getStatPoints(): number {
+    return this.statPoints;
+  }
+
+  /** Cộng điểm chỉ số chưa tiêu; bỏ qua số không hợp lệ (<= 0, NaN, vô hạn). */
+  addStatPoints(n: number): void {
+    if (Number.isFinite(n) && n > 0) {
+      this.statPoints += Math.floor(n);
+    }
+  }
+
+  /** Tiêu 1 điểm chỉ số (thứ tự kiểm như WorldScene.addStatPoint: hết điểm trước). */
+  spendStatPoint(
+    statId: StatId,
+  ): { ok: true } | Fail<'no_points' | 'unknown_stat'> {
+    if (this.statPoints <= 0) {
+      return { ok: false, reason: 'no_points' };
+    }
+
+    if (!STAT_DEFINITIONS.some((definition) => definition.id === statId)) {
+      return { ok: false, reason: 'unknown_stat' };
+    }
+
+    this.statPoints -= 1;
+    this.statSheet.addPoint(statId);
+
+    return { ok: true };
+  }
+
+  getAllocation(): StatAllocation {
+    return this.statSheet.getAllocation();
+  }
+
+  /** StatSheet do PlayerState giữ (chỉ đọc getCombatStats/getAllocation; thay đổi qua spendStatPoint). */
+  getStatSheet(): StatSheet {
+    return this.statSheet;
+  }
+
+  /** Bản sao các cấp node đã học. */
+  getSkillLevels(): SkillLevels {
+    return { ...this.skillLevels };
+  }
+
+  /** Cấp đã học của một node (0 nếu chưa học). */
+  getSkillLevel(nodeId: SkillNodeId): number {
+    return this.skillLevels[nodeId] ?? 0;
+  }
+
+  /** Điểm kỹ năng: tổng nhận (level − 1), đã tiêu, còn lại. Không lưu, luôn tính lại. */
+  getSkillPointSummary(): { earned: number; spent: number; available: number } {
+    const earned = getTotalSkillPoints(this.levelSystem.getLevel());
+    const spent = getSpentSkillPoints(this.skillLevels);
+
+    return { earned, spent, available: Math.max(0, earned - spent) };
+  }
+
+  /**
+   * Học hoặc nâng 1 cấp. Lý do từ chối là chuỗi hiển thị nguyên văn (như
+   * WorldScene.learnSkillNode). Thất bại không đổi dữ liệu.
+   */
+  learnSkillNode(
+    id: SkillNodeId,
+    characterId: CharacterId,
+  ): { ok: true } | Fail<string> {
+    const node = getClassSkillNodes(characterId).find(
+      (entry) => entry.id === id,
+    );
+
+    if (!node) {
+      return { ok: false, reason: 'Kỹ năng không thuộc lớp này' };
+    }
+
+    const result = learnSkill(id, this.levelSystem.getLevel(), this.skillLevels);
+
+    if (!result.ok) {
+      return { ok: false, reason: result.reason };
+    }
+
+    this.skillLevels = { ...result.levels };
+
+    return { ok: true };
+  }
+
+  /** Hồi toàn bộ điểm kỹ năng; miễn phí tới Lv10, sau đó bị từ chối. */
+  respecSkills(): { ok: true } | Fail<'not_free'> {
+    if (!canRespecFree(this.levelSystem.getLevel())) {
+      return { ok: false, reason: 'not_free' };
+    }
+
+    this.skillLevels = respecAll();
+
+    return { ok: true };
+  }
+
+  /** 7 ô: 0–2 chính, 3–6 phụ (null = trống). Bản sao. */
+  getSlotIds(): (SkillId | null)[] {
+    return [...this.skillLoadout, ...this.extraLoadout];
+  }
+
+  private isSkillNodeLearned(rule: SkillRule): boolean {
+    return (
+      !rule.requiresNode || (this.skillLevels[rule.requiresNode] ?? 0) >= 1
+    );
+  }
+
+  private applySlotIds(slots: readonly (SkillId | null)[]): void {
+    this.skillLoadout = [
+      slots[0] as SkillId,
+      slots[1] as SkillId,
+      slots[2] as SkillId,
+    ];
+    this.extraLoadout = slots.slice(3, 7);
+  }
+
+  /**
+   * Gán kỹ năng vào ô 0–6 (0–2 chính, 3–6 phụ); kỹ năng đã nằm ở ô khác thì hoán đổi.
+   * Thứ tự kiểm như WorldScene.assignSkillToSlot. 'not_learned' ưu tiên 'level_locked'
+   * khi cả hai cùng đúng (đúng như toast cũ).
+   */
+  assignSkill(
+    skillId: SkillId,
+    slot: number,
+  ):
+    | { ok: true }
+    | Fail<
+        | 'invalid_slot'
+        | 'unknown_skill'
+        | 'not_learned'
+        | 'level_locked'
+        | 'same_slot'
+        | 'main_slot_empty'
+      > {
+    const slots = this.getSlotIds();
+
+    if (!Number.isInteger(slot) || slot < 0 || slot >= slots.length) {
+      return { ok: false, reason: 'invalid_slot' };
+    }
+
+    const rule = Object.prototype.hasOwnProperty.call(this.rules.skills, skillId)
+      ? this.rules.skills[skillId]
+      : undefined;
+
+    if (!rule) {
+      return { ok: false, reason: 'unknown_skill' };
+    }
+
+    const learned = this.isSkillNodeLearned(rule);
+
+    if (this.levelSystem.getLevel() < rule.unlockLevel || !learned) {
+      return {
+        ok: false,
+        reason: rule.requiresNode && !learned ? 'not_learned' : 'level_locked',
+      };
+    }
+
+    const existingSlot = slots.indexOf(skillId);
+
+    if (existingSlot === slot) {
+      return { ok: false, reason: 'same_slot' };
+    }
+
+    const replaced = slots[slot] ?? null;
+
+    // Ô chính (0–2) không được để trống: không hoán đổi nếu sẽ làm trống ô chính.
+    if (existingSlot !== -1 && existingSlot < 3 && replaced === null) {
+      return { ok: false, reason: 'main_slot_empty' };
+    }
+
+    slots[slot] = skillId;
+
+    if (existingSlot !== -1) {
+      slots[existingSlot] = replaced;
+    }
+
+    this.applySlotIds(slots);
+
+    return { ok: true };
+  }
+
+  /** Bỏ kỹ năng khỏi ô phụ (3–6). */
+  clearSkillSlot(slot: number): { ok: true } | Fail<'invalid_slot' | 'empty'> {
+    const slots = this.getSlotIds();
+
+    if (!Number.isInteger(slot) || slot < 3 || slot >= slots.length) {
+      return { ok: false, reason: 'invalid_slot' };
+    }
+
+    if (!slots[slot]) {
+      return { ok: false, reason: 'empty' };
+    }
+
+    slots[slot] = null;
+    this.applySlotIds(slots);
+
+    return { ok: true };
+  }
+
   // ---------------------------------------------------------------- lưu
 
   /**
-   * Dựng save v8: mọi trường không thuộc kho đồ lấy từ `base` (sao chép sâu);
+   * Dựng save v8: tiến trình (cấp/XP, điểm chỉ số, kỹ năng) và kho đồ lấy từ
+   * PlayerState; mọi trường còn lại lấy từ `base` (sao chép sâu);
    * gold/gems từ economy; lỗ ngọc từng món = economy.sockets[defId] cắt tối đa
    * MAX_SOCKETS (món không có trong túi bị bỏ). Kết quả luôn qua validateSaveV8;
    * lỗi → ném Error (lỗi lập trình, không phải đầu vào người dùng).
@@ -595,6 +896,21 @@ export class PlayerState {
       boots: this.equippedGearUids.boots,
     };
     out.nextItemSeq = this.nextItemSeq;
+
+    const levelState = this.levelSystem.getState();
+
+    out.level = levelState.level;
+    out.xp = levelState.xp;
+    out.xpToNext = levelState.xpToNext;
+    out.statPoints = this.statPoints;
+    out.stats = this.statSheet.getAllocation();
+    out.skillLoadout = [
+      this.skillLoadout[0],
+      this.skillLoadout[1],
+      this.skillLoadout[2],
+    ];
+    out.extraSkills = [...this.extraLoadout];
+    out.skillLevels = cloneJson(this.skillLevels);
 
     const errors = validateSaveV8(out);
 

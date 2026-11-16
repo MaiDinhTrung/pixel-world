@@ -118,8 +118,6 @@ import {
 } from '../config/gearConfig';
 import { gearLookKey, resolveGearLook } from '../config/gearLook';
 import {
-  createEmptyAllocation,
-  STAT_POINTS_PER_LEVEL,
   type StatAllocation,
   type StatId,
 } from '../config/statConfig';
@@ -160,9 +158,7 @@ import { SAVE_VERSION, type CharacterSave } from '../progression/CharacterProgre
 import { progressStore } from '../progression/ProgressStore';
 import { applyV7ShapeToV8 } from '../progression/saveBridge';
 import { v8ToV7Shape } from '../progression/saveMigration';
-import { LevelSystem } from '../progression/LevelSystem';
 import { XP_PER_KILL } from '../progression/progressionConfig';
-import { StatSheet } from '../progression/StatSheet';
 import {
   getSkill,
   type SkillContext,
@@ -185,16 +181,11 @@ import { getClassSkillNodes } from '../skills/tree/skillTreeData';
 import { FortressStand } from '../skills/fortressStand';
 import {
   canRespecFree,
-  getSpentSkillPoints,
-  getTotalSkillPoints,
   getUnlockStatus,
-  learnSkill,
-  respecAll,
 } from '../skills/tree/skillTreeRules';
 import type {
   BranchId,
   SkillKind,
-  SkillLevels,
   SkillNodeId,
   SkillTier,
 } from '../skills/tree/skillTreeTypes';
@@ -357,13 +348,9 @@ export class WorldScene extends Phaser.Scene {
   private damageNumbers!: DamageNumberManager;
   private playerBars!: PlayerBars;
   private spawnIndex = 0;
-  private levelSystem!: LevelSystem;
-  private statSheet!: StatSheet;
-  private statPoints = 0;
-  private statsAllocation: StatAllocation = createEmptyAllocation();
   /** Mục tiêu auto-aim đang khoá khi cầm Kiếm (xem `updateAutoAim`). */
   private autoAimTarget: EnemyBase | null = null;
-  /** Chủ duy nhất của vũ khí (túi + 2 ô) từ C2a; trang bị/cấp còn ở scene tới C2b. */
+  /** Chủ duy nhất của kho đồ, trang bị, cấp đồ (C2a/C2b) và tiến trình: cấp, điểm chỉ số, cây/ô kỹ năng (C3). */
   private playerState!: PlayerState;
   private heroLookKey = '';
   private panelOpen = false;
@@ -405,12 +392,8 @@ export class WorldScene extends Phaser.Scene {
   private allSkills: SkillDefinition[] = [];
   /** 7 ô: 0–2 ô chính (luôn có skill), 3–6 ô phụ (có thể trống). */
   private skills: (SkillDefinition | null)[] = [];
-  private extraLoadout: (SkillId | null)[] = [];
-  private skillLoadout!: [SkillId, SkillId, SkillId];
   /** Thời điểm hết hồi chiêu theo từng kỹ năng, nên đổi ô không reset hồi chiêu. */
   private skillCooldownUntil: Partial<Record<SkillId, number>> = {};
-  /** Cấp đã học trong Skill Tree (chưa nối vào combat ở bước này). */
-  private skillLevels: SkillLevels = {};
   private passives: PassiveBundle = createEmptyPassiveBundle();
   private missingHealthMult = 1;
   private nextHitEnergyAt = 0;
@@ -697,20 +680,22 @@ export class WorldScene extends Phaser.Scene {
     // Cầu nối v8 -> dạng v7: scene giữ cấu trúc nội bộ theo defId như cũ.
     const save = v8ToV7Shape(progressStore.get(this.characterId));
 
-    this.levelSystem = new LevelSystem({
-      level: save.level,
-      xp: save.xp,
-      xpToNext: save.xpToNext,
-    });
-    this.statPoints = save.statPoints;
-    this.statsAllocation = { ...save.stats };
-    // Vũ khí: PlayerState lọc ngoài lớp, bảo đảm có vũ khí khởi đầu, chọn lại hai ô.
+    // PlayerState nạp kho đồ (lọc vũ khí ngoài lớp, vũ khí khởi đầu, chọn lại hai ô) và tiến trình.
     this.playerState = PlayerState.fromSave(
       progressStore.get(this.characterId),
       {
         allowedWeapons: this.character.allowedWeapons,
         startingWeapons: this.character.startingWeapons,
         startingGear: this.character.startingGear,
+        skills: Object.fromEntries(
+          this.allSkills.map((skill) => [
+            skill.id,
+            {
+              unlockLevel: skill.unlockLevel,
+              requiresNode: skill.requiresNode,
+            },
+          ]),
+        ),
       },
     );
     this.village = new VillageService(this.createVillageHost(), {
@@ -728,16 +713,11 @@ export class WorldScene extends Phaser.Scene {
         type,
         toDisplayHealth(amount),
       );
-    this.skillLoadout = [
-      save.skillLoadout[0],
-      save.skillLoadout[1],
-      save.skillLoadout[2],
-    ];
-    this.skillLevels = { ...save.skillLevels };
-    this.passives = computePassiveBundle(this.characterId, this.skillLevels);
-    this.extraLoadout = [...save.extraSkills];
+    this.passives = computePassiveBundle(
+      this.characterId,
+      this.playerState.getSkillLevels(),
+    );
     this.rebuildSkills();
-    this.statSheet = new StatSheet(this.statsAllocation);
     this.applyPlayerStatistics();
 
     // Sau khi chỉ số/trang bị đã áp (để kẹp theo tối đa đúng): trả lại HP, giáp, EN, lượt dash đã chụp.
@@ -1099,10 +1079,10 @@ export class WorldScene extends Phaser.Scene {
     this.hud.update(
       this.player,
       weapon,
-      this.levelSystem,
+      this.playerState.getLevelSystem(),
       skillStatus,
       this.character.name,
-      this.statPoints,
+      this.playerState.getStatPoints(),
     );
     this.hud.setRunInfo(
       time - this.runStartedAt,
@@ -1403,7 +1383,7 @@ export class WorldScene extends Phaser.Scene {
       point.x,
       point.y,
       this.bossNumber,
-      this.levelSystem.getLevel(),
+      this.playerState.getLevel(),
       {
         onSlam: (slam) => this.handleBossSlam(slam),
         onSummon: (count, summoner) => this.summonBossMinions(count, summoner),
@@ -1836,11 +1816,13 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private grantExperience(amount: number): void {
-    const previousLevel = this.levelSystem.getLevel();
-    const levelsGained = this.levelSystem.addXp(amount);
+    const {
+      previousLevel,
+      levelsGained,
+      statPointsGained: points,
+    } = this.playerState.grantExperience(amount);
 
     if (levelsGained > 0) {
-      const points = levelsGained * STAT_POINTS_PER_LEVEL;
       // Điểm kỹ năng không lưu bộ đếm: luôn suy ra từ level (xem skillTreeRules),
       // nên ở đây chỉ báo cho người chơi, không cộng vào đâu cả.
       const hasSkillTree = getClassSkillNodes(this.characterId).length > 0;
@@ -1848,8 +1830,7 @@ export class WorldScene extends Phaser.Scene {
         ? ` · +${levelsGained} ĐIỂM KỸ NĂNG`
         : '';
 
-      this.statPoints += points;
-      this.announceSkillUnlocks(previousLevel, this.levelSystem.getLevel());
+      this.announceSkillUnlocks(previousLevel, this.playerState.getLevel());
       this.hud.showToast(
         `LÊN CẤP! +${points} ĐIỂM CHỈ SỐ${skillText}`,
         NEON_CSS.gold,
@@ -2489,13 +2470,14 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private saveProgress(): void {
-    const levelState = this.levelSystem.getState();
+    const levelState = this.playerState.getLevelSystem().getState();
+    const slotIds = this.playerState.getSlotIds();
 
     const shape: CharacterSave = {
       ...levelState,
       version: SAVE_VERSION,
-      statPoints: this.statPoints,
-      stats: { ...this.statsAllocation },
+      statPoints: this.playerState.getStatPoints(),
+      stats: this.playerState.getAllocation(),
       inventory: this.playerState.getWeapons(),
       equipped: this.playerState.getEquippedWeapons(),
       gearInventory: this.playerState.getGear(),
@@ -2505,12 +2487,12 @@ export class WorldScene extends Phaser.Scene {
       gems: { ...this.village.getGems() },
       gearSockets: this.village.getSocketsSnapshot(),
       skillLoadout: [
-        this.skillLoadout[0],
-        this.skillLoadout[1],
-        this.skillLoadout[2],
+        slotIds[0] as SkillId,
+        slotIds[1] as SkillId,
+        slotIds[2] as SkillId,
       ],
-      extraSkills: [...this.extraLoadout],
-      skillLevels: { ...this.skillLevels },
+      extraSkills: slotIds.slice(3),
+      skillLevels: this.playerState.getSkillLevels(),
     };
     // Cầu nối dạng v7 -> v8; không áp được thì không ghi, không ném.
     const result = applyV7ShapeToV8(progressStore.get(this.characterId), shape);
@@ -2579,7 +2561,7 @@ export class WorldScene extends Phaser.Scene {
   private applyPlayerStatistics(): void {
     this.refreshHeroLook();
     const base = applyGearBonuses(
-      this.statSheet.getCombatStats(),
+      this.playerState.getStatSheet().getCombatStats(),
       this.playerState.getEquippedGear(),
       this.playerState.getGearLevels(),
     );
@@ -2647,7 +2629,10 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private refreshPassives(): void {
-    this.passives = computePassiveBundle(this.characterId, this.skillLevels);
+    this.passives = computePassiveBundle(
+      this.characterId,
+      this.playerState.getSkillLevels(),
+    );
     this.missingHealthMult = getMissingHealthDamageMult(
       this.passives,
       this.player.getMaxHealth() - this.player.getHealth(),
@@ -2660,13 +2645,10 @@ export class WorldScene extends Phaser.Scene {
   }
 
   addStatPoint(statId: StatId): boolean {
-    if (this.statPoints <= 0) {
+    if (!this.playerState.spendStatPoint(statId).ok) {
       return false;
     }
 
-    this.statPoints -= 1;
-    this.statSheet.addPoint(statId);
-    this.statsAllocation = this.statSheet.getAllocation();
     this.applyPlayerStatistics();
     this.saveProgress();
 
@@ -2680,7 +2662,7 @@ export class WorldScene extends Phaser.Scene {
   private getSkillNodeLevel(skillId: SkillId): number {
     const nodeId = LIVE_SKILL_NODE[skillId];
 
-    return nodeId ? (this.skillLevels[nodeId] ?? 0) : 0;
+    return nodeId ? this.playerState.getSkillLevel(nodeId) : 0;
   }
 
   /** Hồi chiêu sau khi tính cấp kỹ năng. Skill tích lượt giữ nguyên (CD là khoảng nghỉ giữa lượt). */
@@ -2709,10 +2691,7 @@ export class WorldScene extends Phaser.Scene {
     spent: number;
     available: number;
   } {
-    const earned = getTotalSkillPoints(this.levelSystem.getLevel());
-    const spent = getSpentSkillPoints(this.skillLevels);
-
-    return { earned, spent, available: Math.max(0, earned - spent) };
+    return this.playerState.getSkillPointSummary();
   }
 
   getSkillTreePanelState(): {
@@ -2737,14 +2716,15 @@ export class WorldScene extends Phaser.Scene {
       passiveActive: boolean;
     }[];
   } {
-    const level = this.levelSystem.getLevel();
+    const level = this.playerState.getLevel();
+    const skillLevels = this.playerState.getSkillLevels();
 
     return {
       level,
       ...this.getSkillPointSummary(),
       freeRespec: canRespecFree(level),
       nodes: getClassSkillNodes(this.characterId).map((node) => {
-        const status = getUnlockStatus(node, level, this.skillLevels);
+        const status = getUnlockStatus(node, level, skillLevels);
 
         return {
           id: node.id,
@@ -2753,7 +2733,7 @@ export class WorldScene extends Phaser.Scene {
           kind: node.kind,
           tier: node.tier,
           maxLevel: node.maxLevel,
-          level: this.skillLevels[node.id] ?? 0,
+          level: skillLevels[node.id] ?? 0,
           unlocked: status.unlocked,
           reasons: status.reasons,
           linkedSkillName: (() => {
@@ -2771,21 +2751,12 @@ export class WorldScene extends Phaser.Scene {
   learnSkillNode(
     id: SkillNodeId,
   ): { ok: true } | { ok: false; reason: string } {
-    const node = getClassSkillNodes(this.characterId).find(
-      (entry) => entry.id === id,
-    );
-
-    if (!node) {
-      return { ok: false, reason: 'Kỹ năng không thuộc lớp này' };
-    }
-
-    const result = learnSkill(id, this.levelSystem.getLevel(), this.skillLevels);
+    const result = this.playerState.learnSkillNode(id, this.characterId);
 
     if (!result.ok) {
       return result;
     }
 
-    this.skillLevels = { ...result.levels };
     this.refreshPassives();
     this.saveProgress();
 
@@ -2794,11 +2765,10 @@ export class WorldScene extends Phaser.Scene {
 
   /** Hồi toàn bộ điểm kỹ năng; miễn phí tới Lv10, sau đó chưa có chi phí nên bị từ chối. */
   respecSkills(): boolean {
-    if (!canRespecFree(this.levelSystem.getLevel())) {
+    if (!this.playerState.respecSkills().ok) {
       return false;
     }
 
-    this.skillLevels = respecAll();
     this.refreshPassives();
     this.saveProgress();
 
@@ -2976,14 +2946,14 @@ export class WorldScene extends Phaser.Scene {
     /** Kháng nguyên tố hiệu dụng (điểm %, sau khi chặn trần). */
     resistPercent: Record<ElementType, number>;
   } {
-    const baseStats = this.statSheet.getCombatStats();
+    const baseStats = this.playerState.getStatSheet().getCombatStats();
     const stats = this.player.getStats();
 
     return {
       characterName: this.character.name,
-      level: this.levelSystem.getLevel(),
-      statPoints: this.statPoints,
-      allocation: this.statSheet.getAllocation(),
+      level: this.playerState.getLevel(),
+      statPoints: this.playerState.getStatPoints(),
+      allocation: this.playerState.getAllocation(),
       maxHealth: toDisplayHealth(this.player.getMaxHealth()),
       maxArmor: toDisplayHealth(this.player.getMaxArmor()),
       maxEnergy: toDisplayEnergy(this.player.getMaxEnergy()),
@@ -3026,7 +2996,7 @@ export class WorldScene extends Phaser.Scene {
 
     return {
       characterName: this.character.name,
-      level: this.levelSystem.getLevel(),
+      level: this.playerState.getLevel(),
       weapons: [
         { slot: 0, weaponId: equippedWeapons[0] },
         { slot: 1, weaponId: equippedWeapons[1] },
@@ -3048,14 +3018,15 @@ export class WorldScene extends Phaser.Scene {
   /** Kỹ năng từ cây đã học node chưa (kỹ năng không đòi node luôn true). */
   private isNodeLearned(skill: SkillDefinition): boolean {
     return (
-      !skill.requiresNode || (this.skillLevels[skill.requiresNode] ?? 0) >= 1
+      !skill.requiresNode ||
+      this.playerState.getSkillLevel(skill.requiresNode) >= 1
     );
   }
 
   /** Dùng/gán được: đủ level và (nếu là kỹ năng từ cây) đã học node. */
   private isSkillUsable(skill: SkillDefinition): boolean {
     return (
-      this.levelSystem.getLevel() >= skill.unlockLevel &&
+      this.playerState.getLevel() >= skill.unlockLevel &&
       this.isNodeLearned(skill)
     );
   }
@@ -3068,72 +3039,40 @@ export class WorldScene extends Phaser.Scene {
 
   /** Dựng lại 7 ô từ 3 ô chính + 4 ô phụ. */
   private rebuildSkills(): void {
-    this.skills = [
-      ...this.skillLoadout.map((id) => getSkill(id)),
-      ...this.extraLoadout.map((id) => (id ? getSkill(id) : null)),
-    ];
+    this.skills = this.playerState
+      .getSlotIds()
+      .map((id) => (id ? getSkill(id) : null));
   }
 
   private getSlotIds(): (SkillId | null)[] {
-    return [...this.skillLoadout, ...this.extraLoadout];
-  }
-
-  private applySlotIds(slots: readonly (SkillId | null)[]): void {
-    this.skillLoadout = [
-      slots[0] as SkillId,
-      slots[1] as SkillId,
-      slots[2] as SkillId,
-    ];
-    this.extraLoadout = slots.slice(3, 7);
-    this.rebuildSkills();
-    this.saveProgress();
+    return this.playerState.getSlotIds();
   }
 
   /** Gán kỹ năng vào ô 0–6 (0–2 chính, 3–6 phụ). Kỹ năng đã nằm ở ô khác sẽ hoán đổi. */
   assignSkillToSlot(skillId: SkillId, slot: number): boolean {
-    if (
-      !Number.isInteger(slot) ||
-      slot < 0 ||
-      slot >= this.skills.length ||
-      !this.allSkills.some((entry) => entry.id === skillId)
-    ) {
+    const result = this.playerState.assignSkill(skillId, slot);
+
+    if (!result.ok) {
+      if (result.reason === 'not_learned' || result.reason === 'level_locked') {
+        const locked = getSkill(skillId);
+
+        this.hud.showToast(
+          result.reason === 'not_learned'
+            ? `${locked.name}: HỌC TRONG CÂY KỸ NĂNG`
+            : `${locked.name} KHOÁ ĐẾN LV${locked.unlockLevel}`,
+          '#8b8fa3',
+        );
+      } else if (result.reason === 'main_slot_empty') {
+        this.hud.showToast('Ô CHÍNH KHÔNG ĐƯỢC ĐỂ TRỐNG', '#ff8fa3');
+      }
+
       return false;
     }
 
     const skill = getSkill(skillId);
 
-    if (!this.isSkillUsable(skill)) {
-      this.hud.showToast(
-        skill.requiresNode && !this.isNodeLearned(skill)
-          ? `${skill.name}: HỌC TRONG CÂY KỸ NĂNG`
-          : `${skill.name} KHOÁ ĐẾN LV${skill.unlockLevel}`,
-        '#8b8fa3',
-      );
-      return false;
-    }
-
-    const slots = this.getSlotIds();
-    const existingSlot = slots.indexOf(skillId);
-
-    if (existingSlot === slot) {
-      return false;
-    }
-
-    const replaced = slots[slot];
-
-    // Ô chính (0–2) không được để trống: không hoán đổi nếu sẽ làm trống ô chính.
-    if (existingSlot !== -1 && existingSlot < 3 && replaced === null) {
-      this.hud.showToast('Ô CHÍNH KHÔNG ĐƯỢC ĐỂ TRỐNG', '#ff8fa3');
-      return false;
-    }
-
-    slots[slot] = skillId;
-
-    if (existingSlot !== -1) {
-      slots[existingSlot] = replaced;
-    }
-
-    this.applySlotIds(slots);
+    this.rebuildSkills();
+    this.saveProgress();
     this.hud.showToast(`${skill.name} → Ô ${slot + 3}`, skill.colorCss);
 
     return true;
@@ -3141,14 +3080,12 @@ export class WorldScene extends Phaser.Scene {
 
   /** Bỏ kỹ năng khỏi ô phụ (3–6). */
   clearSkillSlot(slot: number): boolean {
-    if (slot < 3 || slot >= this.skills.length || !this.getSlotIds()[slot]) {
+    if (!this.playerState.clearSkillSlot(slot).ok) {
       return false;
     }
 
-    const slots = this.getSlotIds();
-
-    slots[slot] = null;
-    this.applySlotIds(slots);
+    this.rebuildSkills();
+    this.saveProgress();
 
     return true;
   }
@@ -3180,7 +3117,7 @@ export class WorldScene extends Phaser.Scene {
     /** 7 ô: 0–2 chính, 3–6 phụ (null = trống). */
     loadout: (SkillId | null)[];
   } {
-    const level = this.levelSystem.getLevel();
+    const level = this.playerState.getLevel();
 
     return {
       characterName: this.character.name,
