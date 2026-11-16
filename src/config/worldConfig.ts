@@ -41,10 +41,23 @@ export const CONN_VILLAGE_TO_ARENA: ConnectionId = 'conn.village_to_arena';
 export const CONN_ARENA_TO_VILLAGE: ConnectionId = 'conn.arena_to_village';
 
 /**
- * Mẫu xoay vòng hiện tại (M1): id archetype (`enemyConfig.ts`); `grunt`,`grunt`,`caster` = cận chiến, cận chiến,
- * bắn xa (tỉ lệ 2:1, tương đương `spawnIndex % 3 === 2` → bắn xa của WorldScene.spawnEnemy cũ).
+ * Mẫu xoay vòng của ARENA (giữ nguyên từ M1; M2 không đổi): id archetype (`enemyConfig.ts`); `grunt`,`grunt`,`caster`
+ * = cận chiến, cận chiến, bắn xa (tỉ lệ 2:1, tương đương `spawnIndex % 3 === 2` → bắn xa của WorldScene.spawnEnemy cũ).
+ * Hai vùng ngoài làng dùng mẫu riêng ở dưới.
  */
 const CURRENT_SPAWN_PATTERN = ['grunt', 'grunt', 'caster'] as const;
+
+/**
+ * Mẫu sinh vùng GẦN làng (M2): 2 grunt : 1 caster : 1 swarmer mỗi chu kỳ 4. Thứ tự chọn: world/spawnPattern.ts
+ * (`pickStaggeredArchetype`, bộ đếm riêng của vùng). GIÁ TRỊ KHỞI ĐIỂM.
+ */
+export const WILDS_NEAR_SPAWN_PATTERN = ['grunt', 'grunt', 'caster', 'swarmer'] as const;
+
+/**
+ * Mẫu sinh vùng XA làng (M2): 1 grunt, 2 brute, 2 caster, 1 swarmer mỗi chu kỳ 6 (nhiều quái nặng/bắn xa hơn vùng gần).
+ * GIÁ TRỊ KHỞI ĐIỂM.
+ */
+export const WILDS_FAR_SPAWN_PATTERN = ['grunt', 'brute', 'caster', 'swarmer', 'caster', 'brute'] as const;
 
 /**
  * Vị trí người chơi xuất hiện ở bản đồ chính (lúc vào game VÀ khi về từ Arena: RunSession không lưu tọa độ
@@ -128,7 +141,7 @@ const STARTING_LANDS: MapDef = {
       tierOffset: 0,
       tierFloor: 0,
       tierCap: MAX_THREAT_TIER,
-      spawnTable: { pattern: [...CURRENT_SPAWN_PATTERN], points: [] },
+      spawnTable: { pattern: [...WILDS_NEAR_SPAWN_PATTERN], points: [] },
       maxAliveCap: null,
       eliteSlots: [],
       display: { name: 'Đồng Hoang Úa', danger: 1, description: 'Gió lạnh mang mùi tử khí' },
@@ -143,7 +156,7 @@ const STARTING_LANDS: MapDef = {
       tierOffset: WILDS_FAR_TIER_OFFSET,
       tierFloor: 0,
       tierCap: MAX_THREAT_TIER,
-      spawnTable: { pattern: [...CURRENT_SPAWN_PATTERN], points: [] },
+      spawnTable: { pattern: [...WILDS_FAR_SPAWN_PATTERN], points: [] },
       maxAliveCap: null,
       eliteSlots: [],
       display: { name: 'Hoang Địa Sâu', danger: 2, description: 'Kẻ yếu không trở về' },

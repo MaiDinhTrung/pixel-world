@@ -70,6 +70,7 @@ const PURE_SOURCES: Record<string, string> = {
   'src/config/worldConfig.ts': fileURLToPath(new URL('../config/worldConfig.ts', import.meta.url)),
   'src/world/regionTracker.ts': fileURLToPath(new URL('./regionTracker.ts', import.meta.url)),
   'src/config/enemyConfig.ts': fileURLToPath(new URL('../config/enemyConfig.ts', import.meta.url)),
+  'src/config/enemyVisualConfig.ts': fileURLToPath(new URL('../config/enemyVisualConfig.ts', import.meta.url)),
   'src/world/spawnPattern.ts': fileURLToPath(new URL('./spawnPattern.ts', import.meta.url)),
   'src/systems/enemyStats.ts': fileURLToPath(new URL('../systems/enemyStats.ts', import.meta.url)),
 };
@@ -194,7 +195,7 @@ describe('dữ liệu worldConfig', () => {
     expect(ARENA_TO_VILLAGE.from.mapId).toBe(MAP_BOSS_ARENA_1);
   });
 
-  it('region.arena dùng trần quái con của Arena; làng an toàn, không sinh quái; wilds xoay vòng 2:1', () => {
+  it('region.arena dùng trần quái con của Arena; làng an toàn, không sinh quái; mẫu sinh theo vùng (M2)', () => {
     const arena = BOSS_ARENA.regions[0];
     const village = STARTING_LANDS.regions.find((region) => region.id === REGION_VILLAGE);
     const near = STARTING_LANDS.regions.find((region) => region.id === REGION_WILDS_NEAR);
@@ -204,9 +205,13 @@ describe('dữ liệu worldConfig', () => {
     expect(village?.safe).toBe(true);
     expect(village?.spawnTable.pattern).toEqual([]);
 
+    // M2: mẫu riêng từng vùng ngoài làng; Arena giữ mẫu M1 (2 grunt : 1 caster).
+    expect(arena.spawnTable.pattern).toEqual(['grunt', 'grunt', 'caster']);
+    expect(near?.spawnTable.pattern).toEqual(['grunt', 'grunt', 'caster', 'swarmer']);
+    expect(far?.spawnTable.pattern).toEqual(['grunt', 'brute', 'caster', 'swarmer', 'caster', 'brute']);
+
     for (const wilds of [near, far]) {
       expect(wilds?.safe).toBe(false);
-      expect(wilds?.spawnTable.pattern).toEqual(['grunt', 'grunt', 'caster']);
       expect(wilds?.tierFloor).toBe(0);
       expect(wilds?.tierCap).toBe(MAX_THREAT_TIER);
     }

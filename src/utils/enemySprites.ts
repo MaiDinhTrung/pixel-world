@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 
 import { TEXTURE_KEYS } from '../config/constants';
+import { createEnemyVariantSheets } from './enemyVariantSprites';
 
 type EnemyAction = 'idle' | 'walk' | 'attack' | 'death';
 type EnemyVisual = 'brute' | 'caster' | 'boss';
@@ -644,4 +645,7 @@ export function createEnemySpriteSheets(scene: Phaser.Scene): void {
 
     createEnemyAnimations(scene, spec);
   }
+
+  // M2: sheet Swarmer/Brute (enemy-swarmer, enemy-bruiser) sinh ở file riêng, cùng bộ clip.
+  createEnemyVariantSheets(scene);
 }

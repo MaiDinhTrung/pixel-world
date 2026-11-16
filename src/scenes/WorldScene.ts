@@ -221,8 +221,10 @@ import {
   DEFAULT_MELEE_ARCHETYPE,
   DEFAULT_RANGED_ARCHETYPE,
   ENEMY_ARCHETYPES,
+  type ArchetypeId,
 } from '../config/enemyConfig';
-import { pickArchetype } from '../world/spawnPattern';
+import { killXp } from '../systems/enemyStats';
+import { pickArchetype, pickStaggeredArchetype } from '../world/spawnPattern';
 import { RegionBanner } from '../ui/RegionBanner';
 import { createRegionTracker, type RegionTracker } from '../world/regionTracker';
 import {
@@ -368,6 +370,10 @@ export class WorldScene extends Phaser.Scene {
   private damageNumbers!: DamageNumberManager;
   private playerBars!: PlayerBars;
   private spawnIndex = 0;
+  /** M2: số lần đã sinh quái theo vùng (id vùng → đếm), dùng chọn archetype lệch pha với điểm sinh. */
+  private readonly regionSpawnCounts = new Map<string, number>();
+  /** M2: số điểm sinh của từng vùng (tính một lần mỗi lượt chơi). */
+  private readonly regionSpawnPoints = new Map<string, number>();
   /** Mục tiêu auto-aim đang khoá khi cầm Kiếm (xem `updateAutoAim`). */
   private autoAimTarget: EnemyBase | null = null;
   /** Chủ duy nhất của kho đồ, trang bị, cấp đồ (C2a/C2b) và tiến trình: cấp, điểm chỉ số, cây/ô kỹ năng (C3). */
@@ -594,6 +600,8 @@ export class WorldScene extends Phaser.Scene {
 
   create(): void {
     this.spawnIndex = 0;
+    this.regionSpawnCounts.clear();
+    this.regionSpawnPoints.clear();
     this.nextAfterimageAt = 0;
     this.attackWasDown = false;
     this.chests = [];
@@ -1302,14 +1310,50 @@ export class WorldScene extends Phaser.Scene {
     this.activateWeapon(firstEquipped >= 0 ? firstEquipped : 0);
   }
 
+  /**
+   * Chọn archetype cho lần sinh này (M2). Vùng có điểm sinh riêng (`spawnTable.points` khác rỗng = Arena): giữ chuỗi
+   * M1 `pattern[spawnIndex % length]`. Vùng ngoài làng: bộ đếm riêng của vùng + dịch pha theo vòng điểm sinh
+   * (`pickStaggeredArchetype`) để mỗi điểm sinh gặp nhiều loại quái. Xác định, không ngẫu nhiên.
+   */
+  private pickSpawnArchetype(
+    region: ReturnType<typeof regionAt>,
+  ): ArchetypeId | null {
+    if (region === null) {
+      return null;
+    }
+
+    const table = region.spawnTable;
+
+    if (table.points.length > 0) {
+      return pickArchetype(table.pattern, this.spawnIndex);
+    }
+
+    let points = this.regionSpawnPoints.get(region.id);
+
+    if (points === undefined) {
+      points = 0;
+
+      for (const spawn of this.town.enemySpawns) {
+        if (regionAt(this.getMapDef(), spawn.x, spawn.y)?.id === region.id) {
+          points += 1;
+        }
+      }
+
+      this.regionSpawnPoints.set(region.id, points);
+    }
+
+    const count = this.regionSpawnCounts.get(region.id) ?? 0;
+
+    this.regionSpawnCounts.set(region.id, count + 1);
+
+    return pickStaggeredArchetype(table.pattern, count, points);
+  }
+
   private spawnEnemy(): void {
     const point =
       this.town.enemySpawns[this.spawnIndex % this.town.enemySpawns.length];
     const spawnRegion = regionAt(this.getMapDef(), point.x, point.y);
-    const archetypeId =
-      spawnRegion === null
-        ? null
-        : pickArchetype(spawnRegion.spawnTable.pattern, this.spawnIndex);
+    const archetypeId = this.pickSpawnArchetype(spawnRegion);
     // Pattern rỗng/không có vùng (không xảy ra với dữ liệu hiện có) → hành vi cũ: chỉ số % 3 === 2 là bắn xa.
     const isRanged =
       archetypeId === null
@@ -1352,7 +1396,10 @@ export class WorldScene extends Phaser.Scene {
       this.corpses.add(enemy.x, enemy.y, enemy.getMaxHealth());
       this.maybeDropWeaponChest(enemy.x, enemy.y);
       this.dropLoot(enemy.x, enemy.y, tier);
-      this.handleEnemyKilled();
+      // M2 (M-D1): EXP theo archetype + bậc của chính quái này.
+      this.handleEnemyKilled(
+        killXp(archetypeId ?? (isRanged ? DEFAULT_RANGED_ARCHETYPE : DEFAULT_MELEE_ARCHETYPE), tier),
+      );
     });
 
     this.watchEnemyHits(enemy);
@@ -1895,8 +1942,9 @@ export class WorldScene extends Phaser.Scene {
     }
   }
 
-  private handleEnemyKilled(): void {
-    this.grantExperience(XP_PER_KILL);
+  /** `xp`: mặc định XP_PER_KILL (minion Boss giữ nguyên); quái sinh theo vùng truyền `killXp(archetype, bậc)` (M2). */
+  private handleEnemyKilled(xp: number = XP_PER_KILL): void {
+    this.grantExperience(xp);
 
     if (this.passives.energyOnKill > 0) {
       this.player.restoreEnergy(this.passives.energyOnKill);

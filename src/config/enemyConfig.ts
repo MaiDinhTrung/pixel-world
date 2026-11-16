@@ -17,9 +17,9 @@ export interface EnemyArchetype {
   readonly speedMult: number;
   /** Sát thương cộng thêm (số nguyên, 0 = như hiện tại): cận chiến cộng vào sát thương chạm, bắn xa cộng vào sát thương đạn. */
   readonly contactDamageBonus: number;
-  /** Hệ số nhân EXP khi hạ. CHƯA DÙNG ở M1 (M2 sẽ nối vào WorldScene). Phải > 0. */
+  /** Hệ số nhân EXP khi hạ (M2: dùng trong `killXp` của `enemyStats.ts`). Phải > 0. */
   readonly xpMult: number;
-  /** Hệ số nhân vàng khi hạ. CHƯA DÙNG ở M1 (M2 sẽ nối vào dropLoot). Phải > 0. */
+  /** Hệ số nhân vàng khi hạ. CHƯA DÙNG (M-D1 chỉ đổi EXP; để dành cho gói cân bằng drop). Phải > 0. */
   readonly goldMult: number;
 }
 
@@ -40,6 +40,30 @@ export const ENEMY_ARCHETYPES = {
     speedMult: 1,
     contactDamageBonus: 0,
     xpMult: 1,
+    goldMult: 1,
+  },
+  /**
+   * Cận chiến nhỏ, nhanh, mỏng máu (M2): đông và dễ hạ. Giá trị là KHỞI ĐIỂM, chỉnh sau khi chơi thử.
+   * Hình vẽ riêng: `enemyVisualConfig.ts` (texture `enemy-swarmer`).
+   */
+  swarmer: {
+    kind: 'melee',
+    healthMult: 0.5,
+    speedMult: 1.35,
+    contactDamageBonus: 0,
+    xpMult: 0.8,
+    goldMult: 1,
+  },
+  /**
+   * Cận chiến to, chậm, trâu máu, chạm đau hơn (M2): KHỞI ĐIỂM, chỉnh sau khi chơi thử.
+   * Hình vẽ riêng: `enemyVisualConfig.ts` (texture `enemy-bruiser`; id archetype là `brute`).
+   */
+  brute: {
+    kind: 'melee',
+    healthMult: 2.5,
+    speedMult: 0.75,
+    contactDamageBonus: 1,
+    xpMult: 2,
     goldMult: 1,
   },
 } as const satisfies Record<string, EnemyArchetype>;

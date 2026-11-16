@@ -135,6 +135,7 @@ export abstract class EnemyBase extends Phaser.Physics.Arcade.Sprite {
     bodyWidth: number,
     bodyHeight: number,
     deathColor: number,
+    displayScale = 2,
   ) {
     super(scene, x, y, texture, `${animPrefix}-idle-0`);
 
@@ -147,7 +148,7 @@ export abstract class EnemyBase extends Phaser.Physics.Arcade.Sprite {
     scene.physics.add.existing(this);
 
     this.setOrigin(0.5);
-    this.setScale(2);
+    this.setScale(displayScale);
     this.setBodySize(bodyWidth, bodyHeight);
     this.setCollideWorldBounds(true);
     this.setDepth(8);

@@ -15,6 +15,7 @@ import {
   RANGED_ENEMY_SPEED,
 } from '../config/combatConfig';
 import { ENEMY_ARCHETYPES, type ArchetypeId, type EnemyArchetype } from '../config/enemyConfig';
+import { XP_PER_KILL, XP_TIER_BONUS } from '../progression/progressionConfig';
 
 export interface MeleeStats {
   readonly maxHealth: number;
@@ -45,6 +46,13 @@ export function meleeStats(tier: number, archetype: ArchetypeId | EnemyArchetype
     contactDamage:
       ENEMY_CONTACT_DAMAGE + Math.floor(tier / ENEMY_DAMAGE_TIER_STEP) + def.contactDamageBonus,
   };
+}
+
+/** EXP khi hạ một quái sinh theo vùng (M2, M-D1). Grunt bậc 0 = XP_PER_KILL (15) như trước. Thuần. */
+export function killXp(archetype: ArchetypeId | EnemyArchetype, tier: number): number {
+  const def = resolve(archetype);
+
+  return Math.round(XP_PER_KILL * def.xpMult * (1 + XP_TIER_BONUS * tier));
 }
 
 export function rangedStats(tier: number, archetype: ArchetypeId | EnemyArchetype): RangedStats {

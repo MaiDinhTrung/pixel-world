@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 
-import { TEXTURE_KEYS } from '../config/constants';
 import { DEFAULT_MELEE_ARCHETYPE, type ArchetypeId } from '../config/enemyConfig';
+import { ENEMY_VISUALS } from '../config/enemyVisualConfig';
 import { NEON } from '../config/palette';
 import { meleeStats } from '../systems/enemyStats';
 import { EnemyBase, type EnemyTarget } from './EnemyBase';
@@ -20,17 +20,20 @@ export class Enemy extends EnemyBase {
     archetype: ArchetypeId = DEFAULT_MELEE_ARCHETYPE,
   ) {
     const stats = meleeStats(tier, archetype);
+    const visual = ENEMY_VISUALS[archetype];
 
+    // Hình/scale/body theo archetype (M2); grunt = texture `enemy`, scale 2, body 20x20 như trước.
     super(
       scene,
       x,
       y,
-      TEXTURE_KEYS.enemy,
-      TEXTURE_KEYS.enemy,
+      visual.textureKey,
+      visual.animPrefix,
       stats.maxHealth,
-      20,
-      20,
+      visual.bodySize,
+      visual.bodySize,
       NEON.meleeEnemy,
+      visual.displayScale,
     );
 
     this.moveSpeed = stats.moveSpeed;

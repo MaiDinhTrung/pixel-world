@@ -46,6 +46,8 @@ export const TEXTURE_KEYS = {
   enemy: 'enemy', // quái cận chiến
   rangedEnemy: 'rangedEnemy', // quái bắn xa
   boss: 'boss',
+  enemySwarmer: 'enemy-swarmer', // quái cận chiến nhỏ nhanh (archetype swarmer, M2)
+  enemyBruiser: 'enemy-bruiser', // quái cận chiến to chậm (archetype brute, M2)
   // Vũ khí cầm tay
   sword: 'sword', // kiếm
   shield: 'shield', // khiên

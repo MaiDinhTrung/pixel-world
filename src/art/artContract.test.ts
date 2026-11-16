@@ -22,6 +22,7 @@ import {
   STAFF_BIG_ORB_SCALE,
 } from '../config/combatConfig';
 import { TEXTURE_KEYS } from '../config/constants';
+import { ENEMY_VISUALS } from '../config/enemyVisualConfig';
 import { ELEMENT_TYPES } from '../config/damageTypeConfig';
 import {
   ENEMY_BULLET_VISUAL,
@@ -349,17 +350,36 @@ describe('I10/I11 quái và Boss: khung, scale, body, anim', () => {
     expectMatch(enemyBase, /`\$\{this\.animPrefix\}-death`|`\$\{animPrefix\}-death`/, 'anim chết quái đã đổi tên');
   });
 
-  it('I10: quái thường scale 2, origin 0.5, body = tham số constructor', () => {
-    expectMatch(enemyBase, /this\.setOrigin\(0\.5\);\s*this\.setScale\(2\);\s*this\.setBodySize\(bodyWidth,\s*bodyHeight\);/, 'origin/scale/body EnemyBase đã đổi');
+  it('I10: quái thường scale mặc định 2 (tham số displayScale), origin 0.5, body = tham số constructor', () => {
+    // M2: scale đi qua tham số `displayScale = 2` (Enemy truyền scale theo archetype, RangedEnemy/Boss không truyền → 2).
+    expectMatch(enemyBase, /deathColor: number,\s*displayScale = 2,\s*\)/, 'tham số displayScale của EnemyBase không còn mặc định 2');
+    expectMatch(enemyBase, /this\.setOrigin\(0\.5\);\s*this\.setScale\(displayScale\);\s*this\.setBodySize\(bodyWidth,\s*bodyHeight\);/, 'origin/scale/body EnemyBase đã đổi');
     expectMatch(enemyBase, /this\.setDepth\(this\.y \+ 20\)/, 'depth quái không còn y+20');
   });
 
-  it('I10: body 20x20 truyền từ Enemy, RangedEnemy, BossEnemy', () => {
+  it('I10: grunt/caster giữ texture, scale 2, body 20x20 (ENEMY_VISUALS); mọi archetype body x scale = 40', () => {
+    expect(ENEMY_VISUALS.grunt).toEqual({ textureKey: 'enemy', animPrefix: 'enemy', displayScale: 2, bodySize: 20 });
+    expect(ENEMY_VISUALS.caster).toEqual({
+      textureKey: 'rangedEnemy',
+      animPrefix: 'rangedEnemy',
+      displayScale: 2,
+      bodySize: 20,
+    });
+
+    for (const [id, visual] of Object.entries(ENEMY_VISUALS)) {
+      expect(visual.bodySize * visual.displayScale, `hitbox ${id}`).toBeCloseTo(40, 9);
+    }
+  });
+
+  it('I10: body 20x20 truyền từ Enemy (qua ENEMY_VISUALS), RangedEnemy, BossEnemy', () => {
+    const enemy = read('entities/Enemy.ts');
+
     expectMatch(
-      read('entities/Enemy.ts'),
-      /TEXTURE_KEYS\.enemy,\s*TEXTURE_KEYS\.enemy,[^;]*?,\s*20,\s*20,\s*NEON\.meleeEnemy,/,
-      'body Enemy không còn 20x20',
+      enemy,
+      /visual\.textureKey,\s*visual\.animPrefix,\s*stats\.maxHealth,\s*visual\.bodySize,\s*visual\.bodySize,\s*NEON\.meleeEnemy,\s*visual\.displayScale,/,
+      'Enemy không còn lấy texture/body/scale từ visual (ENEMY_VISUALS)',
     );
+    expectMatch(enemy, /const visual = ENEMY_VISUALS\[archetype\];/, 'Enemy không còn tra ENEMY_VISUALS theo archetype');
     expectMatch(
       read('entities/RangedEnemy.ts'),
       /TEXTURE_KEYS\.rangedEnemy,\s*TEXTURE_KEYS\.rangedEnemy,[^;]*?,\s*20,\s*20,\s*NEON\.rangedEnemy,/,
