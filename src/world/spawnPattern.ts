@@ -26,19 +26,19 @@ export function pickArchetype<T extends string>(
  * Khi gcd(P + 1, L) = 1 thì qua L vòng mỗi điểm gặp ĐỦ mọi vị trí của mẫu đúng bằng nhau → tần suất mỗi archetype
  * khớp mẫu chính xác theo chu kỳ P*L (vùng gần 4x4 = 16, vùng xa 4x6 = 24). Test khóa điều này cho dữ liệu thật.
  *
- * Mẫu rỗng → null. `pointsInRegion` < 1 coi như 1.
+ * Mẫu rỗng → null. `pointsInZone` < 1 coi như 1.
  */
 export function pickStaggeredArchetype<T extends string>(
   pattern: readonly T[],
-  regionSpawnCount: number,
-  pointsInRegion: number,
+  zoneSpawnCount: number,
+  pointsInZone: number,
 ): T | null {
   if (pattern.length === 0) {
     return null;
   }
 
-  const points = Math.max(1, Math.floor(pointsInRegion));
-  const round = Math.floor(regionSpawnCount / points);
+  const points = Math.max(1, Math.floor(pointsInZone));
+  const round = Math.floor(zoneSpawnCount / points);
 
-  return pattern[(regionSpawnCount + round) % pattern.length];
+  return pattern[(zoneSpawnCount + round) % pattern.length];
 }

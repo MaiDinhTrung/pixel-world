@@ -4,26 +4,26 @@ import { ENEMY_ARCHETYPES, type ArchetypeId } from '../config/enemyConfig';
 import {
   MAP_BOSS_ARENA_1,
   MAP_STARTING_LANDS,
-  REGION_ARENA,
-  REGION_VILLAGE,
-  REGION_WILDS_FAR,
-  REGION_WILDS_NEAR,
+  ZONE_ARENA,
+  ZONE_VILLAGE,
+  ZONE_WILDS_FAR,
+  ZONE_WILDS_NEAR,
   WILDS_FAR_SPAWN_PATTERN,
   WILDS_NEAR_SPAWN_PATTERN,
   WORLD,
 } from '../config/worldConfig';
 import { pickArchetype, pickStaggeredArchetype } from './spawnPattern';
-import { regionAt, type MapDef, type RegionDef } from './worldGraph';
+import { zoneAt, type MapDef, type ZoneDef } from './worldGraph';
 
 const MAIN_MAP = WORLD.maps.find((m) => m.id === MAP_STARTING_LANDS) as MapDef;
-const ALL_REGIONS = WORLD.maps.flatMap((map) => map.regions);
+const ALL_ZONES = WORLD.maps.flatMap((map) => map.zones);
 
-function regionById(id: string): RegionDef {
-  const region = ALL_REGIONS.find((r) => r.id === id);
+function zoneById(id: string): ZoneDef {
+  const zone = ALL_ZONES.find((r) => r.id === id);
 
-  expect(region, id).toBeDefined();
+  expect(zone, id).toBeDefined();
 
-  return region as RegionDef;
+  return zone as ZoneDef;
 }
 
 describe('pickArchetype', () => {
@@ -43,7 +43,7 @@ describe('pickArchetype', () => {
   });
 
   it('Arena giữ chuỗi M1: 300 chỉ số đầu khớp i % 3 === 2 ? caster : grunt', () => {
-    const arena = regionById(REGION_ARENA);
+    const arena = zoneById(ZONE_ARENA);
 
     expect(arena.spawnTable.pattern).toEqual(['grunt', 'grunt', 'caster']);
     expect(arena.spawnTable.points.length).toBeGreaterThan(0);
@@ -56,8 +56,8 @@ describe('pickArchetype', () => {
 
 describe('mẫu sinh theo vùng (M2)', () => {
   it('khớp bảng thiết kế; làng không sinh quái', () => {
-    expect(regionById(REGION_WILDS_NEAR).spawnTable.pattern).toEqual(['grunt', 'grunt', 'caster', 'swarmer']);
-    expect(regionById(REGION_WILDS_FAR).spawnTable.pattern).toEqual([
+    expect(zoneById(ZONE_WILDS_NEAR).spawnTable.pattern).toEqual(['grunt', 'grunt', 'caster', 'swarmer']);
+    expect(zoneById(ZONE_WILDS_FAR).spawnTable.pattern).toEqual([
       'grunt',
       'brute',
       'caster',
@@ -65,21 +65,21 @@ describe('mẫu sinh theo vùng (M2)', () => {
       'caster',
       'brute',
     ]);
-    expect([...WILDS_NEAR_SPAWN_PATTERN]).toEqual(regionById(REGION_WILDS_NEAR).spawnTable.pattern);
-    expect([...WILDS_FAR_SPAWN_PATTERN]).toEqual(regionById(REGION_WILDS_FAR).spawnTable.pattern);
-    expect(regionById(REGION_VILLAGE).spawnTable.pattern).toEqual([]);
+    expect([...WILDS_NEAR_SPAWN_PATTERN]).toEqual(zoneById(ZONE_WILDS_NEAR).spawnTable.pattern);
+    expect([...WILDS_FAR_SPAWN_PATTERN]).toEqual(zoneById(ZONE_WILDS_FAR).spawnTable.pattern);
+    expect(zoneById(ZONE_VILLAGE).spawnTable.pattern).toEqual([]);
   });
 
   it('pattern của mọi vùng chỉ chứa id có thật', () => {
-    for (const region of ALL_REGIONS) {
-      for (const id of region.spawnTable.pattern) {
-        expect(Object.prototype.hasOwnProperty.call(ENEMY_ARCHETYPES, id), `${region.id}: ${id}`).toBe(true);
+    for (const zone of ALL_ZONES) {
+      for (const id of zone.spawnTable.pattern) {
+        expect(Object.prototype.hasOwnProperty.call(ENEMY_ARCHETYPES, id), `${zone.id}: ${id}`).toBe(true);
       }
     }
   });
 });
 
-/** Số điểm sinh của một vùng, tính từ ENEMY_SPAWNS thật qua regionAt (nguồn tọa độ: world/town.ts, giá trị khóa ở worldGraph.test). */
+/** Số điểm sinh của một vùng, tính từ ENEMY_SPAWNS thật qua zoneAt (nguồn tọa độ: world/town.ts, giá trị khóa ở worldGraph.test). */
 const MAIN_SPAWN_POINTS = [
   { x: 1050, y: 1150 },
   { x: 2750, y: 1150 },
@@ -91,31 +91,31 @@ const MAIN_SPAWN_POINTS = [
   { x: 2900, y: 2350 },
 ] as const;
 
-/** Mô phỏng WorldScene: spawnIndex chạy 0..n-1, điểm = spawnIndex % 8, vùng = regionAt(điểm), bộ đếm riêng theo vùng. */
-function simulate(spawns: number): { regionId: string; pointIndex: number; id: ArchetypeId }[] {
+/** Mô phỏng WorldScene: spawnIndex chạy 0..n-1, điểm = spawnIndex % 8, vùng = zoneAt(điểm), bộ đếm riêng theo vùng. */
+function simulate(spawns: number): { zoneId: string; pointIndex: number; id: ArchetypeId }[] {
   const counts = new Map<string, number>();
   const pointTotals = new Map<string, number>();
 
   for (const point of MAIN_SPAWN_POINTS) {
-    const region = regionAt(MAIN_MAP, point.x, point.y) as RegionDef;
+    const zone = zoneAt(MAIN_MAP, point.x, point.y) as ZoneDef;
 
-    pointTotals.set(region.id, (pointTotals.get(region.id) ?? 0) + 1);
+    pointTotals.set(zone.id, (pointTotals.get(zone.id) ?? 0) + 1);
   }
 
-  const result: { regionId: string; pointIndex: number; id: ArchetypeId }[] = [];
+  const result: { zoneId: string; pointIndex: number; id: ArchetypeId }[] = [];
 
   for (let spawnIndex = 0; spawnIndex < spawns; spawnIndex += 1) {
     const pointIndex = spawnIndex % MAIN_SPAWN_POINTS.length;
     const point = MAIN_SPAWN_POINTS[pointIndex];
-    const region = regionAt(MAIN_MAP, point.x, point.y) as RegionDef;
-    const count = counts.get(region.id) ?? 0;
+    const zone = zoneAt(MAIN_MAP, point.x, point.y) as ZoneDef;
+    const count = counts.get(zone.id) ?? 0;
 
-    counts.set(region.id, count + 1);
+    counts.set(zone.id, count + 1);
 
-    const id = pickStaggeredArchetype(region.spawnTable.pattern, count, pointTotals.get(region.id) ?? 1);
+    const id = pickStaggeredArchetype(zone.spawnTable.pattern, count, pointTotals.get(zone.id) ?? 1);
 
-    expect(id, `${region.id} #${count}`).not.toBeNull();
-    result.push({ regionId: region.id, pointIndex, id: id as ArchetypeId });
+    expect(id, `${zone.id} #${count}`).not.toBeNull();
+    result.push({ zoneId: zone.id, pointIndex, id: id as ArchetypeId });
   }
 
   return result;
@@ -139,39 +139,39 @@ describe('pickStaggeredArchetype', () => {
     const counts = new Map<string, number>();
 
     for (const point of MAIN_SPAWN_POINTS) {
-      const region = regionAt(MAIN_MAP, point.x, point.y) as RegionDef;
+      const zone = zoneAt(MAIN_MAP, point.x, point.y) as ZoneDef;
 
-      counts.set(region.id, (counts.get(region.id) ?? 0) + 1);
+      counts.set(zone.id, (counts.get(zone.id) ?? 0) + 1);
     }
 
-    expect(counts.get(REGION_WILDS_NEAR)).toBe(4);
-    expect(counts.get(REGION_WILDS_FAR)).toBe(4);
-    expect(counts.get(REGION_VILLAGE)).toBeUndefined();
+    expect(counts.get(ZONE_WILDS_NEAR)).toBe(4);
+    expect(counts.get(ZONE_WILDS_FAR)).toBe(4);
+    expect(counts.get(ZONE_VILLAGE)).toBeUndefined();
   });
 
   it('tần suất archetype trên 2400 lần sinh khớp mẫu từng vùng (sai lệch <= 1%)', () => {
     const sim = simulate(2400);
 
-    for (const regionId of [REGION_WILDS_NEAR, REGION_WILDS_FAR]) {
-      const pattern = regionById(regionId).spawnTable.pattern;
-      const own = sim.filter((s) => s.regionId === regionId);
+    for (const zoneId of [ZONE_WILDS_NEAR, ZONE_WILDS_FAR]) {
+      const pattern = zoneById(zoneId).spawnTable.pattern;
+      const own = sim.filter((s) => s.zoneId === zoneId);
       const expected = new Map<string, number>();
 
       for (const id of pattern) {
         expected.set(id, (expected.get(id) ?? 0) + 1 / pattern.length);
       }
 
-      expect(own.length, regionId).toBeGreaterThanOrEqual(1200);
+      expect(own.length, zoneId).toBeGreaterThanOrEqual(1200);
 
       for (const [id, share] of expected) {
         const actual = own.filter((s) => s.id === id).length / own.length;
 
-        expect(Math.abs(actual - share), `${regionId} ${id}`).toBeLessThanOrEqual(0.01);
+        expect(Math.abs(actual - share), `${zoneId} ${id}`).toBeLessThanOrEqual(0.01);
       }
 
       // Chỉ chứa id thuộc mẫu.
       for (const s of own) {
-        expect(pattern.includes(s.id), `${regionId} ${s.id}`).toBe(true);
+        expect(pattern.includes(s.id), `${zoneId} ${s.id}`).toBe(true);
       }
     }
   });
@@ -179,12 +179,12 @@ describe('pickStaggeredArchetype', () => {
   it('chính xác theo chu kỳ: vùng gần mỗi 16 lần, vùng xa mỗi 24 lần đủ đúng bảng', () => {
     const sim = simulate(8 * 48);
 
-    for (const [regionId, period] of [
-      [REGION_WILDS_NEAR, 16],
-      [REGION_WILDS_FAR, 24],
+    for (const [zoneId, period] of [
+      [ZONE_WILDS_NEAR, 16],
+      [ZONE_WILDS_FAR, 24],
     ] as const) {
-      const pattern = regionById(regionId).spawnTable.pattern;
-      const own = sim.filter((s) => s.regionId === regionId).slice(0, period * 3);
+      const pattern = zoneById(zoneId).spawnTable.pattern;
+      const own = sim.filter((s) => s.zoneId === zoneId).slice(0, period * 3);
 
       for (let start = 0; start + period <= own.length; start += period) {
         const chunk = own.slice(start, start + period);
@@ -192,7 +192,7 @@ describe('pickStaggeredArchetype', () => {
         for (const id of new Set(pattern)) {
           const want = (pattern.filter((p) => p === id).length / pattern.length) * period;
 
-          expect(chunk.filter((s) => s.id === id).length, `${regionId} ${id} @${start}`).toBe(want);
+          expect(chunk.filter((s) => s.id === id).length, `${zoneId} ${id} @${start}`).toBe(want);
         }
       }
     }
@@ -211,11 +211,11 @@ describe('pickStaggeredArchetype', () => {
   it('không sinh quái trong làng và chuỗi Arena không bị ảnh hưởng', () => {
     const sim = simulate(200);
 
-    expect(sim.some((s) => s.regionId === REGION_VILLAGE)).toBe(false);
+    expect(sim.some((s) => s.zoneId === ZONE_VILLAGE)).toBe(false);
 
     const arenaMap = WORLD.maps.find((m) => m.id === MAP_BOSS_ARENA_1);
 
-    expect(arenaMap?.regions.map((r) => r.id)).toEqual([REGION_ARENA]);
+    expect(arenaMap?.zones.map((r) => r.id)).toEqual([ZONE_ARENA]);
   });
 });
 

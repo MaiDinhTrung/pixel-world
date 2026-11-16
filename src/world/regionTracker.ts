@@ -7,41 +7,41 @@
  *  - Một vùng vừa được hiện biển thì không hiện lại trong cooldownMs.
  *  - Lần đầu công nhận một vùng (đầu lượt) cũng hiện biển như bình thường.
  */
-import type { RegionId } from './worldGraph';
+import type { ZoneId } from './worldGraph';
 
-export interface RegionTrackerOptions {
+export interface ZoneTrackerOptions {
   /** Thời gian (ms) vùng mới phải ổn định. */
   readonly stableMs: number;
   /** Thời gian chờ (ms) trước khi cùng một vùng được hiện biển lại. */
   readonly cooldownMs: number;
 }
 
-export interface RegionTracker {
+export interface ZoneTracker {
   /**
    * Gọi mỗi khung hình với vùng hiện tại (null = không vùng nào có biển) và đồng hồ đơn điệu `now` (ms).
    * Trả id vùng cần HIỆN BIỂN ngay lúc này; ngược lại null.
    */
-  update(regionId: RegionId | null, now: number): RegionId | null;
+  update(zoneId: ZoneId | null, now: number): ZoneId | null;
   /** Vùng đã được công nhận gần nhất (kể cả khi biển bị chặn bởi thời gian chờ). */
-  getCurrent(): RegionId | null;
+  getCurrent(): ZoneId | null;
 }
 
-export function createRegionTracker(options: RegionTrackerOptions): RegionTracker {
-  let current: RegionId | null = null;
-  let candidate: RegionId | null = null;
+export function createZoneTracker(options: ZoneTrackerOptions): ZoneTracker {
+  let current: ZoneId | null = null;
+  let candidate: ZoneId | null = null;
   let candidateSince = 0;
-  const lastShownAt = new Map<RegionId, number>();
+  const lastShownAt = new Map<ZoneId, number>();
 
   return {
-    update(regionId, now) {
-      if (regionId === null || regionId === current) {
+    update(zoneId, now) {
+      if (zoneId === null || zoneId === current) {
         candidate = null;
 
         return null;
       }
 
-      if (regionId !== candidate) {
-        candidate = regionId;
+      if (zoneId !== candidate) {
+        candidate = zoneId;
         candidateSince = now;
       }
 
@@ -49,18 +49,18 @@ export function createRegionTracker(options: RegionTrackerOptions): RegionTracke
         return null;
       }
 
-      current = regionId;
+      current = zoneId;
       candidate = null;
 
-      const last = lastShownAt.get(regionId);
+      const last = lastShownAt.get(zoneId);
 
       if (last !== undefined && now - last < options.cooldownMs) {
         return null;
       }
 
-      lastShownAt.set(regionId, now);
+      lastShownAt.set(zoneId, now);
 
-      return regionId;
+      return zoneId;
     },
     getCurrent() {
       return current;
@@ -69,6 +69,6 @@ export function createRegionTracker(options: RegionTrackerOptions): RegionTracke
 }
 
 /** Chuỗi mức nguy hiểm trên biển tên: 0 → "AN TOÀN", n → n ký tự ◆. */
-export function formatRegionDanger(danger: number): string {
+export function formatZoneDanger(danger: number): string {
   return danger <= 0 ? 'AN TOÀN' : '◆'.repeat(danger);
 }

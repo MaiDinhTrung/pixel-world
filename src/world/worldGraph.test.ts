@@ -19,10 +19,10 @@ import {
   MAIN_DEFAULT_SPAWN,
   MAP_BOSS_ARENA_1,
   MAP_STARTING_LANDS,
-  REGION_ARENA,
-  REGION_VILLAGE,
-  REGION_WILDS_FAR,
-  REGION_WILDS_NEAR,
+  ZONE_ARENA,
+  ZONE_VILLAGE,
+  ZONE_WILDS_FAR,
+  ZONE_WILDS_NEAR,
   WILDS_FAR_TIER_OFFSET,
   WILDS_NEAR_BOUNDS,
   WORLD,
@@ -36,7 +36,7 @@ import {
   effectiveThreatTier,
   evaluateConnection,
   findConnection,
-  regionAt,
+  zoneAt,
   requestTravel,
   validateWorld,
   type ConnectionAccessInput,
@@ -102,9 +102,9 @@ describe('độ thuần của worldGraph/worldConfig', () => {
   }
 });
 
-// ── regionAt ────────────────────────────────────────────────────────────────
+// ── zoneAt ────────────────────────────────────────────────────────────────
 
-describe('regionAt', () => {
+describe('zoneAt', () => {
   it('safe === isInsideVillage trên lưới phủ biên VILLAGE_ZONE (±1 px) và nhiều điểm trong/ngoài', () => {
     const right = VILLAGE_ZONE.x + VILLAGE_ZONE.width;
     const bottom = VILLAGE_ZONE.y + VILLAGE_ZONE.height;
@@ -135,18 +135,18 @@ describe('regionAt', () => {
 
     for (const x of xs) {
       for (const y of ys) {
-        const region = regionAt(STARTING_LANDS, x, y);
+        const zone = zoneAt(STARTING_LANDS, x, y);
 
-        expect(region, `(${x},${y})`).not.toBeNull();
-        expect(region?.safe, `(${x},${y})`).toBe(isInsideVillage(x, y));
+        expect(zone, `(${x},${y})`).not.toBeNull();
+        expect(zone?.safe, `(${x},${y})`).toBe(isInsideVillage(x, y));
         const insideNear =
           x >= WILDS_NEAR_BOUNDS.x &&
           x <= WILDS_NEAR_BOUNDS.x + WILDS_NEAR_BOUNDS.width &&
           y >= WILDS_NEAR_BOUNDS.y &&
           y <= WILDS_NEAR_BOUNDS.y + WILDS_NEAR_BOUNDS.height;
 
-        expect(region?.id, `(${x},${y})`).toBe(
-          isInsideVillage(x, y) ? REGION_VILLAGE : insideNear ? REGION_WILDS_NEAR : REGION_WILDS_FAR,
+        expect(zone?.id, `(${x},${y})`).toBe(
+          isInsideVillage(x, y) ? ZONE_VILLAGE : insideNear ? ZONE_WILDS_NEAR : ZONE_WILDS_FAR,
         );
         checked += 1;
       }
@@ -156,31 +156,31 @@ describe('regionAt', () => {
   });
 
   it('bounds của làng là VILLAGE_ZONE', () => {
-    const village = STARTING_LANDS.regions.find((region) => region.id === REGION_VILLAGE);
+    const village = STARTING_LANDS.zones.find((zone) => zone.id === ZONE_VILLAGE);
 
     expect(village?.bounds).toEqual(VILLAGE_ZONE);
   });
 
-  it('Arena: mọi điểm thuộc region.arena', () => {
-    expect(regionAt(BOSS_ARENA, 800, 544)?.id).toBe(REGION_ARENA);
-    expect(regionAt(BOSS_ARENA, 0, 0)?.id).toBe(REGION_ARENA);
+  it('Arena: mọi điểm thuộc zone.arena', () => {
+    expect(zoneAt(BOSS_ARENA, 800, 544)?.id).toBe(ZONE_ARENA);
+    expect(zoneAt(BOSS_ARENA, 0, 0)?.id).toBe(ZONE_ARENA);
   });
 
   it('chọn vùng hẹp nhất khi vùng lồng nhau; không có vùng nào chứa → vùng "phần còn lại"; không có → null', () => {
-    const base = STARTING_LANDS.regions[0];
+    const base = STARTING_LANDS.zones[0];
     const map: MapDef = {
       ...STARTING_LANDS,
-      regions: [
-        { ...base, id: 'region.big', bounds: { x: 0, y: 0, width: 1000, height: 1000 } },
-        { ...base, id: 'region.small', bounds: { x: 100, y: 100, width: 50, height: 50 } },
-        { ...base, id: 'region.rest', bounds: null },
+      zones: [
+        { ...base, id: 'zone.big', bounds: { x: 0, y: 0, width: 1000, height: 1000 } },
+        { ...base, id: 'zone.small', bounds: { x: 100, y: 100, width: 50, height: 50 } },
+        { ...base, id: 'zone.rest', bounds: null },
       ],
     };
 
-    expect(regionAt(map, 120, 120)?.id).toBe('region.small');
-    expect(regionAt(map, 500, 500)?.id).toBe('region.big');
-    expect(regionAt(map, 2000, 2000)?.id).toBe('region.rest');
-    expect(regionAt({ ...map, regions: map.regions.slice(0, 2) }, 2000, 2000)).toBeNull();
+    expect(zoneAt(map, 120, 120)?.id).toBe('zone.small');
+    expect(zoneAt(map, 500, 500)?.id).toBe('zone.big');
+    expect(zoneAt(map, 2000, 2000)?.id).toBe('zone.rest');
+    expect(zoneAt({ ...map, zones: map.zones.slice(0, 2) }, 2000, 2000)).toBeNull();
   });
 });
 
@@ -196,11 +196,11 @@ describe('dữ liệu worldConfig', () => {
     expect(ARENA_TO_VILLAGE.from.mapId).toBe(MAP_BOSS_ARENA_1);
   });
 
-  it('region.arena dùng trần quái con của Arena; làng an toàn, không sinh quái; mẫu sinh theo vùng (M2)', () => {
-    const arena = BOSS_ARENA.regions[0];
-    const village = STARTING_LANDS.regions.find((region) => region.id === REGION_VILLAGE);
-    const near = STARTING_LANDS.regions.find((region) => region.id === REGION_WILDS_NEAR);
-    const far = STARTING_LANDS.regions.find((region) => region.id === REGION_WILDS_FAR);
+  it('zone.arena dùng trần quái con của Arena; làng an toàn, không sinh quái; mẫu sinh theo vùng (M2)', () => {
+    const arena = BOSS_ARENA.zones[0];
+    const village = STARTING_LANDS.zones.find((zone) => zone.id === ZONE_VILLAGE);
+    const near = STARTING_LANDS.zones.find((zone) => zone.id === ZONE_WILDS_NEAR);
+    const far = STARTING_LANDS.zones.find((zone) => zone.id === ZONE_WILDS_FAR);
 
     expect(arena.maxAliveCap).toBe(BOSS_ARENA_MINION_MAX_ALIVE);
     expect(village?.safe).toBe(true);
@@ -376,11 +376,11 @@ describe('validateWorld', () => {
 
   it('id duy nhất; mọi đích tồn tại; mỗi map có ≥1 connection đi và ≥1 đi tới', () => {
     const mapIds = WORLD.maps.map((map) => map.id);
-    const regionIds = WORLD.maps.flatMap((map) => map.regions.map((region) => region.id));
+    const zoneIds = WORLD.maps.flatMap((map) => map.zones.map((zone) => zone.id));
     const connIds = WORLD.maps.flatMap((map) => map.connections.map((conn) => conn.id));
 
     expect(new Set(mapIds).size).toBe(mapIds.length);
-    expect(new Set(regionIds).size).toBe(regionIds.length);
+    expect(new Set(zoneIds).size).toBe(zoneIds.length);
     expect(new Set(connIds).size).toBe(connIds.length);
 
     for (const map of WORLD.maps) {
@@ -399,24 +399,24 @@ describe('validateWorld', () => {
   it('bắt được dữ liệu cố ý hỏng', () => {
     const cases: Array<[WorldErrorCode, (world: Loose) => void]> = [
       ['duplicate_map_id', (w) => { w.maps[1].id = w.maps[0].id; }],
-      ['duplicate_region_id', (w) => { w.maps[1].regions[0].id = w.maps[0].regions[0].id; }],
+      ['duplicate_zone_id', (w) => { w.maps[1].zones[0].id = w.maps[0].zones[0].id; }],
       ['duplicate_connection_id', (w) => { w.maps[1].connections[0].id = w.maps[0].connections[0].id; }],
-      ['region_map_mismatch', (w) => { w.maps[0].regions[0].mapId = 'map.khac'; }],
-      ['region_out_of_bounds', (w) => { w.maps[0].regions[0].bounds = { x: WORLD_WIDTH - 10, y: 0, width: 100, height: 100 }; }],
-      ['region_out_of_bounds', (w) => { w.maps[0].regions[0].bounds = { x: 0, y: 0, width: 0, height: 10 }; }],
-      ['region_invalid_tier', (w) => { w.maps[0].regions[0].tierFloor = MAX_THREAT_TIER + 1; }],
-      ['region_invalid_display', (w) => { w.maps[0].regions[1].display.description = 'x'.repeat(41); }],
-      ['region_invalid_display', (w) => { w.maps[0].regions[1].display.danger = 4; }],
-      ['region_invalid_display', (w) => { w.maps[0].regions[1].display.danger = 1.5; }],
-      ['region_invalid_display', (w) => { w.maps[0].regions[2].display.name = '  '; }],
-      ['region_unknown_archetype', (w) => { w.maps[0].regions[1].spawnTable.pattern = ['grunt', 'khong_co']; }],
+      ['zone_map_mismatch', (w) => { w.maps[0].zones[0].mapId = 'map.khac'; }],
+      ['zone_out_of_bounds', (w) => { w.maps[0].zones[0].bounds = { x: WORLD_WIDTH - 10, y: 0, width: 100, height: 100 }; }],
+      ['zone_out_of_bounds', (w) => { w.maps[0].zones[0].bounds = { x: 0, y: 0, width: 0, height: 10 }; }],
+      ['zone_invalid_tier', (w) => { w.maps[0].zones[0].tierFloor = MAX_THREAT_TIER + 1; }],
+      ['zone_invalid_display', (w) => { w.maps[0].zones[1].display.description = 'x'.repeat(41); }],
+      ['zone_invalid_display', (w) => { w.maps[0].zones[1].display.danger = 4; }],
+      ['zone_invalid_display', (w) => { w.maps[0].zones[1].display.danger = 1.5; }],
+      ['zone_invalid_display', (w) => { w.maps[0].zones[2].display.name = '  '; }],
+      ['zone_unknown_archetype', (w) => { w.maps[0].zones[1].spawnTable.pattern = ['grunt', 'khong_co']; }],
       // M3: eliteSlots sai (id không tồn tại / không cận chiến / vùng an toàn / vùng có điểm sinh riêng).
-      ['region_invalid_elite', (w) => { w.maps[0].regions[1].eliteSlots = ['khong_co']; }],
-      ['region_invalid_elite', (w) => { w.maps[0].regions[1].eliteSlots = ['caster']; }],
-      ['region_invalid_elite', (w) => { w.maps[0].regions[0].eliteSlots = ['grunt']; }],
-      ['region_invalid_elite', (w) => { w.maps[1].regions[0].eliteSlots = ['grunt']; }],
-      ['multiple_fallback_regions', (w) => { w.maps[0].regions[0].bounds = null; }],
-      ['no_regions', (w) => { w.maps[1].regions = []; }],
+      ['zone_invalid_elite', (w) => { w.maps[0].zones[1].eliteSlots = ['khong_co']; }],
+      ['zone_invalid_elite', (w) => { w.maps[0].zones[1].eliteSlots = ['caster']; }],
+      ['zone_invalid_elite', (w) => { w.maps[0].zones[0].eliteSlots = ['grunt']; }],
+      ['zone_invalid_elite', (w) => { w.maps[1].zones[0].eliteSlots = ['grunt']; }],
+      ['multiple_fallback_zones', (w) => { w.maps[0].zones[0].bounds = null; }],
+      ['no_zones', (w) => { w.maps[1].zones = []; }],
       ['connection_from_out_of_bounds', (w) => { w.maps[0].connections[0].from.x = -5; }],
       ['missing_target_map', (w) => { w.maps[0].connections[0].to.mapId = 'map.khong_co'; }],
       ['missing_target_spawn', (w) => { w.maps[0].connections[0].to.spawnId = 'fromPortal:conn.khong_co'; }],
@@ -433,26 +433,26 @@ describe('validateWorld', () => {
     }
   });
 
-  it('eliteSlots sai chỉ gây đúng mã region_invalid_elite (mỗi slot sai một lỗi); slot hợp lệ không lỗi', () => {
+  it('eliteSlots sai chỉ gây đúng mã zone_invalid_elite (mỗi slot sai một lỗi); slot hợp lệ không lỗi', () => {
     const only: Array<[string, (world: Loose) => void]> = [
-      ['id không tồn tại', (w) => { w.maps[0].regions[1].eliteSlots = ['khong_co']; }],
-      ['không phải cận chiến', (w) => { w.maps[0].regions[2].eliteSlots = ['caster']; }],
-      ['vùng an toàn (làng)', (w) => { w.maps[0].regions[0].eliteSlots = ['grunt']; }],
-      ['vùng có điểm sinh riêng (Arena)', (w) => { w.maps[1].regions[0].eliteSlots = ['brute']; }],
+      ['id không tồn tại', (w) => { w.maps[0].zones[1].eliteSlots = ['khong_co']; }],
+      ['không phải cận chiến', (w) => { w.maps[0].zones[2].eliteSlots = ['caster']; }],
+      ['vùng an toàn (làng)', (w) => { w.maps[0].zones[0].eliteSlots = ['grunt']; }],
+      ['vùng có điểm sinh riêng (Arena)', (w) => { w.maps[1].zones[0].eliteSlots = ['brute']; }],
     ];
 
     for (const [label, mutate] of only) {
-      expect(codes(broken(mutate)), label).toEqual(['region_invalid_elite']);
+      expect(codes(broken(mutate)), label).toEqual(['zone_invalid_elite']);
     }
 
     expect(
-      codes(broken((w) => { w.maps[0].regions[1].eliteSlots = ['grunt', 'brute', 'swarmer']; })),
+      codes(broken((w) => { w.maps[0].zones[1].eliteSlots = ['grunt', 'brute', 'swarmer']; })),
       'nhiều slot cận chiến hợp lệ',
     ).toEqual([]);
     expect(
-      codes(broken((w) => { w.maps[0].regions[1].eliteSlots = ['khong_co', 'caster']; })),
+      codes(broken((w) => { w.maps[0].zones[1].eliteSlots = ['khong_co', 'caster']; })),
       'hai slot sai = hai lỗi',
-    ).toEqual(['region_invalid_elite', 'region_invalid_elite']);
+    ).toEqual(['zone_invalid_elite', 'zone_invalid_elite']);
   });
 });
 
@@ -490,8 +490,8 @@ describe('effectiveThreatTier', () => {
     let zeroOffset = 0;
 
     for (const map of WORLD.maps) {
-      for (const region of map.regions) {
-        if (region.tierOffset !== 0) {
+      for (const zone of map.zones) {
+        if (zone.tierOffset !== 0) {
           continue;
         }
 
@@ -499,11 +499,11 @@ describe('effectiveThreatTier', () => {
 
         for (let tier = 0; tier <= MAX_THREAT_TIER + 2; tier += 1) {
           for (const elapsed of [tier * THREAT_INTERVAL_MS - 1, tier * THREAT_INTERVAL_MS, tier * THREAT_INTERVAL_MS + 1]) {
-            expect(effectiveThreatTier(elapsed, region), `${region.id} @${elapsed}`).toBe(legacyThreatTier(elapsed));
+            expect(effectiveThreatTier(elapsed, zone), `${zone.id} @${elapsed}`).toBe(legacyThreatTier(elapsed));
           }
         }
 
-        expect(effectiveThreatTier(1e9, region)).toBe(legacyThreatTier(1e9));
+        expect(effectiveThreatTier(1e9, zone)).toBe(legacyThreatTier(1e9));
       }
     }
 
@@ -511,7 +511,7 @@ describe('effectiveThreatTier', () => {
   });
 
   it('dữ liệu thật: vùng xa = bậc cũ + 1, kẹp theo tierCap = MAX_THREAT_TIER', () => {
-    const far = STARTING_LANDS.regions.find((region) => region.id === REGION_WILDS_FAR) as MapDef['regions'][number];
+    const far = STARTING_LANDS.zones.find((zone) => zone.id === ZONE_WILDS_FAR) as MapDef['zones'][number];
 
     for (let tier = 0; tier <= MAX_THREAT_TIER + 2; tier += 1) {
       for (const elapsed of [tier * THREAT_INTERVAL_MS - 1, tier * THREAT_INTERVAL_MS, tier * THREAT_INTERVAL_MS + 1]) {
@@ -578,46 +578,46 @@ describe('vùng của điểm sinh quái (W3)', () => {
 
   it('4 điểm đầu → wilds_near, 4 điểm sau → wilds_far', () => {
     spawns.forEach((point, index) => {
-      expect(regionAt(STARTING_LANDS, point.x, point.y)?.id, `(${point.x},${point.y})`).toBe(
-        index < 4 ? REGION_WILDS_NEAR : REGION_WILDS_FAR,
+      expect(zoneAt(STARTING_LANDS, point.x, point.y)?.id, `(${point.x},${point.y})`).toBe(
+        index < 4 ? ZONE_WILDS_NEAR : ZONE_WILDS_FAR,
       );
     });
   });
 
   it('jitter ±48 (và kẹp lề 48) không làm điểm sinh đổi vùng, không rơi vào vùng an toàn', () => {
     for (const point of spawns) {
-      const home = regionAt(STARTING_LANDS, point.x, point.y);
+      const home = zoneAt(STARTING_LANDS, point.x, point.y);
 
       for (const dx of [-48, 0, 48]) {
         for (const dy of [-48, 0, 48]) {
           const x = Math.min(WORLD_WIDTH - 48, Math.max(48, point.x + dx));
           const y = Math.min(WORLD_HEIGHT - 48, Math.max(48, point.y + dy));
 
-          expect(regionAt(STARTING_LANDS, x, y)?.id, `(${x},${y})`).toBe(home?.id);
-          expect(regionAt(STARTING_LANDS, x, y)?.safe, `(${x},${y})`).toBe(false);
+          expect(zoneAt(STARTING_LANDS, x, y)?.id, `(${x},${y})`).toBe(home?.id);
+          expect(zoneAt(STARTING_LANDS, x, y)?.safe, `(${x},${y})`).toBe(false);
           expect(isInsideVillage(x, y), `(${x},${y})`).toBe(false);
         }
       }
     }
   });
 
-  it('region.village vẫn an toàn và nằm trọn trong wilds_near (regionAt chọn vùng hẹp nhất)', () => {
+  it('zone.village vẫn an toàn và nằm trọn trong wilds_near (zoneAt chọn vùng hẹp nhất)', () => {
     const near = WILDS_NEAR_BOUNDS;
 
     expect(VILLAGE_ZONE.x).toBeGreaterThanOrEqual(near.x);
     expect(VILLAGE_ZONE.y).toBeGreaterThanOrEqual(near.y);
     expect(VILLAGE_ZONE.x + VILLAGE_ZONE.width).toBeLessThanOrEqual(near.x + near.width);
     expect(VILLAGE_ZONE.y + VILLAGE_ZONE.height).toBeLessThanOrEqual(near.y + near.height);
-    expect(regionAt(STARTING_LANDS, MAIN_DEFAULT_SPAWN.x, MAIN_DEFAULT_SPAWN.y)?.id).toBe(REGION_VILLAGE);
+    expect(zoneAt(STARTING_LANDS, MAIN_DEFAULT_SPAWN.x, MAIN_DEFAULT_SPAWN.y)?.id).toBe(ZONE_VILLAGE);
   });
 
   it('bậc quái theo điểm sinh: near = bậc thời gian cũ, far = +1 (kẹp MAX_THREAT_TIER)', () => {
     for (const elapsed of [0, 59999, 60000, 5 * THREAT_INTERVAL_MS, 1e9]) {
       spawns.forEach((point, index) => {
-        const region = regionAt(STARTING_LANDS, point.x, point.y);
+        const zone = zoneAt(STARTING_LANDS, point.x, point.y);
 
-        expect(region).not.toBeNull();
-        expect(effectiveThreatTier(elapsed, region as NonNullable<typeof region>)).toBe(
+        expect(zone).not.toBeNull();
+        expect(effectiveThreatTier(elapsed, zone as NonNullable<typeof zone>)).toBe(
           index < 4 ? legacyThreatTier(elapsed) : Math.min(MAX_THREAT_TIER, legacyThreatTier(elapsed) + 1),
         );
       });
@@ -628,16 +628,16 @@ describe('vùng của điểm sinh quái (W3)', () => {
 describe('biển tên vùng (dữ liệu)', () => {
   it('mọi vùng có biển hợp lệ: tên không rỗng, 0–3 ◆, mô tả ≤ 40 ký tự; Arena không có biển', () => {
     for (const map of WORLD.maps) {
-      for (const region of map.regions) {
-        if (region.id === REGION_ARENA) {
-          expect(region.display).toBeNull();
+      for (const zone of map.zones) {
+        if (zone.id === ZONE_ARENA) {
+          expect(zone.display).toBeNull();
           continue;
         }
 
-        expect(region.display, region.id).not.toBeNull();
-        expect(region.display?.name.length).toBeGreaterThan(0);
-        expect(region.display?.description.length).toBeLessThanOrEqual(40);
-        expect(region.display?.danger).toBe(region.safe ? 0 : region.id === REGION_WILDS_NEAR ? 1 : 2);
+        expect(zone.display, zone.id).not.toBeNull();
+        expect(zone.display?.name.length).toBeGreaterThan(0);
+        expect(zone.display?.description.length).toBeLessThanOrEqual(40);
+        expect(zone.display?.danger).toBe(zone.safe ? 0 : zone.id === ZONE_WILDS_NEAR ? 1 : 2);
       }
     }
   });

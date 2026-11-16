@@ -17,11 +17,11 @@ import {
   type EliteAffixId,
   type EnemyArchetype,
 } from '../config/enemyConfig';
-import type { Point, RegionDef } from './worldGraph';
+import type { Point, ZoneDef } from './worldGraph';
 
 export interface EliteSpawnState {
   /** Số quái thường đã hạ trong vùng này kể từ lần Elite gần nhất của vùng (hoặc từ đầu lượt chơi). */
-  readonly killsInRegion: number;
+  readonly killsInZone: number;
   /** Số Elite đang sống. */
   readonly aliveElites: number;
   /** Thời gian (ms) từ lần Elite xuất hiện gần nhất; chưa có Elite nào → `Infinity`. */
@@ -35,14 +35,14 @@ export interface EliteSpawnState {
  */
 export function shouldSpawnElite(
   state: EliteSpawnState,
-  region: Pick<RegionDef, 'safe' | 'eliteSlots'>,
+  zone: Pick<ZoneDef, 'safe' | 'eliteSlots'>,
 ): boolean {
-  if (region.safe || region.eliteSlots.length === 0) {
+  if (zone.safe || zone.eliteSlots.length === 0) {
     return false;
   }
 
   return (
-    state.killsInRegion >= ELITE_KILLS_INTERVAL &&
+    state.killsInZone >= ELITE_KILLS_INTERVAL &&
     state.aliveElites < ELITE_MAX_ALIVE &&
     state.sinceLastEliteMs >= ELITE_MIN_GAP_MS
   );

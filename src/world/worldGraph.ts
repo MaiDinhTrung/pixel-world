@@ -1,9 +1,9 @@
 /**
- * Mô hình World/Region/Map THUẦN (Gói W1, docs/WORLD_MAP_DESIGN.md §3): kiểu dữ liệu, tra cứu vùng,
+ * Mô hình World/Map/Zone (Region nhóm Map sẽ thêm ở gói sau; xem docs/WORLD_ARCHITECTURE.md) THUẦN (Gói W1, docs/WORLD_MAP_DESIGN.md §3): kiểu dữ liệu, tra cứu vùng,
  * luật khóa cổng, thời gian → bậc độ khó theo vùng, kiểm tra dữ liệu.
  *
  * ĐÃ NỐI (W2): WorldScene/BossArenaScene đọc cổng, đích, khóa cổng và bậc thời gian từ đây. W3: bậc theo vùng của
- * điểm sinh (`regionAt` + `effectiveThreatTier`) và biển tên vùng (`RegionDef.display`). Không phụ thuộc Phaser,
+ * điểm sinh (`zoneAt` + `effectiveThreatTier`) và biển tên vùng (`ZoneDef.display`). Không phụ thuộc Phaser,
  * không ngẫu nhiên, không đọc thời gian hệ thống. Dữ liệu cụ thể ở `config/worldConfig.ts`.
  */
 import { MAX_THREAT_TIER, THREAT_INTERVAL_MS } from '../config/combatConfig';
@@ -18,7 +18,7 @@ import {
 // ── Id ổn định (không đổi tên sau phát hành) ────────────────────────────────
 
 export type MapId = `map.${string}`;
-export type RegionId = `region.${string}`;
+export type ZoneId = `zone.${string}`;
 export type ConnectionId = `conn.${string}`;
 export type SpawnId = 'default' | `fromPortal:${ConnectionId}`;
 
@@ -46,20 +46,20 @@ export interface SpawnTable {
   readonly points: readonly Point[];
 }
 
-/** Thông tin biển tên vùng (W3, D9): tên, mức nguy hiểm ◆ (0 = an toàn), một dòng mô tả ≤ REGION_DESCRIPTION_MAX_CHARS ký tự. */
-export interface RegionDisplay {
+/** Thông tin biển tên vùng (W3, D9): tên, mức nguy hiểm ◆ (0 = an toàn), một dòng mô tả ≤ ZONE_DESCRIPTION_MAX_CHARS ký tự. */
+export interface ZoneDisplay {
   readonly name: string;
   readonly danger: number;
   readonly description: string;
 }
 
 /** Số ◆ tối đa của biển tên (D9: 1–3; 0 = an toàn). */
-export const REGION_DANGER_MAX = 3;
+export const ZONE_DANGER_MAX = 3;
 /** Độ dài tối đa của dòng mô tả trên biển tên (D9). */
-export const REGION_DESCRIPTION_MAX_CHARS = 40;
+export const ZONE_DESCRIPTION_MAX_CHARS = 40;
 
-export interface RegionDef {
-  readonly id: RegionId;
+export interface ZoneDef {
+  readonly id: ZoneId;
   readonly mapId: MapId;
   /** Hình chữ nhật (biên TÍNH CẢ cạnh, khớp isInsideVillage). null = "phần còn lại" của map (tối đa một vùng/map). */
   readonly bounds: Rect | null;
@@ -77,7 +77,7 @@ export interface RegionDef {
    */
   readonly eliteSlots: readonly ArchetypeId[];
   /** Biển tên khi vào vùng; null = không hiện biển (ví dụ Arena). */
-  readonly display: RegionDisplay | null;
+  readonly display: ZoneDisplay | null;
 }
 
 /** `always_open` và `boss_alive` làm việc thật; `boss_ready`, `min_level` chừa chỗ (chưa có trong kiểu). */
@@ -106,7 +106,7 @@ export interface MapDef {
   readonly kind: 'overworld' | 'boss';
   readonly lighting: 'day_night' | 'fixed';
   readonly playerSpawns: Readonly<Partial<Record<SpawnId, Point>>>;
-  readonly regions: readonly RegionDef[];
+  readonly zones: readonly ZoneDef[];
   readonly connections: readonly ConnectionDef[];
   /** Nơi hồi sinh khi chết (D6: về làng). */
   readonly deathRespawn: { readonly mapId: MapId; readonly spawnId: SpawnId };
@@ -150,25 +150,25 @@ function rectContains(rect: Rect, x: number, y: number): boolean {
  * Vùng hẹp nhất (diện tích nhỏ nhất) chứa điểm; không vùng nào chứa → vùng "phần còn lại"
  * (bounds null) của map; map không có vùng như vậy → null.
  */
-export function regionAt(map: MapDef, x: number, y: number): RegionDef | null {
-  let best: RegionDef | null = null;
+export function zoneAt(map: MapDef, x: number, y: number): ZoneDef | null {
+  let best: ZoneDef | null = null;
   let bestArea = Infinity;
-  let fallback: RegionDef | null = null;
+  let fallback: ZoneDef | null = null;
 
-  for (const region of map.regions) {
-    if (region.bounds === null) {
-      fallback ??= region;
+  for (const zone of map.zones) {
+    if (zone.bounds === null) {
+      fallback ??= zone;
       continue;
     }
 
-    if (!rectContains(region.bounds, x, y)) {
+    if (!rectContains(zone.bounds, x, y)) {
       continue;
     }
 
-    const area = region.bounds.width * region.bounds.height;
+    const area = zone.bounds.width * zone.bounds.height;
 
     if (area < bestArea) {
-      best = region;
+      best = zone;
       bestArea = area;
     }
   }
@@ -262,27 +262,27 @@ export function timeThreatTier(elapsedMs: number): number {
  */
 export function effectiveThreatTier(
   elapsedMs: number,
-  region: Pick<RegionDef, 'tierOffset' | 'tierFloor' | 'tierCap'>,
+  zone: Pick<ZoneDef, 'tierOffset' | 'tierFloor' | 'tierCap'>,
 ): number {
-  const raw = timeThreatTier(elapsedMs) + region.tierOffset;
+  const raw = timeThreatTier(elapsedMs) + zone.tierOffset;
 
-  return Math.min(region.tierCap, Math.max(region.tierFloor, raw));
+  return Math.min(zone.tierCap, Math.max(zone.tierFloor, raw));
 }
 
 // ── Kiểm tra dữ liệu ────────────────────────────────────────────────────────
 
 export type WorldErrorCode =
   | 'duplicate_map_id'
-  | 'duplicate_region_id'
+  | 'duplicate_zone_id'
   | 'duplicate_connection_id'
-  | 'region_map_mismatch'
-  | 'region_out_of_bounds'
-  | 'region_invalid_tier'
-  | 'region_invalid_display'
-  | 'region_unknown_archetype'
-  | 'region_invalid_elite'
-  | 'multiple_fallback_regions'
-  | 'no_regions'
+  | 'zone_map_mismatch'
+  | 'zone_out_of_bounds'
+  | 'zone_invalid_tier'
+  | 'zone_invalid_display'
+  | 'zone_unknown_archetype'
+  | 'zone_invalid_elite'
+  | 'multiple_fallback_zones'
+  | 'no_zones'
   | 'connection_from_out_of_bounds'
   | 'missing_target_map'
   | 'missing_target_spawn'
@@ -310,7 +310,7 @@ export function validateWorld(world: WorldDef): WorldError[] {
   };
 
   const mapsById = new Map<string, MapDef>();
-  const regionIds = new Set<string>();
+  const zoneIds = new Set<string>();
   const connectionIds = new Set<string>();
 
   for (const map of world.maps) {
@@ -324,12 +324,12 @@ export function validateWorld(world: WorldDef): WorldError[] {
   const incoming = new Set<string>();
 
   for (const map of world.maps) {
-    if (map.regions.length === 0) {
-      fail('no_regions', `${map.id} không có vùng nào`);
+    if (map.zones.length === 0) {
+      fail('no_zones', `${map.id} không có vùng nào`);
     }
 
-    if (map.regions.filter((region) => region.bounds === null).length > 1) {
-      fail('multiple_fallback_regions', `${map.id} có hơn một vùng "phần còn lại"`);
+    if (map.zones.filter((zone) => zone.bounds === null).length > 1) {
+      fail('multiple_fallback_zones', `${map.id} có hơn một vùng "phần còn lại"`);
     }
 
     if (map.playerSpawns.default === undefined) {
@@ -351,53 +351,53 @@ export function validateWorld(world: WorldDef): WorldError[] {
       fail('missing_death_respawn', `${map.id} deathRespawn trỏ tới nơi không tồn tại`);
     }
 
-    for (const region of map.regions) {
-      if (regionIds.has(region.id)) {
-        fail('duplicate_region_id', `vùng trùng id: ${region.id}`);
+    for (const zone of map.zones) {
+      if (zoneIds.has(zone.id)) {
+        fail('duplicate_zone_id', `vùng trùng id: ${zone.id}`);
       }
 
-      regionIds.add(region.id);
+      zoneIds.add(zone.id);
 
-      if (region.mapId !== map.id) {
-        fail('region_map_mismatch', `${region.id}.mapId (${region.mapId}) khác map chứa nó (${map.id})`);
+      if (zone.mapId !== map.id) {
+        fail('zone_map_mismatch', `${zone.id}.mapId (${zone.mapId}) khác map chứa nó (${map.id})`);
       }
 
-      if (region.tierFloor > region.tierCap) {
-        fail('region_invalid_tier', `${region.id} có tierFloor > tierCap`);
+      if (zone.tierFloor > zone.tierCap) {
+        fail('zone_invalid_tier', `${zone.id} có tierFloor > tierCap`);
       }
 
-      for (const archetypeId of region.spawnTable.pattern) {
+      for (const archetypeId of zone.spawnTable.pattern) {
         if (findArchetype(archetypeId) === undefined) {
-          fail('region_unknown_archetype', `${region.id} có spawnTable.pattern chứa archetype không tồn tại: ${String(archetypeId)}`);
+          fail('zone_unknown_archetype', `${zone.id} có spawnTable.pattern chứa archetype không tồn tại: ${String(archetypeId)}`);
         }
       }
 
-      for (const slot of region.eliteSlots) {
+      for (const slot of zone.eliteSlots) {
         const archetype = findArchetype(slot);
 
         if (archetype === undefined) {
-          fail('region_invalid_elite', `${region.id} có eliteSlots chứa archetype không tồn tại: ${String(slot)}`);
+          fail('zone_invalid_elite', `${zone.id} có eliteSlots chứa archetype không tồn tại: ${String(slot)}`);
         } else if (archetype.kind !== 'melee') {
-          fail('region_invalid_elite', `${region.id} có eliteSlots chứa archetype không phải cận chiến: ${slot}`);
-        } else if (region.safe || region.spawnTable.points.length > 0) {
-          fail('region_invalid_elite', `${region.id} là vùng an toàn hoặc có điểm sinh riêng (Arena) nhưng có eliteSlots`);
+          fail('zone_invalid_elite', `${zone.id} có eliteSlots chứa archetype không phải cận chiến: ${slot}`);
+        } else if (zone.safe || zone.spawnTable.points.length > 0) {
+          fail('zone_invalid_elite', `${zone.id} là vùng an toàn hoặc có điểm sinh riêng (Arena) nhưng có eliteSlots`);
         }
       }
 
-      const display = region.display;
+      const display = zone.display;
 
       if (
         display !== null &&
         (display.name.trim() === '' ||
           !Number.isInteger(display.danger) ||
           display.danger < 0 ||
-          display.danger > REGION_DANGER_MAX ||
-          display.description.length > REGION_DESCRIPTION_MAX_CHARS)
+          display.danger > ZONE_DANGER_MAX ||
+          display.description.length > ZONE_DESCRIPTION_MAX_CHARS)
       ) {
-        fail('region_invalid_display', `${region.id} có biển tên không hợp lệ (tên rỗng, ◆ ngoài 0–${REGION_DANGER_MAX} hoặc mô tả quá ${REGION_DESCRIPTION_MAX_CHARS} ký tự)`);
+        fail('zone_invalid_display', `${zone.id} có biển tên không hợp lệ (tên rỗng, ◆ ngoài 0–${ZONE_DANGER_MAX} hoặc mô tả quá ${ZONE_DESCRIPTION_MAX_CHARS} ký tự)`);
       }
 
-      const rect = region.bounds;
+      const rect = zone.bounds;
 
       if (
         rect !== null &&
@@ -408,7 +408,7 @@ export function validateWorld(world: WorldDef): WorldError[] {
           rect.x + rect.width > map.size.width ||
           rect.y + rect.height > map.size.height)
       ) {
-        fail('region_out_of_bounds', `${region.id} nằm ngoài biên ${map.id} hoặc kích thước không dương`);
+        fail('zone_out_of_bounds', `${zone.id} nằm ngoài biên ${map.id} hoặc kích thước không dương`);
       }
     }
 

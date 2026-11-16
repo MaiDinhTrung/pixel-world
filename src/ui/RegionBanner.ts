@@ -1,16 +1,16 @@
 import type Phaser from 'phaser';
 
-import { REGION_BANNER } from '../config/worldConfig';
+import { ZONE_BANNER } from '../config/worldConfig';
 import { setTextValue } from '../utils/textCache';
-import { formatRegionDanger } from '../world/regionTracker';
-import type { RegionDisplay } from '../world/worldGraph';
+import { formatZoneDanger } from '../world/regionTracker';
+import type { ZoneDisplay } from '../world/worldGraph';
 
 /**
  * Biển tên vùng (Gói W3, D9): tên + mức ◆ + mô tả, phía trên giữa màn hình. Hiện dần, giữ, mờ dần; không nhấp nháy.
  * Hai Text được tạo MỘT lần và dùng lại (setTextValue), tiến trình theo `update(now)` nên không tạo tween/đối tượng
  * mỗi lần hiện hay mỗi khung hình. Đây là lớp hiển thị duy nhất của hệ biển tên (logic ở world/regionTracker.ts).
  */
-export class RegionBanner {
+export class ZoneBanner {
   private readonly nameText: Phaser.GameObjects.Text;
   private readonly subText: Phaser.GameObjects.Text;
   private shownAt = -1;
@@ -20,44 +20,44 @@ export class RegionBanner {
   constructor(scene: Phaser.Scene) {
     const style = {
       fontFamily: 'monospace',
-      stroke: REGION_BANNER.strokeColor,
-      strokeThickness: REGION_BANNER.strokeThickness,
+      stroke: ZONE_BANNER.strokeColor,
+      strokeThickness: ZONE_BANNER.strokeThickness,
     };
 
     this.nameText = scene.add
-      .text(REGION_BANNER.centerX, REGION_BANNER.nameY, '', {
+      .text(ZONE_BANNER.centerX, ZONE_BANNER.nameY, '', {
         ...style,
-        fontSize: `${REGION_BANNER.nameFontPx}px`,
+        fontSize: `${ZONE_BANNER.nameFontPx}px`,
         fontStyle: 'bold',
-        color: REGION_BANNER.nameColor,
+        color: ZONE_BANNER.nameColor,
       })
       .setOrigin(0.5)
       .setScrollFactor(0)
-      .setDepth(REGION_BANNER.depth)
+      .setDepth(ZONE_BANNER.depth)
       .setAlpha(0)
       .setVisible(false);
 
     this.subText = scene.add
-      .text(REGION_BANNER.centerX, REGION_BANNER.subY, '', {
+      .text(ZONE_BANNER.centerX, ZONE_BANNER.subY, '', {
         ...style,
-        fontSize: `${REGION_BANNER.subFontPx}px`,
-        color: REGION_BANNER.subColor,
+        fontSize: `${ZONE_BANNER.subFontPx}px`,
+        color: ZONE_BANNER.subColor,
       })
       .setOrigin(0.5)
       .setScrollFactor(0)
-      .setDepth(REGION_BANNER.depth)
+      .setDepth(ZONE_BANNER.depth)
       .setAlpha(0)
       .setVisible(false);
   }
 
   /** Bắt đầu hiện biển (thay biển đang hiện nếu có). `now` cùng đồng hồ với `update`. */
-  show(display: RegionDisplay, now: number): void {
+  show(display: ZoneDisplay, now: number): void {
     if (this.destroyed) {
       return;
     }
 
     setTextValue(this.nameText, display.name);
-    setTextValue(this.subText, `${formatRegionDanger(display.danger)}  ·  ${display.description}`);
+    setTextValue(this.subText, `${formatZoneDanger(display.danger)}  ·  ${display.description}`);
     this.shownAt = now;
     this.alpha = -1;
     this.update(now);
@@ -69,7 +69,7 @@ export class RegionBanner {
       return;
     }
 
-    const { fadeInMs, holdMs, fadeOutMs } = REGION_BANNER;
+    const { fadeInMs, holdMs, fadeOutMs } = ZONE_BANNER;
     const elapsed = now - this.shownAt;
     let alpha: number;
 

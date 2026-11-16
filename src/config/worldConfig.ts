@@ -1,9 +1,9 @@
 /**
- * Dữ liệu World/Region/Map (Gói W1, docs/WORLD_MAP_DESIGN.md): mô tả ĐÚNG hai bản đồ hiện có.
+ * Dữ liệu World/Map/Zone (Region nhóm Map sẽ thêm ở gói sau; xem docs/WORLD_ARCHITECTURE.md) (Gói W1, docs/WORLD_MAP_DESIGN.md): mô tả ĐÚNG hai bản đồ hiện có.
  * ĐÃ NỐI (W2): WorldScene/BossArenaScene/town/bossArena đọc id, đích và luật cổng từ đây. Chỉ THAM CHIẾU
  * hằng số có sẵn, không sao chép số (MAIN_DEFAULT_SPAWN là nguồn thật, xem chú thích bên dưới).
  */
-import type { MapDef, MapId, RegionId, ConnectionId, WorldDef } from '../world/worldGraph';
+import type { MapDef, MapId, ZoneId, ConnectionId, WorldDef } from '../world/worldGraph';
 import {
   BOSS_ARENA_ENTRANCE,
   BOSS_ARENA_ENTRANCE_LABEL,
@@ -30,12 +30,12 @@ import { VILLAGE_ZONE } from './economyConfig';
 export const MAP_STARTING_LANDS: MapId = 'map.starting_lands';
 export const MAP_BOSS_ARENA_1: MapId = 'map.boss_arena_1';
 
-export const REGION_VILLAGE: RegionId = 'region.village';
+export const ZONE_VILLAGE: ZoneId = 'zone.village';
 /** Vùng ngoài làng, GẦN làng (W3): độ khó như bậc thời gian toàn cục. */
-export const REGION_WILDS_NEAR: RegionId = 'region.wilds_near';
+export const ZONE_WILDS_NEAR: ZoneId = 'zone.wilds_near';
 /** Vùng ngoài làng, XA làng (W3): "phần còn lại" của map, quái sinh ra mạnh hơn. */
-export const REGION_WILDS_FAR: RegionId = 'region.wilds_far';
-export const REGION_ARENA: RegionId = 'region.arena';
+export const ZONE_WILDS_FAR: ZoneId = 'zone.wilds_far';
+export const ZONE_ARENA: ZoneId = 'zone.arena';
 
 export const CONN_VILLAGE_TO_ARENA: ConnectionId = 'conn.village_to_arena';
 export const CONN_ARENA_TO_VILLAGE: ConnectionId = 'conn.arena_to_village';
@@ -84,7 +84,7 @@ export const WILDS_FAR_TIER_OFFSET = 1;
  * stableMs: vùng mới phải được giữ liên tục ít nhất ngần này ms mới tính là đã vào (chống nhấp nháy ở biên).
  * cooldownMs: không hiện lại biển của CÙNG một vùng trong ngần này ms kể từ lần hiện trước.
  */
-export const REGION_TRACKER = { stableMs: 400, cooldownMs: 20000 } as const;
+export const ZONE_TRACKER = { stableMs: 400, cooldownMs: 20000 } as const;
 
 /**
  * Biển tên vùng (ui/RegionBanner.ts). Tọa độ theo khung thiết kế 960x540 (scrollFactor 0).
@@ -94,7 +94,7 @@ export const REGION_TRACKER = { stableMs: 400, cooldownMs: 20000 } as const;
  * Màu đồng trầm (cùng VILLAGE_MARKER), không dùng đỏ/cam (dành cho đạn quái và telegraph).
  * Cỡ chữ (px) >= nhãn cổng (15 px) để đọc được trên điện thoại.
  */
-export const REGION_BANNER = {
+export const ZONE_BANNER = {
   centerX: 480,
   nameY: 62,
   subY: 90,
@@ -117,9 +117,9 @@ const STARTING_LANDS: MapDef = {
   kind: 'overworld',
   lighting: 'day_night',
   playerSpawns: { default: { ...MAIN_DEFAULT_SPAWN } },
-  regions: [
+  zones: [
     {
-      id: REGION_VILLAGE,
+      id: ZONE_VILLAGE,
       mapId: MAP_STARTING_LANDS,
       bounds: { ...VILLAGE_ZONE },
       safe: true,
@@ -132,9 +132,9 @@ const STARTING_LANDS: MapDef = {
       display: { name: 'Làng Khởi Nguyên', danger: 0, description: 'Nơi trú ẩn cuối cùng' },
     },
     {
-      // GẦN làng: hình chữ nhật WILDS_NEAR_BOUNDS (chứa cả làng; regionAt chọn vùng hẹp nhất nên làng vẫn là village).
+      // GẦN làng: hình chữ nhật WILDS_NEAR_BOUNDS (chứa cả làng; zoneAt chọn vùng hẹp nhất nên làng vẫn là village).
       // Điểm sinh quái vẫn nằm ở world/town.ts (ENEMY_SPAWNS).
-      id: REGION_WILDS_NEAR,
+      id: ZONE_WILDS_NEAR,
       mapId: MAP_STARTING_LANDS,
       bounds: { ...WILDS_NEAR_BOUNDS },
       safe: false,
@@ -149,7 +149,7 @@ const STARTING_LANDS: MapDef = {
     {
       // XA làng: "phần còn lại" của map (bounds null). Quái sinh ở đây mạnh hơn WILDS_FAR_TIER_OFFSET bậc;
       // trần vẫn là MAX_THREAT_TIER (không nâng trần chung).
-      id: REGION_WILDS_FAR,
+      id: ZONE_WILDS_FAR,
       mapId: MAP_STARTING_LANDS,
       bounds: null,
       safe: false,
@@ -193,10 +193,10 @@ const BOSS_ARENA_1: MapDef = {
   kind: 'boss',
   lighting: 'fixed',
   playerSpawns: { default: { ...BOSS_ARENA_PLAYER_SPAWN } },
-  regions: [
+  zones: [
     {
       // Cả Arena là một vùng (bounds null). Quái con dùng cùng quy tắc xoay vòng của WorldScene.spawnEnemy.
-      id: REGION_ARENA,
+      id: ZONE_ARENA,
       mapId: MAP_BOSS_ARENA_1,
       bounds: null,
       safe: false,

@@ -32,10 +32,10 @@ import { NEON } from '../config/palette';
 import {
   MAP_BOSS_ARENA_1,
   MAP_STARTING_LANDS,
-  REGION_ARENA,
-  REGION_VILLAGE,
-  REGION_WILDS_FAR,
-  REGION_WILDS_NEAR,
+  ZONE_ARENA,
+  ZONE_VILLAGE,
+  ZONE_WILDS_FAR,
+  ZONE_WILDS_NEAR,
   WORLD,
 } from '../config/worldConfig';
 import { XP_PER_KILL, XP_TIER_BONUS } from '../progression/progressionConfig';
@@ -48,11 +48,11 @@ import {
   shouldSpawnElite,
   type EliteSpawnState,
 } from './eliteRules';
-import { findMap, type RegionDef } from './worldGraph';
+import { findMap, type ZoneDef } from './worldGraph';
 
-function region(id: string): RegionDef {
+function zone(id: string): ZoneDef {
   for (const map of WORLD.maps) {
-    const found = map.regions.find((candidate) => candidate.id === id);
+    const found = map.zones.find((candidate) => candidate.id === id);
 
     if (found !== undefined) {
       return found;
@@ -62,13 +62,13 @@ function region(id: string): RegionDef {
   throw new Error(`không có vùng ${id}`);
 }
 
-const NEAR = region(REGION_WILDS_NEAR);
-const FAR = region(REGION_WILDS_FAR);
-const VILLAGE = region(REGION_VILLAGE);
-const ARENA = region(REGION_ARENA);
+const NEAR = zone(ZONE_WILDS_NEAR);
+const FAR = zone(ZONE_WILDS_FAR);
+const VILLAGE = zone(ZONE_VILLAGE);
+const ARENA = zone(ZONE_ARENA);
 
 const READY: EliteSpawnState = {
-  killsInRegion: ELITE_KILLS_INTERVAL,
+  killsInZone: ELITE_KILLS_INTERVAL,
   aliveElites: 0,
   sinceLastEliteMs: ELITE_MIN_GAP_MS,
 };
@@ -114,10 +114,10 @@ describe('shouldSpawnElite', () => {
   });
 
   it('biên số kill: 24 chưa, 25 rồi, nhiều hơn vẫn được', () => {
-    expect(shouldSpawnElite({ ...READY, killsInRegion: ELITE_KILLS_INTERVAL - 1 }, NEAR)).toBe(false);
-    expect(shouldSpawnElite({ ...READY, killsInRegion: ELITE_KILLS_INTERVAL }, NEAR)).toBe(true);
-    expect(shouldSpawnElite({ ...READY, killsInRegion: ELITE_KILLS_INTERVAL + 7 }, NEAR)).toBe(true);
-    expect(shouldSpawnElite({ ...READY, killsInRegion: 0 }, NEAR)).toBe(false);
+    expect(shouldSpawnElite({ ...READY, killsInZone: ELITE_KILLS_INTERVAL - 1 }, NEAR)).toBe(false);
+    expect(shouldSpawnElite({ ...READY, killsInZone: ELITE_KILLS_INTERVAL }, NEAR)).toBe(true);
+    expect(shouldSpawnElite({ ...READY, killsInZone: ELITE_KILLS_INTERVAL + 7 }, NEAR)).toBe(true);
+    expect(shouldSpawnElite({ ...READY, killsInZone: 0 }, NEAR)).toBe(false);
   });
 
   it('biên số Elite đang sống: 0 được, 1 (đủ trần) thì không', () => {
@@ -135,7 +135,7 @@ describe('shouldSpawnElite', () => {
   });
 
   it('luôn false ở làng và Arena dù mọi ngưỡng đã đủ', () => {
-    const huge: EliteSpawnState = { killsInRegion: 9999, aliveElites: 0, sinceLastEliteMs: Number.POSITIVE_INFINITY };
+    const huge: EliteSpawnState = { killsInZone: 9999, aliveElites: 0, sinceLastEliteMs: Number.POSITIVE_INFINITY };
 
     expect(shouldSpawnElite(huge, VILLAGE)).toBe(false);
     expect(shouldSpawnElite(huge, ARENA)).toBe(false);
@@ -324,7 +324,7 @@ describe('eliteSlots dữ liệu thật (M3)', () => {
 
   it('mọi slot là archetype cận chiến có thật, không nằm ở vùng an toàn/có điểm sinh riêng', () => {
     for (const map of WORLD.maps) {
-      for (const candidate of map.regions) {
+      for (const candidate of map.zones) {
         for (const slot of candidate.eliteSlots) {
           expect(findArchetype(slot)?.kind, `${candidate.id}:${slot}`).toBe('melee');
           expect(candidate.safe, candidate.id).toBe(false);

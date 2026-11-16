@@ -214,7 +214,7 @@ import {
 } from '../world/bossArenaRules';
 import {
   MAP_STARTING_LANDS,
-  REGION_TRACKER,
+  ZONE_TRACKER,
   WORLD,
 } from '../config/worldConfig';
 import {
@@ -240,14 +240,14 @@ import {
   shouldSpawnElite,
 } from '../world/eliteRules';
 import { pickArchetype, pickStaggeredArchetype } from '../world/spawnPattern';
-import { RegionBanner } from '../ui/RegionBanner';
-import { createRegionTracker, type RegionTracker } from '../world/regionTracker';
+import { ZoneBanner } from '../ui/RegionBanner';
+import { createZoneTracker, type ZoneTracker } from '../world/regionTracker';
 import {
   effectiveThreatTier,
   evaluateConnection,
   findConnection,
   findMap,
-  regionAt,
+  zoneAt,
   timeThreatTier,
   type ConnectionDef,
   type MapDef,
@@ -389,11 +389,11 @@ export class WorldScene extends Phaser.Scene {
   private playerBars!: PlayerBars;
   private spawnIndex = 0;
   /** M2: số lần đã sinh quái theo vùng (id vùng → đếm), dùng chọn archetype lệch pha với điểm sinh. */
-  private readonly regionSpawnCounts = new Map<string, number>();
+  private readonly zoneSpawnCounts = new Map<string, number>();
   /** M2: số điểm sinh của từng vùng (tính một lần mỗi lượt chơi). */
-  private readonly regionSpawnPoints = new Map<string, number>();
+  private readonly zoneSpawnPoints = new Map<string, number>();
   /** M3: số quái thường đã hạ theo vùng của VỊ TRÍ CHẾT kể từ lần Elite gần nhất của vùng (id vùng → đếm). Chỉ trong bộ nhớ. */
-  private readonly regionKillCounts = new Map<string, number>();
+  private readonly zoneKillCounts = new Map<string, number>();
   /** M3: số Elite đã sinh trong lượt này (chọn affix xoay vòng và archetype nền theo chỉ số này). */
   private elitesSpawned = 0;
   /** M3: thời điểm (`time.now`) Elite xuất hiện gần nhất; null = chưa có. */
@@ -413,8 +413,8 @@ export class WorldScene extends Phaser.Scene {
   private nextGemEnergyAt = 0;
   private insideVillage = false;
   /** Biển tên vùng (W3): chỉ có ở map overworld; null ở Arena. */
-  private regionBanner: RegionBanner | null = null;
-  private regionTracker: RegionTracker | null = null;
+  private zoneBanner: ZoneBanner | null = null;
+  private zoneTracker: ZoneTracker | null = null;
   private lootDirty = false;
   private lastNoCombatToastAt = 0;
   private lastLootSaveAt = 0;
@@ -624,9 +624,9 @@ export class WorldScene extends Phaser.Scene {
 
   create(): void {
     this.spawnIndex = 0;
-    this.regionSpawnCounts.clear();
-    this.regionSpawnPoints.clear();
-    this.regionKillCounts.clear();
+    this.zoneSpawnCounts.clear();
+    this.zoneSpawnPoints.clear();
+    this.zoneKillCounts.clear();
     this.elitesSpawned = 0;
     this.lastEliteAt = null;
     this.nextAfterimageAt = 0;
@@ -759,9 +759,9 @@ export class WorldScene extends Phaser.Scene {
       this.inputController.destroy();
       this.corpses.destroy();
       this.minions.clear();
-      this.regionBanner?.destroy();
-      this.regionBanner = null;
-      this.regionTracker = null;
+      this.zoneBanner?.destroy();
+      this.zoneBanner = null;
+      this.zoneTracker = null;
     });
 
     // Một nguồn lưu (C4): đọc thẳng save v8; PlayerState nạp kho đồ (lọc vũ khí ngoài lớp,
@@ -876,11 +876,11 @@ export class WorldScene extends Phaser.Scene {
 
     // Biển tên vùng (W3): chỉ ở map overworld (Arena không có biển).
     if (this.getMapDef().kind === 'overworld') {
-      this.regionBanner = new RegionBanner(this);
-      this.regionTracker = createRegionTracker(REGION_TRACKER);
+      this.zoneBanner = new ZoneBanner(this);
+      this.zoneTracker = createZoneTracker(ZONE_TRACKER);
     } else {
-      this.regionBanner = null;
-      this.regionTracker = null;
+      this.zoneBanner = null;
+      this.zoneTracker = null;
     }
 
     this.events.on(Phaser.Scenes.Events.RESUME, () => {
@@ -1084,7 +1084,7 @@ export class WorldScene extends Phaser.Scene {
 
     // Đồng hồ Boss chạy toàn cục (kể cả trong làng): map chính chỉ đánh dấu "Boss chờ ở Đấu Trường".
     this.updateBoss(time);
-    this.updateRegionBanner(time);
+    this.updateZoneBanner(time);
 
     if (!this.player.isDead()) {
       const stealthed = this.player.isStealthed(time);
@@ -1343,35 +1343,35 @@ export class WorldScene extends Phaser.Scene {
    * (`pickStaggeredArchetype`) để mỗi điểm sinh gặp nhiều loại quái. Xác định, không ngẫu nhiên.
    */
   private pickSpawnArchetype(
-    region: ReturnType<typeof regionAt>,
+    zone: ReturnType<typeof zoneAt>,
   ): ArchetypeId | null {
-    if (region === null) {
+    if (zone === null) {
       return null;
     }
 
-    const table = region.spawnTable;
+    const table = zone.spawnTable;
 
     if (table.points.length > 0) {
       return pickArchetype(table.pattern, this.spawnIndex);
     }
 
-    let points = this.regionSpawnPoints.get(region.id);
+    let points = this.zoneSpawnPoints.get(zone.id);
 
     if (points === undefined) {
       points = 0;
 
       for (const spawn of this.town.enemySpawns) {
-        if (regionAt(this.getMapDef(), spawn.x, spawn.y)?.id === region.id) {
+        if (zoneAt(this.getMapDef(), spawn.x, spawn.y)?.id === zone.id) {
           points += 1;
         }
       }
 
-      this.regionSpawnPoints.set(region.id, points);
+      this.zoneSpawnPoints.set(zone.id, points);
     }
 
-    const count = this.regionSpawnCounts.get(region.id) ?? 0;
+    const count = this.zoneSpawnCounts.get(zone.id) ?? 0;
 
-    this.regionSpawnCounts.set(region.id, count + 1);
+    this.zoneSpawnCounts.set(zone.id, count + 1);
 
     return pickStaggeredArchetype(table.pattern, count, points);
   }
@@ -1379,8 +1379,8 @@ export class WorldScene extends Phaser.Scene {
   private spawnEnemy(): void {
     const point =
       this.town.enemySpawns[this.spawnIndex % this.town.enemySpawns.length];
-    const spawnRegion = regionAt(this.getMapDef(), point.x, point.y);
-    const archetypeId = this.pickSpawnArchetype(spawnRegion);
+    const spawnZone = zoneAt(this.getMapDef(), point.x, point.y);
+    const archetypeId = this.pickSpawnArchetype(spawnZone);
     // Pattern rỗng/không có vùng (không xảy ra với dữ liệu hiện có) → hành vi cũ: chỉ số % 3 === 2 là bắn xa.
     const isRanged =
       archetypeId === null
@@ -1401,11 +1401,11 @@ export class WorldScene extends Phaser.Scene {
     this.spawnIndex += 1;
 
     // Bậc theo vùng của ĐIỂM SINH GỐC (W3, D2): vùng offset 0 = bậc thời gian toàn cục như trước.
-    const region = regionAt(this.getMapDef(), point.x, point.y);
+    const zone = zoneAt(this.getMapDef(), point.x, point.y);
     const tier =
-      region === null
+      zone === null
         ? this.getThreatTier(this.time.now)
-        : effectiveThreatTier(this.time.now - this.runStartedAt, region);
+        : effectiveThreatTier(this.time.now - this.runStartedAt, zone);
     const enemy = isRanged
       ? new RangedEnemy(
           this,
@@ -1464,7 +1464,7 @@ export class WorldScene extends Phaser.Scene {
       if (options.role === 'elite') {
         this.hud.showToast(ELITE_KILL_LABEL, ELITE_VISUAL.colorCss);
       } else if (options.role === 'normal') {
-        this.countRegionKill(enemy.x, enemy.y);
+        this.countZoneKill(enemy.x, enemy.y);
       }
     });
   }
@@ -1479,59 +1479,59 @@ export class WorldScene extends Phaser.Scene {
   }
 
   /** Cộng một kill thường vào vùng của vị trí chết; đủ điều kiện (`shouldSpawnElite`) thì sinh Elite. */
-  private countRegionKill(x: number, y: number): void {
-    const region = regionAt(this.getMapDef(), x, y);
+  private countZoneKill(x: number, y: number): void {
+    const zone = zoneAt(this.getMapDef(), x, y);
 
-    if (region === null) {
+    if (zone === null) {
       return;
     }
 
-    const kills = (this.regionKillCounts.get(region.id) ?? 0) + 1;
+    const kills = (this.zoneKillCounts.get(zone.id) ?? 0) + 1;
     const now = this.time.now;
 
-    this.regionKillCounts.set(region.id, kills);
+    this.zoneKillCounts.set(zone.id, kills);
 
     const aliveElites = this.getEnemies().filter((enemy) => enemy.getData(ELITE_DATA_KEY) === true).length;
 
     if (
       shouldSpawnElite(
         {
-          killsInRegion: kills,
+          killsInZone: kills,
           aliveElites,
           sinceLastEliteMs: this.lastEliteAt === null ? Number.POSITIVE_INFINITY : now - this.lastEliteAt,
         },
-        region,
+        zone,
       ) &&
-      this.spawnElite(region)
+      this.spawnElite(zone)
     ) {
-      this.regionKillCounts.set(region.id, 0);
+      this.zoneKillCounts.set(zone.id, 0);
     }
   }
 
   /**
-   * Sinh một Elite ở `region` (E1, E3, E4, E6). Bỏ qua kiểm trần quái nhưng nằm trong group `enemies`.
+   * Sinh một Elite ở `zone` (E1, E3, E4, E6). Bỏ qua kiểm trần quái nhưng nằm trong group `enemies`.
    * Trả false (không đổi trạng thái) khi vùng không có điểm sinh dùng được.
    */
-  private spawnElite(region: NonNullable<ReturnType<typeof regionAt>>): boolean {
-    const regionPoints = this.town.enemySpawns.filter(
-      (spawn) => regionAt(this.getMapDef(), spawn.x, spawn.y)?.id === region.id,
+  private spawnElite(zone: NonNullable<ReturnType<typeof zoneAt>>): boolean {
+    const zonePoints = this.town.enemySpawns.filter(
+      (spawn) => zoneAt(this.getMapDef(), spawn.x, spawn.y)?.id === zone.id,
     );
     const point = pickEliteSpawnPoint(
-      regionPoints,
+      zonePoints,
       { x: this.player.x, y: this.player.y },
       ELITE_SPAWN_MIN_PLAYER_DISTANCE,
     );
 
-    if (point === null || region.eliteSlots.length === 0) {
+    if (point === null || zone.eliteSlots.length === 0) {
       return false;
     }
 
     const eliteIndex = this.elitesSpawned;
-    const baseId = region.eliteSlots[eliteIndex % region.eliteSlots.length];
+    const baseId = zone.eliteSlots[eliteIndex % zone.eliteSlots.length];
     const affixId = pickEliteAffix(eliteIndex);
     const affix = ELITE_AFFIXES[affixId];
     const profile = eliteArchetype(baseId, affixId);
-    const tier = effectiveThreatTier(this.time.now - this.runStartedAt, region);
+    const tier = effectiveThreatTier(this.time.now - this.runStartedAt, zone);
     const margin = 48;
     const x = Phaser.Math.Clamp(point.x, margin, WORLD_WIDTH - margin);
     const y = Phaser.Math.Clamp(point.y, margin, WORLD_HEIGHT - margin);
@@ -1594,9 +1594,9 @@ export class WorldScene extends Phaser.Scene {
   }
 
   /** Biển tên vùng (W3): theo dõi vùng người chơi đứng, hiện biển khi vào vùng mới; ẩn khi chết/mở panel. */
-  private updateRegionBanner(time: number): void {
-    const banner = this.regionBanner;
-    const tracker = this.regionTracker;
+  private updateZoneBanner(time: number): void {
+    const banner = this.zoneBanner;
+    const tracker = this.zoneTracker;
 
     if (banner === null || tracker === null) {
       return;
@@ -1608,11 +1608,11 @@ export class WorldScene extends Phaser.Scene {
       return;
     }
 
-    const region = regionAt(this.getMapDef(), this.player.x, this.player.y);
-    const shown = tracker.update(region?.display ? region.id : null, time);
+    const zone = zoneAt(this.getMapDef(), this.player.x, this.player.y);
+    const shown = tracker.update(zone?.display ? zone.id : null, time);
 
-    if (shown !== null && region?.display) {
-      banner.show(region.display, time);
+    if (shown !== null && zone?.display) {
+      banner.show(zone.display, time);
     }
 
     banner.update(time);

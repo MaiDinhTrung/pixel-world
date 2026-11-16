@@ -4,6 +4,8 @@ Trạng thái: **đã duyệt Cổng 1 (2026-11-16)** theo khuyến nghị D1–
 
 Viết cho: người duyệt/đang phát triển Pixel World và Developer sẽ lập brief W1–W3.
 
+> **Ghi chú thuật ngữ (P0b, 2026-11-17):** trong tài liệu lịch sử này, "Region/vùng" (`RegionDef`, `region.*`, `regionAt`, `REGION_*`) nay có tên trong code là **Zone** (`ZoneDef`, `zone.*`, `zoneAt`, `ZONE_*`). Từ "Region" dành cho nhóm nhiều Map trong kiến trúc mới (`docs/WORLD_ARCHITECTURE.md`). Nội dung spec W0–W3 bên dưới giữ nguyên, không viết lại.
+
 ## 0. Trạng thái triển khai (cập nhật 2026-11-16)
 
 W1 (a68057a), W2 (25dbd97), W3 (a4e695d) đã triển khai và chốt. Sau W3, `region.wilds` trong spec bên dưới đã tách thành `region.wilds_near` ({x:700,y:700,w:2400,h:1300}, offset 0) và `region.wilds_far` (phần còn lại, offset +1); các số này là giá trị khởi điểm ở `src/config/worldConfig.ts`. Bậc theo vùng chỉ áp cho quái SINH ra (chỉ số và vàng); trần quái, nhịp sinh, Boss, HUD vẫn theo bậc thời gian toàn cục. Tên vùng: Làng Khởi Nguyên (an toàn), Đồng Hoang Úa ◆, Hoang Địa Sâu ◆◆. Các phần dưới là spec lịch sử đã duyệt.
