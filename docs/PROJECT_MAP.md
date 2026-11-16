@@ -112,6 +112,11 @@ Bản đồ nhanh `CharacterPanelScene.ts`: `renderSkills`, `renderStats`, `rend
 - `ui/combat/AimIndicator.ts` — vẽ đường ngắm/vùng ảnh hưởng trong world (WorldScene gọi mỗi frame).
 - `input/VirtualJoystick.ts` — joystick nổi (số liệu ở `config/controlsConfig.ts`).
 
+### Art (Visual Overhaul) — `src/art/` (mới, chỉ test + registry; chưa nối vào game)
+- `palette.ts` — registry màu đã duyệt cho module art mới (nền/nhấn ART_BIBLE; chưa gồm DP-7/8/9). Module art không được import `entities|combat|skills|scenes`.
+- `artContract.test.ts` — đóng băng bất biến gameplay↔art (hitbox, frame 48, scale quái/Boss, texture đạn, clip, tay cầm vũ khí); `palette.test.ts`, `artPurity.test.ts` — màu ∈ registry, module art thuần.
+- Tài liệu: `docs/visual-overhaul/README.md` (mục lục), `FEATURE_SPEC.md`, `PERF_BASELINE.md` (người dùng điền số đo `?perf`).
+
 ### VFX — `src/vfx/`
 - `VFXManager.ts` — cửa duy nhất phát hiệu ứng: `VFXManager.for(scene).play(id, opts)` / `.attach(aura, target, tint)`; mỗi scene một manager, tự dọn khi shutdown; 1 emitter particle dùng chung.
 - `VFXPool.ts` — pool sprite có trần (`VFX_MAX_SPRITES`), không tạo/hủy khi chơi.
