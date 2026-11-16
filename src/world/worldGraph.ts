@@ -2,7 +2,8 @@
  * Mô hình World/Region/Map THUẦN (Gói W1, docs/WORLD_MAP_DESIGN.md §3): kiểu dữ liệu, tra cứu vùng,
  * luật khóa cổng, thời gian → bậc độ khó theo vùng, kiểm tra dữ liệu.
  *
- * ĐÃ NỐI (W2): WorldScene/BossArenaScene đọc cổng, đích, khóa cổng và bậc thời gian từ đây. Không phụ thuộc Phaser,
+ * ĐÃ NỐI (W2): WorldScene/BossArenaScene đọc cổng, đích, khóa cổng và bậc thời gian từ đây. W3: bậc theo vùng của
+ * điểm sinh (`regionAt` + `effectiveThreatTier`) và biển tên vùng (`RegionDef.display`). Không phụ thuộc Phaser,
  * không ngẫu nhiên, không đọc thời gian hệ thống. Dữ liệu cụ thể ở `config/worldConfig.ts`.
  */
 import { MAX_THREAT_TIER, THREAT_INTERVAL_MS } from '../config/combatConfig';
@@ -43,6 +44,18 @@ export interface SpawnTable {
   readonly points: readonly Point[];
 }
 
+/** Thông tin biển tên vùng (W3, D9): tên, mức nguy hiểm ◆ (0 = an toàn), một dòng mô tả ≤ REGION_DESCRIPTION_MAX_CHARS ký tự. */
+export interface RegionDisplay {
+  readonly name: string;
+  readonly danger: number;
+  readonly description: string;
+}
+
+/** Số ◆ tối đa của biển tên (D9: 1–3; 0 = an toàn). */
+export const REGION_DANGER_MAX = 3;
+/** Độ dài tối đa của dòng mô tả trên biển tên (D9). */
+export const REGION_DESCRIPTION_MAX_CHARS = 40;
+
 export interface RegionDef {
   readonly id: RegionId;
   readonly mapId: MapId;
@@ -58,6 +71,8 @@ export interface RegionDef {
   readonly maxAliveCap: number | null;
   /** Chừa chỗ cho Elite (gói sau W3); luôn rỗng ở W1. */
   readonly eliteSlots: readonly never[];
+  /** Biển tên khi vào vùng; null = không hiện biển (ví dụ Arena). */
+  readonly display: RegionDisplay | null;
 }
 
 /** `always_open` và `boss_alive` làm việc thật; `boss_ready`, `min_level` chừa chỗ (chưa có trong kiểu). */
@@ -258,6 +273,7 @@ export type WorldErrorCode =
   | 'region_map_mismatch'
   | 'region_out_of_bounds'
   | 'region_invalid_tier'
+  | 'region_invalid_display'
   | 'multiple_fallback_regions'
   | 'no_regions'
   | 'connection_from_out_of_bounds'
@@ -341,6 +357,19 @@ export function validateWorld(world: WorldDef): WorldError[] {
 
       if (region.tierFloor > region.tierCap) {
         fail('region_invalid_tier', `${region.id} có tierFloor > tierCap`);
+      }
+
+      const display = region.display;
+
+      if (
+        display !== null &&
+        (display.name.trim() === '' ||
+          !Number.isInteger(display.danger) ||
+          display.danger < 0 ||
+          display.danger > REGION_DANGER_MAX ||
+          display.description.length > REGION_DESCRIPTION_MAX_CHARS)
+      ) {
+        fail('region_invalid_display', `${region.id} có biển tên không hợp lệ (tên rỗng, ◆ ngoài 0–${REGION_DANGER_MAX} hoặc mô tả quá ${REGION_DESCRIPTION_MAX_CHARS} ký tự)`);
       }
 
       const rect = region.bounds;

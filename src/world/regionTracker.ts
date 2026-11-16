@@ -1,0 +1,74 @@
+/**
+ * Theo dõi vùng hiện tại của người chơi để quyết định KHI NÀO hiện biển tên (Gói W3, D9). THUẦN: không Phaser,
+ * không đọc thời gian hệ thống (thời gian `now` do nơi gọi đưa vào), không ngẫu nhiên.
+ *
+ * Quy tắc:
+ *  - Vùng mới chỉ được công nhận khi người chơi ở đó LIÊN TỤC >= stableMs (chống nhấp nháy khi đứng sát biên).
+ *  - Một vùng vừa được hiện biển thì không hiện lại trong cooldownMs.
+ *  - Lần đầu công nhận một vùng (đầu lượt) cũng hiện biển như bình thường.
+ */
+import type { RegionId } from './worldGraph';
+
+export interface RegionTrackerOptions {
+  /** Thời gian (ms) vùng mới phải ổn định. */
+  readonly stableMs: number;
+  /** Thời gian chờ (ms) trước khi cùng một vùng được hiện biển lại. */
+  readonly cooldownMs: number;
+}
+
+export interface RegionTracker {
+  /**
+   * Gọi mỗi khung hình với vùng hiện tại (null = không vùng nào có biển) và đồng hồ đơn điệu `now` (ms).
+   * Trả id vùng cần HIỆN BIỂN ngay lúc này; ngược lại null.
+   */
+  update(regionId: RegionId | null, now: number): RegionId | null;
+  /** Vùng đã được công nhận gần nhất (kể cả khi biển bị chặn bởi thời gian chờ). */
+  getCurrent(): RegionId | null;
+}
+
+export function createRegionTracker(options: RegionTrackerOptions): RegionTracker {
+  let current: RegionId | null = null;
+  let candidate: RegionId | null = null;
+  let candidateSince = 0;
+  const lastShownAt = new Map<RegionId, number>();
+
+  return {
+    update(regionId, now) {
+      if (regionId === null || regionId === current) {
+        candidate = null;
+
+        return null;
+      }
+
+      if (regionId !== candidate) {
+        candidate = regionId;
+        candidateSince = now;
+      }
+
+      if (now - candidateSince < options.stableMs) {
+        return null;
+      }
+
+      current = regionId;
+      candidate = null;
+
+      const last = lastShownAt.get(regionId);
+
+      if (last !== undefined && now - last < options.cooldownMs) {
+        return null;
+      }
+
+      lastShownAt.set(regionId, now);
+
+      return regionId;
+    },
+    getCurrent() {
+      return current;
+    },
+  };
+}
+
+/** Chuỗi mức nguy hiểm trên biển tên: 0 → "AN TOÀN", n → n ký tự ◆. */
+export function formatRegionDanger(danger: number): string {
+  return danger <= 0 ? 'AN TOÀN' : '◆'.repeat(danger);
+}

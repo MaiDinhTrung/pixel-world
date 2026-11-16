@@ -3,6 +3,8 @@ import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
+import * as worldConfig from '../config/worldConfig';
+
 import {
   BOSS_ARENA_ENTRANCE,
   BOSS_ARENA_MINION_MAX_ALIVE,
@@ -19,7 +21,10 @@ import {
   MAP_STARTING_LANDS,
   REGION_ARENA,
   REGION_VILLAGE,
-  REGION_WILDS,
+  REGION_WILDS_FAR,
+  REGION_WILDS_NEAR,
+  WILDS_FAR_TIER_OFFSET,
+  WILDS_NEAR_BOUNDS,
   WORLD,
 } from '../config/worldConfig';
 import {
@@ -63,6 +68,7 @@ const FORBIDDEN: ReadonlyArray<{ name: string; pattern: RegExp }> = [
 const PURE_SOURCES: Record<string, string> = {
   'src/world/worldGraph.ts': fileURLToPath(new URL('./worldGraph.ts', import.meta.url)),
   'src/config/worldConfig.ts': fileURLToPath(new URL('../config/worldConfig.ts', import.meta.url)),
+  'src/world/regionTracker.ts': fileURLToPath(new URL('./regionTracker.ts', import.meta.url)),
 };
 
 describe('độ thuần của worldGraph/worldConfig', () => {
@@ -128,7 +134,15 @@ describe('regionAt', () => {
 
         expect(region, `(${x},${y})`).not.toBeNull();
         expect(region?.safe, `(${x},${y})`).toBe(isInsideVillage(x, y));
-        expect(region?.id, `(${x},${y})`).toBe(isInsideVillage(x, y) ? REGION_VILLAGE : REGION_WILDS);
+        const insideNear =
+          x >= WILDS_NEAR_BOUNDS.x &&
+          x <= WILDS_NEAR_BOUNDS.x + WILDS_NEAR_BOUNDS.width &&
+          y >= WILDS_NEAR_BOUNDS.y &&
+          y <= WILDS_NEAR_BOUNDS.y + WILDS_NEAR_BOUNDS.height;
+
+        expect(region?.id, `(${x},${y})`).toBe(
+          isInsideVillage(x, y) ? REGION_VILLAGE : insideNear ? REGION_WILDS_NEAR : REGION_WILDS_FAR,
+        );
         checked += 1;
       }
     }
@@ -180,15 +194,25 @@ describe('dữ liệu worldConfig', () => {
   it('region.arena dùng trần quái con của Arena; làng an toàn, không sinh quái; wilds xoay vòng 2:1', () => {
     const arena = BOSS_ARENA.regions[0];
     const village = STARTING_LANDS.regions.find((region) => region.id === REGION_VILLAGE);
-    const wilds = STARTING_LANDS.regions.find((region) => region.id === REGION_WILDS);
+    const near = STARTING_LANDS.regions.find((region) => region.id === REGION_WILDS_NEAR);
+    const far = STARTING_LANDS.regions.find((region) => region.id === REGION_WILDS_FAR);
 
     expect(arena.maxAliveCap).toBe(BOSS_ARENA_MINION_MAX_ALIVE);
     expect(village?.safe).toBe(true);
     expect(village?.spawnTable.pattern).toEqual([]);
-    expect(wilds?.safe).toBe(false);
-    expect(wilds?.spawnTable.pattern).toEqual(['melee', 'melee', 'ranged']);
-    expect(wilds?.tierOffset).toBe(0);
-    expect(wilds?.tierFloor).toBe(0);
+
+    for (const wilds of [near, far]) {
+      expect(wilds?.safe).toBe(false);
+      expect(wilds?.spawnTable.pattern).toEqual(['melee', 'melee', 'ranged']);
+      expect(wilds?.tierFloor).toBe(0);
+      expect(wilds?.tierCap).toBe(MAX_THREAT_TIER);
+    }
+
+    expect(near?.tierOffset).toBe(0);
+    expect(far?.tierOffset).toBe(1);
+    expect(WILDS_FAR_TIER_OFFSET).toBe(1);
+    expect(near?.bounds).toEqual({ x: 700, y: 700, width: 2400, height: 1300 });
+    expect(far?.bounds).toBeNull();
     expect(STARTING_LANDS.lighting).toBe('day_night');
     expect(BOSS_ARENA.lighting).toBe('fixed');
   });
@@ -367,6 +391,10 @@ describe('validateWorld', () => {
       ['region_out_of_bounds', (w) => { w.maps[0].regions[0].bounds = { x: WORLD_WIDTH - 10, y: 0, width: 100, height: 100 }; }],
       ['region_out_of_bounds', (w) => { w.maps[0].regions[0].bounds = { x: 0, y: 0, width: 0, height: 10 }; }],
       ['region_invalid_tier', (w) => { w.maps[0].regions[0].tierFloor = MAX_THREAT_TIER + 1; }],
+      ['region_invalid_display', (w) => { w.maps[0].regions[1].display.description = 'x'.repeat(41); }],
+      ['region_invalid_display', (w) => { w.maps[0].regions[1].display.danger = 4; }],
+      ['region_invalid_display', (w) => { w.maps[0].regions[1].display.danger = 1.5; }],
+      ['region_invalid_display', (w) => { w.maps[0].regions[2].display.name = '  '; }],
       ['multiple_fallback_regions', (w) => { w.maps[0].regions[0].bounds = null; }],
       ['no_regions', (w) => { w.maps[1].regions = []; }],
       ['connection_from_out_of_bounds', (w) => { w.maps[0].connections[0].from.x = -5; }],
@@ -416,14 +444,46 @@ describe('effectiveThreatTier', () => {
     expect(effectiveThreatTier(1e9, plain)).toBe(MAX_THREAT_TIER);
   });
 
-  it('dữ liệu thật: mọi vùng hiện có (offset 0) cho đúng bậc cũ', () => {
+  it('dữ liệu thật: mọi vùng offset 0 (làng, gần, Arena) cho đúng bậc cũ ở mọi biên', () => {
+    let zeroOffset = 0;
+
     for (const map of WORLD.maps) {
       for (const region of map.regions) {
-        for (const elapsed of [0, 59999, 60000, 359999, 360000, 1e9]) {
-          expect(effectiveThreatTier(elapsed, region)).toBe(legacyThreatTier(elapsed));
+        if (region.tierOffset !== 0) {
+          continue;
         }
+
+        zeroOffset += 1;
+
+        for (let tier = 0; tier <= MAX_THREAT_TIER + 2; tier += 1) {
+          for (const elapsed of [tier * THREAT_INTERVAL_MS - 1, tier * THREAT_INTERVAL_MS, tier * THREAT_INTERVAL_MS + 1]) {
+            expect(effectiveThreatTier(elapsed, region), `${region.id} @${elapsed}`).toBe(legacyThreatTier(elapsed));
+          }
+        }
+
+        expect(effectiveThreatTier(1e9, region)).toBe(legacyThreatTier(1e9));
       }
     }
+
+    expect(zeroOffset).toBe(3);
+  });
+
+  it('dữ liệu thật: vùng xa = bậc cũ + 1, kẹp theo tierCap = MAX_THREAT_TIER', () => {
+    const far = STARTING_LANDS.regions.find((region) => region.id === REGION_WILDS_FAR) as MapDef['regions'][number];
+
+    for (let tier = 0; tier <= MAX_THREAT_TIER + 2; tier += 1) {
+      for (const elapsed of [tier * THREAT_INTERVAL_MS - 1, tier * THREAT_INTERVAL_MS, tier * THREAT_INTERVAL_MS + 1]) {
+        expect(effectiveThreatTier(elapsed, far), `@${elapsed}`).toBe(
+          Math.min(MAX_THREAT_TIER, legacyThreatTier(elapsed) + 1),
+        );
+      }
+    }
+
+    expect(effectiveThreatTier(0, far)).toBe(1);
+    expect(effectiveThreatTier(59999, far)).toBe(1);
+    expect(effectiveThreatTier(60000, far)).toBe(2);
+    expect(effectiveThreatTier(1e9, far)).toBe(MAX_THREAT_TIER);
+    expect(far.tierCap).toBe(MAX_THREAT_TIER);
   });
 
   it('offset > 0 cộng thêm, bị kẹp bởi tierCap', () => {
@@ -440,5 +500,146 @@ describe('effectiveThreatTier', () => {
     expect(effectiveThreatTier(0, { tierOffset: 0, tierFloor: 2, tierCap: MAX_THREAT_TIER })).toBe(2);
     expect(effectiveThreatTier(60000, { tierOffset: -3, tierFloor: 1, tierCap: MAX_THREAT_TIER })).toBe(1);
     expect(effectiveThreatTier(5 * THREAT_INTERVAL_MS, { tierOffset: -1, tierFloor: 1, tierCap: MAX_THREAT_TIER })).toBe(4);
+  });
+});
+
+// ── W3: điểm sinh quái theo vùng ────────────────────────────────────────────
+
+/** Đọc ENEMY_SPAWNS từ văn bản town.ts (không export, và import town.ts kéo theo Phaser). */
+function readEnemySpawns(): Array<{ x: number; y: number }> {
+  const text = readFileSync(fileURLToPath(new URL('./town.ts', import.meta.url)), 'utf8');
+  const block = /const ENEMY_SPAWNS = \[([\s\S]*?)\] as const;/.exec(text);
+
+  expect(block, 'không tìm thấy ENEMY_SPAWNS trong town.ts').not.toBeNull();
+
+  return [...(block as RegExpExecArray)[1].matchAll(/\{\s*x:\s*(-?\d+),\s*y:\s*(-?\d+)\s*\}/g)].map((m) => ({
+    x: Number(m[1]),
+    y: Number(m[2]),
+  }));
+}
+
+describe('vùng của điểm sinh quái (W3)', () => {
+  const spawns = readEnemySpawns();
+
+  it('ENEMY_SPAWNS có đúng 8 điểm (4 gần + 4 xa) như đã khóa', () => {
+    expect(spawns).toEqual([
+      { x: 1050, y: 1150 },
+      { x: 2750, y: 1150 },
+      { x: 1050, y: 1750 },
+      { x: 2750, y: 1750 },
+      { x: 1000, y: 400 },
+      { x: 3300, y: 600 },
+      { x: 1100, y: 2350 },
+      { x: 2900, y: 2350 },
+    ]);
+  });
+
+  it('4 điểm đầu → wilds_near, 4 điểm sau → wilds_far', () => {
+    spawns.forEach((point, index) => {
+      expect(regionAt(STARTING_LANDS, point.x, point.y)?.id, `(${point.x},${point.y})`).toBe(
+        index < 4 ? REGION_WILDS_NEAR : REGION_WILDS_FAR,
+      );
+    });
+  });
+
+  it('jitter ±48 (và kẹp lề 48) không làm điểm sinh đổi vùng, không rơi vào vùng an toàn', () => {
+    for (const point of spawns) {
+      const home = regionAt(STARTING_LANDS, point.x, point.y);
+
+      for (const dx of [-48, 0, 48]) {
+        for (const dy of [-48, 0, 48]) {
+          const x = Math.min(WORLD_WIDTH - 48, Math.max(48, point.x + dx));
+          const y = Math.min(WORLD_HEIGHT - 48, Math.max(48, point.y + dy));
+
+          expect(regionAt(STARTING_LANDS, x, y)?.id, `(${x},${y})`).toBe(home?.id);
+          expect(regionAt(STARTING_LANDS, x, y)?.safe, `(${x},${y})`).toBe(false);
+          expect(isInsideVillage(x, y), `(${x},${y})`).toBe(false);
+        }
+      }
+    }
+  });
+
+  it('region.village vẫn an toàn và nằm trọn trong wilds_near (regionAt chọn vùng hẹp nhất)', () => {
+    const near = WILDS_NEAR_BOUNDS;
+
+    expect(VILLAGE_ZONE.x).toBeGreaterThanOrEqual(near.x);
+    expect(VILLAGE_ZONE.y).toBeGreaterThanOrEqual(near.y);
+    expect(VILLAGE_ZONE.x + VILLAGE_ZONE.width).toBeLessThanOrEqual(near.x + near.width);
+    expect(VILLAGE_ZONE.y + VILLAGE_ZONE.height).toBeLessThanOrEqual(near.y + near.height);
+    expect(regionAt(STARTING_LANDS, MAIN_DEFAULT_SPAWN.x, MAIN_DEFAULT_SPAWN.y)?.id).toBe(REGION_VILLAGE);
+  });
+
+  it('bậc quái theo điểm sinh: near = bậc thời gian cũ, far = +1 (kẹp MAX_THREAT_TIER)', () => {
+    for (const elapsed of [0, 59999, 60000, 5 * THREAT_INTERVAL_MS, 1e9]) {
+      spawns.forEach((point, index) => {
+        const region = regionAt(STARTING_LANDS, point.x, point.y);
+
+        expect(region).not.toBeNull();
+        expect(effectiveThreatTier(elapsed, region as NonNullable<typeof region>)).toBe(
+          index < 4 ? legacyThreatTier(elapsed) : Math.min(MAX_THREAT_TIER, legacyThreatTier(elapsed) + 1),
+        );
+      });
+    }
+  });
+});
+
+describe('biển tên vùng (dữ liệu)', () => {
+  it('mọi vùng có biển hợp lệ: tên không rỗng, 0–3 ◆, mô tả ≤ 40 ký tự; Arena không có biển', () => {
+    for (const map of WORLD.maps) {
+      for (const region of map.regions) {
+        if (region.id === REGION_ARENA) {
+          expect(region.display).toBeNull();
+          continue;
+        }
+
+        expect(region.display, region.id).not.toBeNull();
+        expect(region.display?.name.length).toBeGreaterThan(0);
+        expect(region.display?.description.length).toBeLessThanOrEqual(40);
+        expect(region.display?.danger).toBe(region.safe ? 0 : region.id === REGION_WILDS_NEAR ? 1 : 2);
+      }
+    }
+  });
+});
+
+// ── Nhãn cổng khớp luật khóa (rủi ro QA W2) ─────────────────────────────────
+
+describe('portal.kind khớp lockRules cho mọi connection', () => {
+  const sources = ['./town.ts', './bossArena.ts'].map((file) =>
+    readFileSync(fileURLToPath(new URL(file, import.meta.url)), 'utf8'),
+  );
+  const declared = new Map<string, string>();
+
+  for (const text of sources) {
+    for (const m of text.matchAll(/kind:\s*'(enter|return)',\s*connectionId:\s*(CONN_[A-Z_]+)/g)) {
+      declared.set(m[2], m[1]);
+    }
+  }
+
+  it('direction của dữ liệu = loại suy ra từ lockRules (boss_alive → return, còn lại → enter)', () => {
+    let count = 0;
+
+    for (const map of WORLD.maps) {
+      for (const conn of map.connections) {
+        expect(conn.direction, conn.id).toBe(conn.lockRules.includes('boss_alive') ? 'return' : 'enter');
+        count += 1;
+      }
+    }
+
+    expect(count).toBe(2);
+  });
+
+  it('nhãn kind truyền cho createPortal ở town.ts/bossArena.ts khớp loại suy ra, phủ mọi connection', () => {
+    const constants = worldConfig as unknown as Record<string, unknown>;
+
+    for (const map of WORLD.maps) {
+      for (const conn of map.connections) {
+        const name = Object.keys(constants).find((key) => key.startsWith('CONN_') && constants[key] === conn.id);
+
+        expect(name, `không có hằng CONN_ cho ${conn.id}`).toBeDefined();
+        expect(declared.get(name as string), `${conn.id} (${name}) không có nhãn kind trong createPortal`).toBe(
+          conn.lockRules.includes('boss_alive') ? 'return' : 'enter',
+        );
+      }
+    }
   });
 });

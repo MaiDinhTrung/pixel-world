@@ -214,12 +214,17 @@ import {
 } from '../world/bossArenaRules';
 import {
   MAP_STARTING_LANDS,
+  REGION_TRACKER,
   WORLD,
 } from '../config/worldConfig';
+import { RegionBanner } from '../ui/RegionBanner';
+import { createRegionTracker, type RegionTracker } from '../world/regionTracker';
 import {
+  effectiveThreatTier,
   evaluateConnection,
   findConnection,
   findMap,
+  regionAt,
   timeThreatTier,
   type ConnectionDef,
   type MapDef,
@@ -371,6 +376,9 @@ export class WorldScene extends Phaser.Scene {
   private readonly darkLeech = new LeechLimiter();
   private nextGemEnergyAt = 0;
   private insideVillage = false;
+  /** Biển tên vùng (W3): chỉ có ở map overworld; null ở Arena. */
+  private regionBanner: RegionBanner | null = null;
+  private regionTracker: RegionTracker | null = null;
   private lootDirty = false;
   private lastNoCombatToastAt = 0;
   private lastLootSaveAt = 0;
@@ -710,6 +718,9 @@ export class WorldScene extends Phaser.Scene {
       this.inputController.destroy();
       this.corpses.destroy();
       this.minions.clear();
+      this.regionBanner?.destroy();
+      this.regionBanner = null;
+      this.regionTracker = null;
     });
 
     // Một nguồn lưu (C4): đọc thẳng save v8; PlayerState nạp kho đồ (lọc vũ khí ngoài lớp,
@@ -821,6 +832,15 @@ export class WorldScene extends Phaser.Scene {
     this.hud.setGold(this.village.getGold());
     this.createDayNightControl();
     this.playerBars = new PlayerBars(this);
+
+    // Biển tên vùng (W3): chỉ ở map overworld (Arena không có biển).
+    if (this.getMapDef().kind === 'overworld') {
+      this.regionBanner = new RegionBanner(this);
+      this.regionTracker = createRegionTracker(REGION_TRACKER);
+    } else {
+      this.regionBanner = null;
+      this.regionTracker = null;
+    }
 
     this.events.on(Phaser.Scenes.Events.RESUME, () => {
       this.panelOpen = false;
@@ -1023,6 +1043,7 @@ export class WorldScene extends Phaser.Scene {
 
     // Đồng hồ Boss chạy toàn cục (kể cả trong làng): map chính chỉ đánh dấu "Boss chờ ở Đấu Trường".
     this.updateBoss(time);
+    this.updateRegionBanner(time);
 
     if (!this.player.isDead()) {
       const stealthed = this.player.isStealthed(time);
@@ -1293,7 +1314,12 @@ export class WorldScene extends Phaser.Scene {
 
     this.spawnIndex += 1;
 
-    const tier = this.getThreatTier(this.time.now);
+    // Bậc theo vùng của ĐIỂM SINH GỐC (W3, D2): vùng offset 0 = bậc thời gian toàn cục như trước.
+    const region = regionAt(this.getMapDef(), point.x, point.y);
+    const tier =
+      region === null
+        ? this.getThreatTier(this.time.now)
+        : effectiveThreatTier(this.time.now - this.runStartedAt, region);
     const enemy = isRanged
       ? new RangedEnemy(this, spawnX, spawnY, this.enemyBullets, tier)
       : new Enemy(this, spawnX, spawnY, tier);
@@ -1316,6 +1342,31 @@ export class WorldScene extends Phaser.Scene {
 
   private getThreatTier(time: number): number {
     return timeThreatTier(time - this.runStartedAt);
+  }
+
+  /** Biển tên vùng (W3): theo dõi vùng người chơi đứng, hiện biển khi vào vùng mới; ẩn khi chết/mở panel. */
+  private updateRegionBanner(time: number): void {
+    const banner = this.regionBanner;
+    const tracker = this.regionTracker;
+
+    if (banner === null || tracker === null) {
+      return;
+    }
+
+    if (this.player.isDead() || this.panelOpen) {
+      banner.hide();
+
+      return;
+    }
+
+    const region = regionAt(this.getMapDef(), this.player.x, this.player.y);
+    const shown = tracker.update(region?.display ? region.id : null, time);
+
+    if (shown !== null && region?.display) {
+      banner.show(region.display, time);
+    }
+
+    banner.update(time);
   }
 
   private updateEnemySpawning(time: number): void {

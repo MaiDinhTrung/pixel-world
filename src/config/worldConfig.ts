@@ -22,6 +22,7 @@ import {
   BOSS_ARENA_RETURN_PORTAL,
   BOSS_ARENA_WIDTH,
 } from './bossArenaConfig';
+import { VILLAGE_MARKER } from './atmosphereConfig';
 import { MAX_THREAT_TIER } from './combatConfig';
 import { SCENE_KEYS, WORLD_HEIGHT, WORLD_WIDTH } from './constants';
 import { VILLAGE_ZONE } from './economyConfig';
@@ -30,7 +31,10 @@ export const MAP_STARTING_LANDS: MapId = 'map.starting_lands';
 export const MAP_BOSS_ARENA_1: MapId = 'map.boss_arena_1';
 
 export const REGION_VILLAGE: RegionId = 'region.village';
-export const REGION_WILDS: RegionId = 'region.wilds';
+/** Vùng ngoài làng, GẦN làng (W3): độ khó như bậc thời gian toàn cục. */
+export const REGION_WILDS_NEAR: RegionId = 'region.wilds_near';
+/** Vùng ngoài làng, XA làng (W3): "phần còn lại" của map, quái sinh ra mạnh hơn. */
+export const REGION_WILDS_FAR: RegionId = 'region.wilds_far';
 export const REGION_ARENA: RegionId = 'region.arena';
 
 export const CONN_VILLAGE_TO_ARENA: ConnectionId = 'conn.village_to_arena';
@@ -48,6 +52,50 @@ const CURRENT_SPAWN_PATTERN = ['melee', 'melee', 'ranged'] as const;
  * NGUỒN THẬT (W2): world/town.ts đọc `playerSpawn` từ đây. Test khóa giá trị {1920, 1440}.
  */
 export const MAIN_DEFAULT_SPAWN = { x: 1920, y: 1440 } as const;
+
+// ── W3: vùng gần/xa làng, biển tên vùng (GIÁ TRỊ KHỞI ĐIỂM, chỉnh sau khi chơi thử) ─────────────────────
+
+/**
+ * Vùng GẦN làng (hình chữ nhật, px thế giới; biên tính cả cạnh). Chứa 4 điểm sinh gần làng của ENEMY_SPAWNS
+ * (world/town.ts): (1050,1150), (2750,1150), (1050,1750), (2750,1750) và cả làng (VILLAGE_ZONE).
+ * Mọi điểm ngoài hình này (trong map chính) là vùng XA. Không đổi ENEMY_SPAWNS khi chỉnh số này
+ * (test worldGraph khóa 4 điểm gần → near, 4 điểm xa → far).
+ */
+export const WILDS_NEAR_BOUNDS = { x: 700, y: 700, width: 2400, height: 1300 } as const;
+
+/** Vùng XA làng: bậc của quái SINH ở đây = bậc thời gian + giá trị này (kẹp theo `tierCap`). */
+export const WILDS_FAR_TIER_OFFSET = 1;
+
+/**
+ * Theo dõi vùng của người chơi (world/regionTracker.ts).
+ * stableMs: vùng mới phải được giữ liên tục ít nhất ngần này ms mới tính là đã vào (chống nhấp nháy ở biên).
+ * cooldownMs: không hiện lại biển của CÙNG một vùng trong ngần này ms kể từ lần hiện trước.
+ */
+export const REGION_TRACKER = { stableMs: 400, cooldownMs: 20000 } as const;
+
+/**
+ * Biển tên vùng (ui/RegionBanner.ts). Tọa độ theo khung thiết kế 960x540 (scrollFactor 0).
+ * Đặt phía trên giữa: dưới dòng đồng hồ HUD (y 10), trên toast (y 144), xa tâm màn (y 270).
+ * holdMs: thời gian hiện đủ sáng; fadeInMs/fadeOutMs: thời gian hiện dần/mờ dần (không nhấp nháy, không flash).
+ * depth: trên HUD (5000–5004), dưới toast/lời nhắc (5050) và màn chết (5100).
+ * Màu đồng trầm (cùng VILLAGE_MARKER), không dùng đỏ/cam (dành cho đạn quái và telegraph).
+ * Cỡ chữ (px) >= nhãn cổng (15 px) để đọc được trên điện thoại.
+ */
+export const REGION_BANNER = {
+  centerX: 480,
+  nameY: 62,
+  subY: 90,
+  depth: 5040,
+  nameFontPx: 22,
+  subFontPx: 15,
+  nameColor: VILLAGE_MARKER.textColor,
+  subColor: '#b5ad98',
+  strokeColor: '#0b0c12',
+  strokeThickness: 4,
+  fadeInMs: 250,
+  holdMs: 2500,
+  fadeOutMs: 700,
+} as const;
 
 const STARTING_LANDS: MapDef = {
   id: MAP_STARTING_LANDS,
@@ -68,12 +116,14 @@ const STARTING_LANDS: MapDef = {
       spawnTable: { pattern: [], points: [] },
       maxAliveCap: null,
       eliteSlots: [],
+      display: { name: 'Làng Khởi Nguyên', danger: 0, description: 'Nơi trú ẩn cuối cùng' },
     },
     {
-      // "Phần còn lại" của map (bounds null). Điểm sinh quái vẫn nằm ở world/town.ts (ENEMY_SPAWNS) ở W1.
-      id: REGION_WILDS,
+      // GẦN làng: hình chữ nhật WILDS_NEAR_BOUNDS (chứa cả làng; regionAt chọn vùng hẹp nhất nên làng vẫn là village).
+      // Điểm sinh quái vẫn nằm ở world/town.ts (ENEMY_SPAWNS).
+      id: REGION_WILDS_NEAR,
       mapId: MAP_STARTING_LANDS,
-      bounds: null,
+      bounds: { ...WILDS_NEAR_BOUNDS },
       safe: false,
       tierOffset: 0,
       tierFloor: 0,
@@ -81,6 +131,22 @@ const STARTING_LANDS: MapDef = {
       spawnTable: { pattern: [...CURRENT_SPAWN_PATTERN], points: [] },
       maxAliveCap: null,
       eliteSlots: [],
+      display: { name: 'Đồng Hoang Úa', danger: 1, description: 'Gió lạnh mang mùi tử khí' },
+    },
+    {
+      // XA làng: "phần còn lại" của map (bounds null). Quái sinh ở đây mạnh hơn WILDS_FAR_TIER_OFFSET bậc;
+      // trần vẫn là MAX_THREAT_TIER (không nâng trần chung).
+      id: REGION_WILDS_FAR,
+      mapId: MAP_STARTING_LANDS,
+      bounds: null,
+      safe: false,
+      tierOffset: WILDS_FAR_TIER_OFFSET,
+      tierFloor: 0,
+      tierCap: MAX_THREAT_TIER,
+      spawnTable: { pattern: [...CURRENT_SPAWN_PATTERN], points: [] },
+      maxAliveCap: null,
+      eliteSlots: [],
+      display: { name: 'Hoang Địa Sâu', danger: 2, description: 'Kẻ yếu không trở về' },
     },
   ],
   connections: [
@@ -130,6 +196,7 @@ const BOSS_ARENA_1: MapDef = {
       },
       maxAliveCap: BOSS_ARENA_MINION_MAX_ALIVE,
       eliteSlots: [],
+      display: null, // Arena không có biển tên.
     },
   ],
   connections: [
