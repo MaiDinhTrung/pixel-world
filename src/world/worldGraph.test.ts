@@ -73,6 +73,7 @@ const PURE_SOURCES: Record<string, string> = {
   'src/config/enemyVisualConfig.ts': fileURLToPath(new URL('../config/enemyVisualConfig.ts', import.meta.url)),
   'src/world/spawnPattern.ts': fileURLToPath(new URL('./spawnPattern.ts', import.meta.url)),
   'src/systems/enemyStats.ts': fileURLToPath(new URL('../systems/enemyStats.ts', import.meta.url)),
+  'src/world/eliteRules.ts': fileURLToPath(new URL('./eliteRules.ts', import.meta.url)),
 };
 
 describe('độ thuần của worldGraph/worldConfig', () => {
@@ -206,6 +207,11 @@ describe('dữ liệu worldConfig', () => {
     expect(village?.spawnTable.pattern).toEqual([]);
 
     // M2: mẫu riêng từng vùng ngoài làng; Arena giữ mẫu M1 (2 grunt : 1 caster).
+    // M3: Elite chỉ ở hai vùng ngoài làng (nền grunt gần, brute xa); làng và Arena không có Elite.
+    expect(near?.eliteSlots).toEqual(['grunt']);
+    expect(far?.eliteSlots).toEqual(['brute']);
+    expect(village?.eliteSlots).toEqual([]);
+    expect(arena.eliteSlots).toEqual([]);
     expect(arena.spawnTable.pattern).toEqual(['grunt', 'grunt', 'caster']);
     expect(near?.spawnTable.pattern).toEqual(['grunt', 'grunt', 'caster', 'swarmer']);
     expect(far?.spawnTable.pattern).toEqual(['grunt', 'brute', 'caster', 'swarmer', 'caster', 'brute']);
@@ -404,6 +410,11 @@ describe('validateWorld', () => {
       ['region_invalid_display', (w) => { w.maps[0].regions[1].display.danger = 1.5; }],
       ['region_invalid_display', (w) => { w.maps[0].regions[2].display.name = '  '; }],
       ['region_unknown_archetype', (w) => { w.maps[0].regions[1].spawnTable.pattern = ['grunt', 'khong_co']; }],
+      // M3: eliteSlots sai (id không tồn tại / không cận chiến / vùng an toàn / vùng có điểm sinh riêng).
+      ['region_invalid_elite', (w) => { w.maps[0].regions[1].eliteSlots = ['khong_co']; }],
+      ['region_invalid_elite', (w) => { w.maps[0].regions[1].eliteSlots = ['caster']; }],
+      ['region_invalid_elite', (w) => { w.maps[0].regions[0].eliteSlots = ['grunt']; }],
+      ['region_invalid_elite', (w) => { w.maps[1].regions[0].eliteSlots = ['grunt']; }],
       ['multiple_fallback_regions', (w) => { w.maps[0].regions[0].bounds = null; }],
       ['no_regions', (w) => { w.maps[1].regions = []; }],
       ['connection_from_out_of_bounds', (w) => { w.maps[0].connections[0].from.x = -5; }],
@@ -420,6 +431,28 @@ describe('validateWorld', () => {
     for (const [expected, mutate] of cases) {
       expect(codes(broken(mutate)), `kỳ vọng bắt ${expected}`).toContain(expected);
     }
+  });
+
+  it('eliteSlots sai chỉ gây đúng mã region_invalid_elite (mỗi slot sai một lỗi); slot hợp lệ không lỗi', () => {
+    const only: Array<[string, (world: Loose) => void]> = [
+      ['id không tồn tại', (w) => { w.maps[0].regions[1].eliteSlots = ['khong_co']; }],
+      ['không phải cận chiến', (w) => { w.maps[0].regions[2].eliteSlots = ['caster']; }],
+      ['vùng an toàn (làng)', (w) => { w.maps[0].regions[0].eliteSlots = ['grunt']; }],
+      ['vùng có điểm sinh riêng (Arena)', (w) => { w.maps[1].regions[0].eliteSlots = ['brute']; }],
+    ];
+
+    for (const [label, mutate] of only) {
+      expect(codes(broken(mutate)), label).toEqual(['region_invalid_elite']);
+    }
+
+    expect(
+      codes(broken((w) => { w.maps[0].regions[1].eliteSlots = ['grunt', 'brute', 'swarmer']; })),
+      'nhiều slot cận chiến hợp lệ',
+    ).toEqual([]);
+    expect(
+      codes(broken((w) => { w.maps[0].regions[1].eliteSlots = ['khong_co', 'caster']; })),
+      'hai slot sai = hai lỗi',
+    ).toEqual(['region_invalid_elite', 'region_invalid_elite']);
   });
 });
 

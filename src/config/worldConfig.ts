@@ -143,7 +143,7 @@ const STARTING_LANDS: MapDef = {
       tierCap: MAX_THREAT_TIER,
       spawnTable: { pattern: [...WILDS_NEAR_SPAWN_PATTERN], points: [] },
       maxAliveCap: null,
-      eliteSlots: [],
+      eliteSlots: ['grunt'], // M3: Elite nền grunt (GIÁ TRỊ KHỞI ĐIỂM)
       display: { name: 'Đồng Hoang Úa', danger: 1, description: 'Gió lạnh mang mùi tử khí' },
     },
     {
@@ -158,7 +158,7 @@ const STARTING_LANDS: MapDef = {
       tierCap: MAX_THREAT_TIER,
       spawnTable: { pattern: [...WILDS_FAR_SPAWN_PATTERN], points: [] },
       maxAliveCap: null,
-      eliteSlots: [],
+      eliteSlots: ['brute'], // M3: Elite nền brute (GIÁ TRỊ KHỞI ĐIỂM)
       display: { name: 'Hoang Địa Sâu', danger: 2, description: 'Kẻ yếu không trở về' },
     },
   ],

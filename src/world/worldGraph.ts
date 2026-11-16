@@ -71,8 +71,11 @@ export interface RegionDef {
   readonly spawnTable: SpawnTable;
   /** Trần quái sống riêng của vùng; null = không có trần riêng. */
   readonly maxAliveCap: number | null;
-  /** Chừa chỗ cho Elite (gói sau W3); luôn rỗng ở W1. */
-  readonly eliteSlots: readonly never[];
+  /**
+   * Archetype nền của Elite ở vùng này (M3): Elite thứ `n` của vùng dùng `eliteSlots[n % độ dài]`. Chỉ archetype cận chiến;
+   * rỗng = vùng không sinh Elite (bắt buộc với vùng an toàn và vùng có điểm sinh riêng như Arena).
+   */
+  readonly eliteSlots: readonly ArchetypeId[];
   /** Biển tên khi vào vùng; null = không hiện biển (ví dụ Arena). */
   readonly display: RegionDisplay | null;
 }
@@ -277,6 +280,7 @@ export type WorldErrorCode =
   | 'region_invalid_tier'
   | 'region_invalid_display'
   | 'region_unknown_archetype'
+  | 'region_invalid_elite'
   | 'multiple_fallback_regions'
   | 'no_regions'
   | 'connection_from_out_of_bounds'
@@ -365,6 +369,18 @@ export function validateWorld(world: WorldDef): WorldError[] {
       for (const archetypeId of region.spawnTable.pattern) {
         if (findArchetype(archetypeId) === undefined) {
           fail('region_unknown_archetype', `${region.id} có spawnTable.pattern chứa archetype không tồn tại: ${String(archetypeId)}`);
+        }
+      }
+
+      for (const slot of region.eliteSlots) {
+        const archetype = findArchetype(slot);
+
+        if (archetype === undefined) {
+          fail('region_invalid_elite', `${region.id} có eliteSlots chứa archetype không tồn tại: ${String(slot)}`);
+        } else if (archetype.kind !== 'melee') {
+          fail('region_invalid_elite', `${region.id} có eliteSlots chứa archetype không phải cận chiến: ${slot}`);
+        } else if (region.safe || region.spawnTable.points.length > 0) {
+          fail('region_invalid_elite', `${region.id} là vùng an toàn hoặc có điểm sinh riêng (Arena) nhưng có eliteSlots`);
         }
       }
 

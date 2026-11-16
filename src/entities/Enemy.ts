@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 
-import { DEFAULT_MELEE_ARCHETYPE, type ArchetypeId } from '../config/enemyConfig';
+import { DEFAULT_MELEE_ARCHETYPE, type ArchetypeId, type EnemyArchetype } from '../config/enemyConfig';
 import { ENEMY_VISUALS } from '../config/enemyVisualConfig';
 import { NEON } from '../config/palette';
 import { meleeStats } from '../systems/enemyStats';
@@ -18,8 +18,10 @@ export class Enemy extends EnemyBase {
     y: number,
     tier = 0,
     archetype: ArchetypeId = DEFAULT_MELEE_ARCHETYPE,
+    /** Hồ sơ chỉ số dẫn xuất (Elite, M3). Có thì dùng cho máu/tốc độ/sát thương; hình và hitbox vẫn theo `archetype`. */
+    statProfile?: EnemyArchetype,
   ) {
-    const stats = meleeStats(tier, archetype);
+    const stats = meleeStats(tier, statProfile ?? archetype);
     const visual = ENEMY_VISUALS[archetype];
 
     // Hình/scale/body theo archetype (M2); grunt = texture `enemy`, scale 2, body 20x20 như trước.

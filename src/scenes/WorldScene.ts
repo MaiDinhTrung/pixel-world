@@ -220,10 +220,25 @@ import {
 import {
   DEFAULT_MELEE_ARCHETYPE,
   DEFAULT_RANGED_ARCHETYPE,
+  ELITE_AFFIXES,
+  ELITE_ESCORT_ARCHETYPE,
+  ELITE_ESCORT_RADIUS,
+  ELITE_GEM_COUNT,
+  ELITE_KILL_LABEL,
+  ELITE_SPAWN_MIN_PLAYER_DISTANCE,
   ENEMY_ARCHETYPES,
   type ArchetypeId,
 } from '../config/enemyConfig';
-import { killXp } from '../systems/enemyStats';
+import { ELITE_VISUAL } from '../config/enemyVisualConfig';
+import { EliteMarker } from '../entities/EliteMarker';
+import { killXp, meleeStats } from '../systems/enemyStats';
+import {
+  eliteArchetype,
+  escortOffsets,
+  pickEliteAffix,
+  pickEliteSpawnPoint,
+  shouldSpawnElite,
+} from '../world/eliteRules';
 import { pickArchetype, pickStaggeredArchetype } from '../world/spawnPattern';
 import { RegionBanner } from '../ui/RegionBanner';
 import { createRegionTracker, type RegionTracker } from '../world/regionTracker';
@@ -267,6 +282,9 @@ import {
 } from '../utils/effects';
 
 const WALL_THICKNESS = TILE_SIZE;
+
+/** Cờ dữ liệu (`setData`) đánh dấu một quái là Elite (M3); `getEnemies()` lọc theo cờ này để đếm Elite đang sống. */
+const ELITE_DATA_KEY = 'elite';
 
 /** Tầm (px) ngọc Phản Đòn tìm kẻ địch để phản sát thương. */
 const THORNS_RANGE = 170;
@@ -374,6 +392,12 @@ export class WorldScene extends Phaser.Scene {
   private readonly regionSpawnCounts = new Map<string, number>();
   /** M2: số điểm sinh của từng vùng (tính một lần mỗi lượt chơi). */
   private readonly regionSpawnPoints = new Map<string, number>();
+  /** M3: số quái thường đã hạ theo vùng của VỊ TRÍ CHẾT kể từ lần Elite gần nhất của vùng (id vùng → đếm). Chỉ trong bộ nhớ. */
+  private readonly regionKillCounts = new Map<string, number>();
+  /** M3: số Elite đã sinh trong lượt này (chọn affix xoay vòng và archetype nền theo chỉ số này). */
+  private elitesSpawned = 0;
+  /** M3: thời điểm (`time.now`) Elite xuất hiện gần nhất; null = chưa có. */
+  private lastEliteAt: number | null = null;
   /** Mục tiêu auto-aim đang khoá khi cầm Kiếm (xem `updateAutoAim`). */
   private autoAimTarget: EnemyBase | null = null;
   /** Chủ duy nhất của kho đồ, trang bị, cấp đồ (C2a/C2b) và tiến trình: cấp, điểm chỉ số, cây/ô kỹ năng (C3). */
@@ -602,6 +626,9 @@ export class WorldScene extends Phaser.Scene {
     this.spawnIndex = 0;
     this.regionSpawnCounts.clear();
     this.regionSpawnPoints.clear();
+    this.regionKillCounts.clear();
+    this.elitesSpawned = 0;
+    this.lastEliteAt = null;
     this.nextAfterimageAt = 0;
     this.attackWasDown = false;
     this.chests = [];
@@ -1390,16 +1417,11 @@ export class WorldScene extends Phaser.Scene {
         )
       : new Enemy(this, spawnX, spawnY, tier, archetypeId ?? DEFAULT_MELEE_ARCHETYPE);
 
-    enemy.once('died', () => {
-      spawnBurst(this, enemy.x, enemy.y, enemy.getDeathColor(), 10, 150);
-      spawnGlow(this, enemy.x, enemy.y, enemy.getDeathColor(), 1.2, 260);
-      this.corpses.add(enemy.x, enemy.y, enemy.getMaxHealth());
-      this.maybeDropWeaponChest(enemy.x, enemy.y);
-      this.dropLoot(enemy.x, enemy.y, tier);
+    this.watchSpawnedEnemyDeath(enemy, {
+      role: 'normal',
+      tier,
       // M2 (M-D1): EXP theo archetype + bậc của chính quái này.
-      this.handleEnemyKilled(
-        killXp(archetypeId ?? (isRanged ? DEFAULT_RANGED_ARCHETYPE : DEFAULT_MELEE_ARCHETYPE), tier),
-      );
+      xp: killXp(archetypeId ?? (isRanged ? DEFAULT_RANGED_ARCHETYPE : DEFAULT_MELEE_ARCHETYPE), tier),
     });
 
     this.watchEnemyHits(enemy);
@@ -1407,6 +1429,164 @@ export class WorldScene extends Phaser.Scene {
 
     spawnRing(this, point.x, point.y, 60, enemy.getDeathColor(), 300);
     spawnGlow(this, point.x, point.y, enemy.getDeathColor(), 0.7, 300);
+  }
+
+  /**
+   * Handler `died` DÙNG CHUNG cho quái sinh theo vùng (M3): quái thường, Elite và quái hộ tống. Hiệu ứng, xác, loot thường
+   * và EXP giữ đúng như trước; khác nhau theo `role`: `normal` đếm vào bộ đếm Elite của vùng; `elite` thay lượt hòm thường
+   * bằng thưởng Elite và báo hạ gục; `escort` như quái thường nhưng KHÔNG đếm vào bộ đếm Elite.
+   */
+  private watchSpawnedEnemyDeath(
+    enemy: EnemyBase,
+    options: {
+      readonly role: 'normal' | 'elite' | 'escort';
+      readonly tier: number;
+      /** EXP khi hạ. */
+      readonly xp: number;
+      /** Máu tối đa ghi cho xác; bỏ trống = máu tối đa của chính quái (Elite truyền máu archetype nền, không ×5). */
+      readonly corpseMaxHealth?: number;
+    },
+  ): void {
+    enemy.once('died', () => {
+      spawnBurst(this, enemy.x, enemy.y, enemy.getDeathColor(), 10, 150);
+      spawnGlow(this, enemy.x, enemy.y, enemy.getDeathColor(), 1.2, 260);
+      this.corpses.add(enemy.x, enemy.y, options.corpseMaxHealth ?? enemy.getMaxHealth());
+
+      if (options.role === 'elite') {
+        this.dropEliteLoot(enemy.x, enemy.y);
+      } else {
+        this.maybeDropWeaponChest(enemy.x, enemy.y);
+      }
+
+      this.dropLoot(enemy.x, enemy.y, options.tier);
+      this.handleEnemyKilled(options.xp);
+
+      if (options.role === 'elite') {
+        this.hud.showToast(ELITE_KILL_LABEL, ELITE_VISUAL.colorCss);
+      } else if (options.role === 'normal') {
+        this.countRegionKill(enemy.x, enemy.y);
+      }
+    });
+  }
+
+  /** Thưởng chắc chắn của Elite (E5): `ELITE_GEM_COUNT` ngọc (như `dropBossLoot`) và 1 hòm thường. */
+  private dropEliteLoot(x: number, y: number): void {
+    for (let i = 0; i < ELITE_GEM_COUNT; i += 1) {
+      this.spawnDrop(x, y, 'gem', Phaser.Utils.Array.GetRandom(GEM_IDS));
+    }
+
+    this.spawnWeaponChest(x, y, false);
+  }
+
+  /** Cộng một kill thường vào vùng của vị trí chết; đủ điều kiện (`shouldSpawnElite`) thì sinh Elite. */
+  private countRegionKill(x: number, y: number): void {
+    const region = regionAt(this.getMapDef(), x, y);
+
+    if (region === null) {
+      return;
+    }
+
+    const kills = (this.regionKillCounts.get(region.id) ?? 0) + 1;
+    const now = this.time.now;
+
+    this.regionKillCounts.set(region.id, kills);
+
+    const aliveElites = this.getEnemies().filter((enemy) => enemy.getData(ELITE_DATA_KEY) === true).length;
+
+    if (
+      shouldSpawnElite(
+        {
+          killsInRegion: kills,
+          aliveElites,
+          sinceLastEliteMs: this.lastEliteAt === null ? Number.POSITIVE_INFINITY : now - this.lastEliteAt,
+        },
+        region,
+      ) &&
+      this.spawnElite(region)
+    ) {
+      this.regionKillCounts.set(region.id, 0);
+    }
+  }
+
+  /**
+   * Sinh một Elite ở `region` (E1, E3, E4, E6). Bỏ qua kiểm trần quái nhưng nằm trong group `enemies`.
+   * Trả false (không đổi trạng thái) khi vùng không có điểm sinh dùng được.
+   */
+  private spawnElite(region: NonNullable<ReturnType<typeof regionAt>>): boolean {
+    const regionPoints = this.town.enemySpawns.filter(
+      (spawn) => regionAt(this.getMapDef(), spawn.x, spawn.y)?.id === region.id,
+    );
+    const point = pickEliteSpawnPoint(
+      regionPoints,
+      { x: this.player.x, y: this.player.y },
+      ELITE_SPAWN_MIN_PLAYER_DISTANCE,
+    );
+
+    if (point === null || region.eliteSlots.length === 0) {
+      return false;
+    }
+
+    const eliteIndex = this.elitesSpawned;
+    const baseId = region.eliteSlots[eliteIndex % region.eliteSlots.length];
+    const affixId = pickEliteAffix(eliteIndex);
+    const affix = ELITE_AFFIXES[affixId];
+    const profile = eliteArchetype(baseId, affixId);
+    const tier = effectiveThreatTier(this.time.now - this.runStartedAt, region);
+    const margin = 48;
+    const x = Phaser.Math.Clamp(point.x, margin, WORLD_WIDTH - margin);
+    const y = Phaser.Math.Clamp(point.y, margin, WORLD_HEIGHT - margin);
+
+    this.elitesSpawned += 1;
+    this.lastEliteAt = this.time.now;
+
+    const elite = new Enemy(this, x, y, tier, baseId, profile);
+
+    elite.setData(ELITE_DATA_KEY, true);
+
+    if (affix.damageTakenMult !== undefined) {
+      elite.damageTakenMult = affix.damageTakenMult;
+    }
+
+    this.watchSpawnedEnemyDeath(elite, {
+      role: 'elite',
+      tier,
+      xp: killXp(profile, tier),
+      corpseMaxHealth: meleeStats(tier, baseId).maxHealth,
+    });
+    this.watchEnemyHits(elite);
+    this.enemies.add(elite);
+    // Marker tự dọn khi quái `died` hoặc bị hủy (despawn).
+    new EliteMarker(this, elite, affixId);
+
+    this.hud.showToast(affix.label, ELITE_VISUAL.colorCss);
+    spawnRing(this, x, y, ELITE_VISUAL.spawnRing.radius, ELITE_VISUAL.color, ELITE_VISUAL.spawnRing.durationMs);
+
+    for (const offset of escortOffsets(affix.escortCount ?? 0, ELITE_ESCORT_RADIUS)) {
+      this.spawnEliteEscort(x + offset.x, y + offset.y, tier);
+    }
+
+    return true;
+  }
+
+  /** Quái hộ tống của Elite `escorted`: sinh như quái thường (loot/EXP thường) nhưng không đếm vào bộ đếm Elite. */
+  private spawnEliteEscort(x: number, y: number, tier: number): void {
+    const margin = 48;
+    const escort = new Enemy(
+      this,
+      Phaser.Math.Clamp(x, margin, WORLD_WIDTH - margin),
+      Phaser.Math.Clamp(y, margin, WORLD_HEIGHT - margin),
+      tier,
+      ELITE_ESCORT_ARCHETYPE,
+    );
+
+    this.watchSpawnedEnemyDeath(escort, {
+      role: 'escort',
+      tier,
+      xp: killXp(ELITE_ESCORT_ARCHETYPE, tier),
+    });
+    this.watchEnemyHits(escort);
+    this.enemies.add(escort);
+    spawnRing(this, escort.x, escort.y, 50, escort.getDeathColor(), 300);
   }
 
   private getThreatTier(time: number): number {

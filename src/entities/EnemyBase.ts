@@ -115,6 +115,8 @@ export abstract class EnemyBase extends Phaser.Physics.Arcade.Sprite {
     | null = null;
   /** Hồ sơ phòng thủ (giảm vật lý, kháng nguyên tố). Mặc định rỗng = không giảm gì. */
   protected defense: Defender = {};
+  /** Hệ số nhân sát thương nhận vào, áp sau `getVulnerableMult` (M3 affix `armored`). 1 = như cũ. */
+  private damageTakenMultiplier = 1;
   private freezeUntil = 0;
   private freezeImmuneUntil = 0;
   private readonly iceStacks = new IceStackTracker();
@@ -294,6 +296,17 @@ export abstract class EnemyBase extends Phaser.Physics.Arcade.Sprite {
     return !!state && this.scene.time.now < state.until;
   }
 
+  get damageTakenMult(): number {
+    return this.damageTakenMultiplier;
+  }
+
+  /** Giá trị không hữu hạn hoặc <= 0 bị bỏ qua (giữ giá trị cũ). */
+  set damageTakenMult(value: number) {
+    if (Number.isFinite(value) && value > 0) {
+      this.damageTakenMultiplier = value;
+    }
+  }
+
   private getVulnerableMult(time: number): number {
     let total = 1;
 
@@ -336,7 +349,8 @@ export abstract class EnemyBase extends Phaser.Physics.Arcade.Sprite {
   }
 
   private takeStatusDamage(amount: number, kind: EnemyDotKind): void {
-    const dealt = amount * this.getVulnerableMult(this.scene.time.now);
+    const dealt =
+      amount * this.getVulnerableMult(this.scene.time.now) * this.damageTakenMultiplier;
 
     this.health -= dealt;
     this.flash();
@@ -501,7 +515,8 @@ export abstract class EnemyBase extends Phaser.Physics.Arcade.Sprite {
       info?.attacker ?? {},
       this.defense,
     );
-    const dealt = resolved.total * this.getVulnerableMult(this.scene.time.now);
+    const dealt =
+      resolved.total * this.getVulnerableMult(this.scene.time.now) * this.damageTakenMultiplier;
 
     this.health -= dealt;
     this.flash();

@@ -70,6 +70,55 @@ export const ENEMY_ARCHETYPES = {
 
 export type ArchetypeId = keyof typeof ENEMY_ARCHETYPES;
 
+// ── Elite (Gói M3, docs/GAMEPLAY_LOOP_M.md §3c E1–E7) ───────────────────────────────────────────────
+// Mọi giá trị dưới đây là KHỞI ĐIỂM, chỉnh sau khi chơi thử. Luật sinh/chọn affix ở `world/eliteRules.ts`.
+
+/** Số quái thường hạ trong một vùng để Elite xuất hiện (đếm theo VỊ TRÍ CHẾT; Elite, escort, minion Boss không đếm). */
+export const ELITE_KILLS_INTERVAL = 25;
+/** Số Elite sống tối đa cùng lúc. */
+export const ELITE_MAX_ALIVE = 1;
+/** Hệ số nhân máu tối đa của Elite so với archetype nền (xác của Triệu Hồn Sư vẫn tính theo máu nền, không ×5). */
+export const ELITE_HEALTH_MULT = 5;
+/** Hệ số nhân EXP khi hạ Elite so với archetype nền. */
+export const ELITE_XP_MULT = 8;
+/** Số ngọc rơi khi hạ Elite (cùng cách rơi như ngọc của Boss). */
+export const ELITE_GEM_COUNT = 2;
+/** Khoảng chờ tối thiểu (ms) giữa hai lần Elite xuất hiện. */
+export const ELITE_MIN_GAP_MS = 30000;
+/** Elite sinh tại điểm sinh của vùng gần người chơi nhất nhưng cách người chơi ít nhất ngần này px. */
+export const ELITE_SPAWN_MIN_PLAYER_DISTANCE = 600;
+/** Archetype của quái hộ tống (affix `escorted`). */
+export const ELITE_ESCORT_ARCHETYPE: ArchetypeId = 'swarmer';
+/** Bán kính (px) vòng hộ tống quanh Elite lúc sinh. */
+export const ELITE_ESCORT_RADIUS = 64;
+/** Toast khi hạ Elite. */
+export const ELITE_KILL_LABEL = 'HẠ TINH ANH!';
+
+export type EliteAffixId = 'swift' | 'armored' | 'escorted';
+
+export interface EliteAffix {
+  /** Dòng toast khi Elite xuất hiện. */
+  readonly label: string;
+  /** Hệ số nhân tốc độ di chuyển (bỏ trống = 1). */
+  readonly speedMult?: number;
+  /** Hệ số nhân sát thương NHẬN VÀO (bỏ trống = 1; 0.7 = nhận 70%). */
+  readonly damageTakenMult?: number;
+  /** Số quái hộ tống sinh kèm (bỏ trống = 0). */
+  readonly escortCount?: number;
+}
+
+/** Thứ tự xoay vòng xác định: Elite thứ `n` (từ 0) có affix `ELITE_AFFIX_ORDER[n % độ dài]`. */
+export const ELITE_AFFIX_ORDER: readonly EliteAffixId[] = ['swift', 'armored', 'escorted'];
+
+export const ELITE_AFFIXES: Readonly<Record<EliteAffixId, EliteAffix>> = {
+  /** Thần tốc: chạy nhanh hơn. */
+  swift: { label: 'TINH ANH THẦN TỐC XUẤT HIỆN', speedMult: 1.4 },
+  /** Giáp dày: nhận ít sát thương hơn. */
+  armored: { label: 'TINH ANH GIÁP DÀY XUẤT HIỆN', damageTakenMult: 0.7 },
+  /** Có hộ tống: kèm theo quái hộ tống (`ELITE_ESCORT_ARCHETYPE`). */
+  escorted: { label: 'TINH ANH CÓ HỘ TỐNG XUẤT HIỆN', escortCount: 3 },
+};
+
 /** Archetype mặc định của từng lớp hành vi (Enemy → grunt, RangedEnemy → caster). */
 export const DEFAULT_MELEE_ARCHETYPE: ArchetypeId = 'grunt';
 export const DEFAULT_RANGED_ARCHETYPE: ArchetypeId = 'caster';
