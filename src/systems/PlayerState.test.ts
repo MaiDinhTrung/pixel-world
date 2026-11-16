@@ -19,9 +19,11 @@ import {
 } from '../config/gemConfig';
 import { WEAPON_IDS } from '../config/weaponInfo';
 import {
+  SAVE_VERSION,
   createDefaultSave,
   type CharacterSave,
 } from '../progression/CharacterProgress';
+import { applyV7ShapeToV8 } from '../progression/saveBridge';
 import { migrateV7ToV8, v8ToV7Shape } from '../progression/saveMigration';
 import { validateSaveV8, type CharacterSaveV8 } from '../progression/saveV8';
 import { LevelSystem } from '../progression/LevelSystem';
@@ -2606,6 +2608,217 @@ describe('PlayerState C3: id sai không throw, không đổi', () => {
     }
 
     expect(snapP(s)).toBe(before);
+  });
+});
+
+// ---------------------------------------------------------------- C4: toSave thay cầu nối
+
+/** Dựng dạng v7 đúng như WorldScene.saveProgress trước C4 (đường cầu nối cũ). */
+function oldBridgeShape(state: PlayerState, econ: PlayerEconomy): CharacterSave {
+  const slotIds = state.getSlotIds();
+
+  return {
+    ...state.getLevelSystem().getState(),
+    version: SAVE_VERSION,
+    statPoints: state.getStatPoints(),
+    stats: state.getAllocation(),
+    inventory: state.getWeapons(),
+    equipped: state.getEquippedWeapons(),
+    gearInventory: state.getGear(),
+    equippedGear: state.getEquippedGear(),
+    gearLevels: state.getGearLevels(),
+    gold: econ.gold,
+    gems: { ...econ.gems },
+    gearSockets: clone(econ.sockets),
+    skillLoadout: [
+      slotIds[0] as SkillId,
+      slotIds[1] as SkillId,
+      slotIds[2] as SkillId,
+    ],
+    extraSkills: slotIds.slice(3),
+    skillLevels: state.getSkillLevels(),
+  };
+}
+
+/**
+ * Khác biệt có chủ đích duy nhất về thứ tự: cầu nối cũ luôn xếp vũ khí trước rồi mới
+ * trang bị trong `bag`; PlayerState giữ thứ tự thêm (xen kẽ). Thứ tự tương đối trong
+ * từng loại giống hệt nhau, nên getWeapons()/getGear() không đổi.
+ */
+function weaponsFirst(save: CharacterSaveV8): CharacterSaveV8 {
+  const kindOf = (uid: string) => save.items[uid]!.kind;
+
+  return {
+    ...save,
+    bag: [
+      ...save.bag.filter((uid) => kindOf(uid) === 'weapon'),
+      ...save.bag.filter((uid) => kindOf(uid) === 'gear'),
+    ],
+  };
+}
+
+/** Đổi uid thành "kind:defId" để so hai save chỉ khác cách đánh số uid. */
+function uidNeutral(raw: CharacterSaveV8): unknown {
+  const save = weaponsFirst(raw);
+
+  const key = (uid: string | null): string | null =>
+    uid === null ? null : `${save.items[uid]!.kind}:${save.items[uid]!.defId}`;
+  const items: Record<string, unknown> = {};
+
+  for (const uid of save.bag) {
+    items[key(uid)!] = { ...save.items[uid]!, uid: key(uid) };
+  }
+
+  return {
+    ...save,
+    nextItemSeq: 0,
+    items,
+    bag: save.bag.map(key),
+    equippedWeapons: save.equippedWeapons.map(key),
+    equippedGear: {
+      hat: key(save.equippedGear.hat),
+      armor: key(save.equippedGear.armor),
+      boots: key(save.equippedGear.boots),
+    },
+  };
+}
+
+function runBridgeEquivalence(
+  id: CharacterId,
+  seq: number,
+  commitEvery: number,
+): void {
+  const rules = rulesOf(id);
+  const allowed = CHARACTERS[id].allowedWeapons;
+  const skillIds = Object.keys(rules.skills) as SkillId[];
+  let base = progSave(id, { level: 1 + (seq % 6), statPoints: seq % 4 });
+  const state = PlayerState.fromSave(base, rules);
+  const econ = makeEconomy();
+  let rng = (seq + 1) * 2654435761 + id.length * 97;
+  const rand = (n: number): number => {
+    rng = (rng * 1664525 + 1013904223) % 4294967296;
+
+    return Math.floor((rng / 4294967296) * n);
+  };
+  const removed = new Set<string>();
+  const seen = new Set<string>();
+  let lastSeq = base.nextItemSeq;
+
+  for (let t = 0; t < 45; t += 1) {
+    const weapon = allowed[rand(allowed.length)]!;
+    const gear = GEAR_IDS[rand(GEAR_IDS.length)]!;
+    const econBefore = clone(econ);
+    const before = JSON.stringify(state.toSave(econBefore, base));
+    let ok = true;
+
+    switch (rand(15)) {
+      case 0: ok = state.addWeapon(weapon).ok; break;
+      case 1: ok = state.removeWeapon(weapon).ok; break;
+      case 2: ok = state.equipWeapon(weapon, rand(2) as 0 | 1).ok; break;
+      case 3: ok = state.unequipWeapon(rand(2) as 0 | 1).ok; break;
+      case 4: ok = state.addGear(gear).ok; break;
+      case 5: ok = state.rewardGear(gear, rand(4)).ok; break;
+      case 6: ok = state.removeGear(gear).ok; break;
+      case 7: ok = state.equipGear(gear).ok; break;
+      case 8: ok = state.unequipGear(GEAR_SLOTS[rand(3)]!).ok; break;
+      case 9: ok = state.discardGear(gear).ok; break;
+      case 10: state.grantExperience(rand(120)); break;
+      case 11: ok = state.spendStatPoint(STAT_DEFINITIONS[rand(STAT_DEFINITIONS.length)]!.id).ok; break;
+      case 12: ok = state.assignSkill(skillIds[rand(skillIds.length)]!, rand(8) - 1).ok; break;
+      case 13: ok = state.clearSkillSlot(3 + rand(4)).ok; break;
+      default: ok = state.discardWeapon(weapon).ok; break;
+    }
+
+    const label = `${id} chuỗi ${seq} bước ${t}`;
+
+    if (!ok) {
+      expect(JSON.stringify(state.toSave(econBefore, base)), `${label}: ok:false đổi trạng thái`).toBe(before);
+    }
+
+    // Kinh tế đổi theo thời gian (vàng, ngọc, ổ ngọc), như VillageService.
+    econ.gold += rand(50);
+    econ.gems[GEM_IDS[rand(GEM_IDS.length)]!] += rand(3);
+
+    if (rand(4) === 0) {
+      econ.sockets[gear] = [GEM_IDS[rand(GEM_IDS.length)]!, null];
+    }
+
+    if (t % commitEvery !== commitEvery - 1) {
+      continue;
+    }
+
+    const bridged = applyV7ShapeToV8(base, oldBridgeShape(state, econ));
+    const saved = state.toSave(econ, base);
+
+    expect(bridged.ok, label).toBe(true);
+    expect(validateSaveV8(saved), label).toEqual([]);
+
+    if (!bridged.ok) {
+      return;
+    }
+
+    if (commitEvery === 1) {
+      // Commit mỗi bước: giống hệt từng chữ, kể cả uid và nextItemSeq.
+      expect(weaponsFirst(saved), label).toEqual(bridged.save);
+    } else {
+      // Dồn nhiều thao tác: chỉ khác cách đánh số uid / nextItemSeq (xem báo cáo C4).
+      expect(uidNeutral(saved), label).toEqual(uidNeutral(bridged.save));
+      expect(saved.nextItemSeq, label).toBeGreaterThanOrEqual(bridged.save.nextItemSeq);
+    }
+
+    // uid không đổi chủ, không tái dùng sau khi bị bỏ; nextItemSeq không giảm.
+    for (const uid of Object.keys(saved.items)) {
+      expect(removed.has(uid), `${label}: uid ${uid} bị tái dùng`).toBe(false);
+      seen.add(uid);
+    }
+
+    for (const uid of seen) {
+      if (!(uid in saved.items)) {
+        removed.add(uid);
+      }
+    }
+
+    expect(saved.nextItemSeq, label).toBeGreaterThanOrEqual(lastSeq);
+    lastSeq = saved.nextItemSeq;
+    expect(saved.gold, label).toBe(econ.gold);
+    expect(saved.gems, label).toEqual(econ.gems);
+    base = saved;
+  }
+}
+
+describe('PlayerState C4: toSave(economy, base) thay đường cầu nối cũ', () => {
+  it.each(CHARACTER_IDS)(
+    'commit mỗi bước: giống hệt applyV7ShapeToV8(base, shape cũ) (%s)',
+    (id) => {
+      for (let seq = 0; seq < 30; seq += 1) {
+        runBridgeEquivalence(id, seq, 1);
+      }
+    },
+  );
+
+  it.each(CHARACTER_IDS)(
+    'dồn 6 thao tác rồi lưu: khác bridge chỉ ở số uid/nextItemSeq (%s)',
+    (id) => {
+      for (let seq = 0; seq < 30; seq += 1) {
+        runBridgeEquivalence(id, seq + 100, 6);
+      }
+    },
+  );
+
+  it('vàng, ngọc, ổ ngọc đi qua economy; ổ của món không có trong túi bị bỏ', () => {
+    const base = defaultV8('knight');
+    const s = PlayerState.fromSave(base, rulesOf('knight'));
+    const econ = makeEconomy();
+    const out = s.toSave({ ...econ, gold: 777 }, base);
+
+    expect(out.gold).toBe(777);
+    expect(out.gems).toEqual(econ.gems);
+
+    for (const item of Object.values(out.items)) {
+      if (item.kind === 'gear') {
+        expect(item.sockets).toEqual((econ.sockets[item.defId] ?? []).slice(0, MAX_SOCKETS));
+      }
+    }
   });
 });
 

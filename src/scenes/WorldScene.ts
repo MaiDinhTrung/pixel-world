@@ -154,10 +154,8 @@ import { Player } from '../entities/Player';
 import { RangedEnemy } from '../entities/RangedEnemy';
 import { WeaponChest } from '../entities/WeaponChest';
 import { createPlaceholderPlayerSheet } from '../utils/placeholderPlayer';
-import { SAVE_VERSION, type CharacterSave } from '../progression/CharacterProgress';
 import { progressStore } from '../progression/ProgressStore';
-import { applyV7ShapeToV8 } from '../progression/saveBridge';
-import { v8ToV7Shape } from '../progression/saveMigration';
+import type { CharacterSaveV8 } from '../progression/saveV8';
 import { XP_PER_KILL } from '../progression/progressionConfig';
 import {
   getSkill,
@@ -677,12 +675,12 @@ export class WorldScene extends Phaser.Scene {
       this.minions.clear();
     });
 
-    // Cầu nối v8 -> dạng v7: scene giữ cấu trúc nội bộ theo defId như cũ.
-    const save = v8ToV7Shape(progressStore.get(this.characterId));
+    // Một nguồn lưu (C4): đọc thẳng save v8; PlayerState nạp kho đồ (lọc vũ khí ngoài lớp,
+    // vũ khí khởi đầu, chọn lại hai ô) và tiến trình.
+    const save = progressStore.get(this.characterId);
 
-    // PlayerState nạp kho đồ (lọc vũ khí ngoài lớp, vũ khí khởi đầu, chọn lại hai ô) và tiến trình.
     this.playerState = PlayerState.fromSave(
-      progressStore.get(this.characterId),
+      save,
       {
         allowedWeapons: this.character.allowedWeapons,
         startingWeapons: this.character.startingWeapons,
@@ -700,8 +698,8 @@ export class WorldScene extends Phaser.Scene {
     );
     this.village = new VillageService(this.createVillageHost(), {
       gold: save.gold,
-      gems: save.gems,
-      sockets: save.gearSockets,
+      gems: { ...save.gems },
+      sockets: this.playerState.getLoadedSockets(),
     });
     this.player.onHurt = () => this.reflectThorns();
     this.damageNumbers = new DamageNumberManager(this);
@@ -2470,37 +2468,27 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private saveProgress(): void {
-    const levelState = this.playerState.getLevelSystem().getState();
-    const slotIds = this.playerState.getSlotIds();
+    // Một nguồn lưu (C4): PlayerState dựng save v8; không dựng được thì không ghi, không ném.
+    let built: CharacterSaveV8 | null = null;
+    let failure: unknown = null;
 
-    const shape: CharacterSave = {
-      ...levelState,
-      version: SAVE_VERSION,
-      statPoints: this.playerState.getStatPoints(),
-      stats: this.playerState.getAllocation(),
-      inventory: this.playerState.getWeapons(),
-      equipped: this.playerState.getEquippedWeapons(),
-      gearInventory: this.playerState.getGear(),
-      equippedGear: this.playerState.getEquippedGear(),
-      gearLevels: this.playerState.getGearLevels(),
-      gold: this.village.getGold(),
-      gems: { ...this.village.getGems() },
-      gearSockets: this.village.getSocketsSnapshot(),
-      skillLoadout: [
-        slotIds[0] as SkillId,
-        slotIds[1] as SkillId,
-        slotIds[2] as SkillId,
-      ],
-      extraSkills: slotIds.slice(3),
-      skillLevels: this.playerState.getSkillLevels(),
-    };
-    // Cầu nối dạng v7 -> v8; không áp được thì không ghi, không ném.
-    const result = applyV7ShapeToV8(progressStore.get(this.characterId), shape);
+    try {
+      built = this.playerState.toSave(
+        {
+          gold: this.village.getGold(),
+          gems: { ...this.village.getGems() },
+          sockets: this.village.getSocketsSnapshot(),
+        },
+        progressStore.get(this.characterId),
+      );
+    } catch (error) {
+      failure = error;
+    }
 
-    if (result.ok) {
-      progressStore.commit(this.characterId, result.save);
+    if (built) {
+      progressStore.commit(this.characterId, built);
     } else {
-      console.error('saveProgress: không áp được save v8, bỏ qua lần ghi', result.errors);
+      console.error('saveProgress: không dựng được save v8, bỏ qua lần ghi', failure);
 
       if (!this.saveBridgeFailureToasted) {
         this.saveBridgeFailureToasted = true;
