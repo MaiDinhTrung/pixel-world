@@ -36,6 +36,8 @@ import {
   effectiveThreatTier,
   evaluateConnection,
   findConnection,
+  findRegion,
+  regionOfMap,
   zoneAt,
   requestTravel,
   validateWorld,
@@ -68,6 +70,9 @@ const FORBIDDEN: ReadonlyArray<{ name: string; pattern: RegExp }> = [
 const PURE_SOURCES: Record<string, string> = {
   'src/world/worldGraph.ts': fileURLToPath(new URL('./worldGraph.ts', import.meta.url)),
   'src/config/worldConfig.ts': fileURLToPath(new URL('../config/worldConfig.ts', import.meta.url)),
+  'src/world/instance.ts': fileURLToPath(new URL('./instance.ts', import.meta.url)),
+  'src/world/localInstanceAllocator.ts': fileURLToPath(new URL('./localInstanceAllocator.ts', import.meta.url)),
+  'src/world/arrival.ts': fileURLToPath(new URL('./arrival.ts', import.meta.url)),
   'src/world/regionTracker.ts': fileURLToPath(new URL('./regionTracker.ts', import.meta.url)),
   'src/config/enemyConfig.ts': fileURLToPath(new URL('../config/enemyConfig.ts', import.meta.url)),
   'src/config/enemyVisualConfig.ts': fileURLToPath(new URL('../config/enemyVisualConfig.ts', import.meta.url)),
@@ -355,7 +360,7 @@ describe('requestTravel', () => {
 
 // ── validateWorld ───────────────────────────────────────────────────────────
 
-type Loose = { maps: any[] }; // eslint-disable-line @typescript-eslint/no-explicit-any
+type Loose = { maps: any[]; regions: any[] }; // eslint-disable-line @typescript-eslint/no-explicit-any
 
 function broken(mutate: (world: Loose) => void): WorldDef {
   const copy = structuredClone(WORLD) as unknown as Loose;
@@ -453,6 +458,78 @@ describe('validateWorld', () => {
       codes(broken((w) => { w.maps[0].zones[1].eliteSlots = ['khong_co', 'caster']; })),
       'hai slot sai = hai lỗi',
     ).toEqual(['zone_invalid_elite', 'zone_invalid_elite']);
+  });
+});
+
+// ── Region và chính sách Instance (P1) ──────────────────────────────────────
+
+describe('Region và InstancePolicy (P1)', () => {
+  it('WORLD.regions có region.starting với 2 map; findRegion/regionOfMap', () => {
+    expect(WORLD.regions.map((region) => region.id)).toEqual(['region.starting']);
+
+    const region = findRegion(WORLD, worldConfig.REGION_STARTING);
+
+    expect(region?.mapIds).toEqual([MAP_STARTING_LANDS, MAP_BOSS_ARENA_1]);
+    expect(region?.entryMapId).toBe(MAP_STARTING_LANDS);
+    expect(region?.respawn).toBeUndefined();
+    expect(findRegion(WORLD, 'region.khong_co')).toBeNull();
+    expect(regionOfMap(WORLD, MAP_BOSS_ARENA_1)?.id).toBe('region.starting');
+    expect(regionOfMap(WORLD, 'map.khong_co')).toBeNull();
+    expect(STARTING_LANDS.regionId).toBe('region.starting');
+    expect(BOSS_ARENA.regionId).toBe('region.starting');
+    expect(STARTING_LANDS.builderId).toBe('town');
+    expect(BOSS_ARENA.builderId).toBe('boss_arena');
+    expect(STARTING_LANDS.instance).toBeUndefined();
+    expect(BOSS_ARENA.instance).toBeUndefined();
+  });
+
+  it('bắt được dữ liệu Region/Instance cố ý hỏng (mỗi mã mới)', () => {
+    const cases: Array<[WorldErrorCode, (world: Loose) => void]> = [
+      ['duplicate_region_id', (w) => { w.regions.push(structuredClone(w.regions[0])); }],
+      ['region_without_maps', (w) => { w.regions[0].mapIds = []; }],
+      ['region_unknown_map', (w) => { w.regions[0].mapIds.push('map.khong_co'); }],
+      ['region_unknown_map', (w) => { w.regions[0].mapIds.push('map.boss_arena_1'); }],
+      ['region_entry_invalid', (w) => { w.regions[0].entryMapId = 'map.khong_co'; }],
+      ['region_membership_mismatch', (w) => {
+        w.regions.push({ ...structuredClone(w.regions[0]), id: 'region.khac', mapIds: ['map.boss_arena_1'], entryMapId: 'map.boss_arena_1' });
+      }],
+      ['region_membership_mismatch', (w) => { w.regions[0].mapIds = ['map.starting_lands']; }],
+      ['map_unknown_region', (w) => { w.maps[0].regionId = 'region.khong_co'; }],
+      ['region_invalid_respawn', (w) => { w.regions[0].respawn = { mapId: 'map.khong_co', spawnId: 'default' }; }],
+      ['region_invalid_respawn', (w) => { w.regions[0].respawn = { mapId: 'map.starting_lands', spawnId: 'anchor.khong_co' }; }],
+      ['region_invalid_display', (w) => { w.regions[0].display.name = ' '; }],
+      ['region_invalid_display', (w) => { w.regions[0].display.danger = 4; }],
+      ['region_invalid_display', (w) => { w.regions[0].display.danger = 0.5; }],
+      ['region_invalid_display', (w) => { w.regions[0].display.description = 'x'.repeat(41); }],
+      ['map_invalid_builder', (w) => { w.maps[0].builderId = ''; }],
+      ['map_invalid_builder', (w) => { w.maps[0].builderId = '   '; }],
+      ['instance_invalid_capacity', (w) => { w.maps[0].instance = { capacity: 0 }; }],
+      ['instance_invalid_capacity', (w) => { w.maps[0].instance = { capacity: 1.5 }; }],
+      ['instance_invalid_ttl', (w) => { w.maps[0].instance = { idleTtlMs: -1 }; }],
+      ['instance_invalid_ttl', (w) => { w.maps[0].instance = { idleTtlMs: Infinity }; }],
+      ['instance_invalid_policy', (w) => { w.maps[0].instance = { mode: 'x' }; }],
+      ['instance_invalid_policy', (w) => { w.maps[0].instance = { persistence: 'x' }; }],
+      ['instance_invalid_policy', (w) => { w.maps[0].instance = { allocation: 'x' }; }],
+    ];
+
+    for (const [expected, mutate] of cases) {
+      expect(codes(broken(mutate)), `kỳ vọng bắt ${expected}`).toContain(expected);
+    }
+  });
+
+  it('chính sách hợp lệ ghi đè một phần không gây lỗi; respawn hợp lệ không lỗi', () => {
+    const world = broken((w) => {
+      w.maps[0].instance = { mode: 'shared', capacity: 8, persistence: 'persistent', allocation: 'balanced', idleTtlMs: 1000 };
+      w.regions[0].respawn = { mapId: 'map.starting_lands', spawnId: 'default' };
+    });
+
+    expect(codes(world)).toEqual([]);
+  });
+
+  it('validateWorld kiểm chính sách đã ghép với defaults tiêm vào', () => {
+    const badDefaults = { ...worldConfig.DEFAULT_INSTANCE_POLICY, capacity: 0 };
+
+    expect(validateWorld(WORLD, badDefaults).map((error) => error.code)).toContain('instance_invalid_capacity');
   });
 });
 

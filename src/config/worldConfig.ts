@@ -3,7 +3,16 @@
  * ĐÃ NỐI (W2): WorldScene/BossArenaScene/town/bossArena đọc id, đích và luật cổng từ đây. Chỉ THAM CHIẾU
  * hằng số có sẵn, không sao chép số (MAIN_DEFAULT_SPAWN là nguồn thật, xem chú thích bên dưới).
  */
-import type { MapDef, MapId, ZoneId, ConnectionId, WorldDef } from '../world/worldGraph';
+import type {
+  ConnectionId,
+  InstancePolicy,
+  MapDef,
+  MapId,
+  RegionDef,
+  RegionId,
+  WorldDef,
+  ZoneId,
+} from '../world/worldGraph';
 import {
   BOSS_ARENA_ENTRANCE,
   BOSS_ARENA_ENTRANCE_LABEL,
@@ -29,6 +38,20 @@ import { VILLAGE_ZONE } from './economyConfig';
 
 export const MAP_STARTING_LANDS: MapId = 'map.starting_lands';
 export const MAP_BOSS_ARENA_1: MapId = 'map.boss_arena_1';
+
+export const REGION_STARTING: RegionId = 'region.starting';
+
+/**
+ * Chính sách Instance mặc định (P1, GIÁ TRỊ KHỞI ĐIỂM): tái hiện hành vi hiện tại, mỗi lần chuyển Map tạo Instance
+ * mới và Instance cũ bị huỷ. Map ghi đè từng phần bằng `MapDef.instance`. Chưa nối vào game.
+ */
+export const DEFAULT_INSTANCE_POLICY: InstancePolicy = {
+  mode: 'private',
+  capacity: 1,
+  persistence: 'ephemeral',
+  allocation: 'fill_first',
+  idleTtlMs: 0,
+};
 
 export const ZONE_VILLAGE: ZoneId = 'zone.village';
 /** Vùng ngoài làng, GẦN làng (W3): độ khó như bậc thời gian toàn cục. */
@@ -112,6 +135,8 @@ export const ZONE_BANNER = {
 
 const STARTING_LANDS: MapDef = {
   id: MAP_STARTING_LANDS,
+  regionId: REGION_STARTING,
+  builderId: 'town',
   sceneKey: SCENE_KEYS.world,
   size: { width: WORLD_WIDTH, height: WORLD_HEIGHT },
   kind: 'overworld',
@@ -188,6 +213,8 @@ const STARTING_LANDS: MapDef = {
 
 const BOSS_ARENA_1: MapDef = {
   id: MAP_BOSS_ARENA_1,
+  regionId: REGION_STARTING,
+  builderId: 'boss_arena',
   sceneKey: SCENE_KEYS.bossArena,
   size: { width: BOSS_ARENA_WIDTH, height: BOSS_ARENA_HEIGHT },
   kind: 'boss',
@@ -237,4 +264,15 @@ const BOSS_ARENA_1: MapDef = {
   deathRespawn: { mapId: MAP_STARTING_LANDS, spawnId: 'default' },
 };
 
-export const WORLD: WorldDef = { maps: [STARTING_LANDS, BOSS_ARENA_1] };
+/** Region đầu tiên (P1): GIÁ TRỊ KHỞI ĐIỂM, `danger` chưa hiển thị ở đâu; chưa khai báo `respawn`. */
+const REGION_STARTING_DEF: RegionDef = {
+  id: REGION_STARTING,
+  display: { name: 'Khởi Nguyên', description: 'Làng và vùng hoang địa đầu tiên', danger: 1 },
+  mapIds: [MAP_STARTING_LANDS, MAP_BOSS_ARENA_1],
+  entryMapId: MAP_STARTING_LANDS,
+};
+
+export const WORLD: WorldDef = {
+  regions: [REGION_STARTING_DEF],
+  maps: [STARTING_LANDS, BOSS_ARENA_1],
+};

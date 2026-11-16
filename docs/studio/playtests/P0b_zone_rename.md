@@ -133,4 +133,4 @@ Mỗi mục: đánh dấu một ô — `[x] PASS` / `[x] FAIL` / `[x] NOT TESTED
 
 ## Kết quả người dùng gửi (2026-11-17)
 15 Đạt, 0 Không đạt, 0 Chưa kiểm tra / 15 (PT-01 … PT-15, bản tick được trên trang artifact).
-Ghi chú ở PT-13: "Quái và vật phẩm vẫn giữ nguyên, hoạt động bình thường khi mình chết". Không được báo là lỗi; P0b không sửa mã chết/chơi lại. Chờ người dùng xác nhận đó là hành vi mong muốn hay muốn xem xét riêng (ngoài phạm vi P0b).
+Ghi chú ở PT-13: "Quái và vật phẩm vẫn giữ nguyên, hoạt động bình thường khi mình chết". Không được báo là lỗi; P0b không sửa mã chết/chơi lại. **Đã giải quyết (2026-11-17):** người dùng xác nhận hành vi khi chết là mong muốn (reset quái, Boss, vật phẩm trên sàn; giữ trang bị, túi, vàng, ngọc, level); không đổi gameplay. Chi tiết ở `P1_region_instance.md`.

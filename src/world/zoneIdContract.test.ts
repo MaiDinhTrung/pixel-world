@@ -67,7 +67,11 @@ describe('khóa id vùng (Zone) sau P0b', () => {
     expect(CONN_ARENA_TO_VILLAGE).toBe('conn.arena_to_village');
   });
 
-  it('tiền tố "region." bị dành riêng; mọi ZoneId bắt đầu "zone."', () => {
+  it('tiền tố "region." chỉ dành cho RegionId; mọi RegionId bắt đầu "region.", mọi ZoneId bắt đầu "zone."', () => {
+    for (const region of WORLD.regions) {
+      expect(region.id.startsWith('region.'), region.id).toBe(true);
+    }
+
     for (const map of WORLD.maps) {
       expect(map.id.startsWith('region.'), map.id).toBe(false);
 

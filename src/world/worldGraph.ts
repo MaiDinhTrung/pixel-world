@@ -8,6 +8,7 @@
  */
 import { MAX_THREAT_TIER, THREAT_INTERVAL_MS } from '../config/combatConfig';
 import { findArchetype, type ArchetypeId } from '../config/enemyConfig';
+import { DEFAULT_INSTANCE_POLICY } from '../config/worldConfig';
 import {
   getPortalDenyReason,
   type PortalAccessInput,
@@ -20,7 +21,9 @@ import {
 export type MapId = `map.${string}`;
 export type ZoneId = `zone.${string}`;
 export type ConnectionId = `conn.${string}`;
-export type SpawnId = 'default' | `fromPortal:${ConnectionId}`;
+/** Nhóm nhiều Map (P1, docs/WORLD_ARCHITECTURE.md §4.2). */
+export type RegionId = `region.${string}`;
+export type SpawnId = 'default' | `anchor.${string}` | `fromPortal:${ConnectionId}`;
 
 // ── Kiểu dữ liệu ────────────────────────────────────────────────────────────
 
@@ -87,7 +90,7 @@ export interface ConnectionDef {
   readonly id: ConnectionId;
   readonly from: { readonly mapId: MapId; readonly x: number; readonly y: number };
   readonly to: { readonly mapId: MapId; readonly spawnId: SpawnId };
-  readonly type: 'portal';
+  readonly type: 'portal' | 'door' | 'exit';
   readonly direction: PortalKind;
   readonly lockRules: readonly LockRule[];
   readonly chargeMs: number;
@@ -99,8 +102,45 @@ export interface ConnectionDef {
   };
 }
 
+/** Thông tin hiển thị của Region (chưa hiện ở đâu ở P1). */
+export interface RegionDisplay {
+  readonly name: string;
+  readonly description: string;
+  readonly danger: number;
+}
+
+export interface RegionDef {
+  readonly id: RegionId;
+  readonly display: RegionDisplay;
+  readonly mapIds: readonly MapId[];
+  readonly entryMapId: MapId;
+  /** Tùy chọn; P1 chỉ khai báo kiểu và validate, chưa dùng ở đâu. */
+  readonly respawn?: { readonly mapId: MapId; readonly spawnId: SpawnId };
+}
+
+export type InstanceMode = 'shared' | 'private';
+export type InstancePersistence = 'persistent' | 'ephemeral';
+export type InstanceAllocation = 'fill_first' | 'balanced';
+
+/** Chính sách cấp Instance của một Map (giá trị mặc định ở config/worldConfig.ts). */
+export interface InstancePolicy {
+  readonly mode: InstanceMode;
+  readonly capacity: number;
+  readonly persistence: InstancePersistence;
+  readonly allocation: InstanceAllocation;
+  readonly idleTtlMs: number;
+}
+
+const INSTANCE_MODES: readonly string[] = ['shared', 'private'];
+const INSTANCE_PERSISTENCES: readonly string[] = ['persistent', 'ephemeral'];
+const INSTANCE_ALLOCATIONS: readonly string[] = ['fill_first', 'balanced'];
+
 export interface MapDef {
   readonly id: MapId;
+  readonly regionId: RegionId;
+  /** Id bộ dựng nội dung Map (tra ở lớp scene sau này); không rỗng. */
+  readonly builderId: string;
+  readonly instance?: Partial<InstancePolicy>;
   readonly sceneKey: string;
   readonly size: { readonly width: number; readonly height: number };
   readonly kind: 'overworld' | 'boss';
@@ -113,6 +153,7 @@ export interface MapDef {
 }
 
 export interface WorldDef {
+  readonly regions: readonly RegionDef[];
   readonly maps: readonly MapDef[];
 }
 
@@ -206,6 +247,15 @@ export function findMap(world: WorldDef, mapId: MapId): MapDef | null {
   return world.maps.find((map) => map.id === mapId) ?? null;
 }
 
+export function findRegion(world: WorldDef, regionId: RegionId): RegionDef | null {
+  return world.regions.find((region) => region.id === regionId) ?? null;
+}
+
+/** Region thực sự liệt kê map trong `mapIds`; không có → null. */
+export function regionOfMap(world: WorldDef, mapId: MapId): RegionDef | null {
+  return world.regions.find((region) => region.mapIds.includes(mapId)) ?? null;
+}
+
 export function findConnection(
   world: WorldDef,
   connectionId: ConnectionId,
@@ -291,7 +341,19 @@ export type WorldErrorCode =
   | 'spawn_out_of_bounds'
   | 'orphan_connection'
   | 'map_without_exit'
-  | 'map_without_entrance';
+  | 'map_without_entrance'
+  | 'duplicate_region_id'
+  | 'region_without_maps'
+  | 'region_unknown_map'
+  | 'region_entry_invalid'
+  | 'region_membership_mismatch'
+  | 'map_unknown_region'
+  | 'region_invalid_respawn'
+  | 'region_invalid_display'
+  | 'map_invalid_builder'
+  | 'instance_invalid_capacity'
+  | 'instance_invalid_ttl'
+  | 'instance_invalid_policy';
 
 export interface WorldError {
   readonly code: WorldErrorCode;
@@ -303,7 +365,10 @@ function insideMap(map: MapDef, x: number, y: number): boolean {
 }
 
 /** Danh sách lỗi dữ liệu; rỗng = hợp lệ. */
-export function validateWorld(world: WorldDef): WorldError[] {
+export function validateWorld(
+  world: WorldDef,
+  defaults: InstancePolicy = DEFAULT_INSTANCE_POLICY,
+): WorldError[] {
   const errors: WorldError[] = [];
   const fail = (code: WorldErrorCode, message: string): void => {
     errors.push({ code, message });
@@ -318,6 +383,92 @@ export function validateWorld(world: WorldDef): WorldError[] {
       fail('duplicate_map_id', `map trùng id: ${map.id}`);
     } else {
       mapsById.set(map.id, map);
+    }
+  }
+
+  // ── Region ────────────────────────────────────────────────────────────────
+  const regionsById = new Map<string, RegionDef>();
+
+  for (const region of world.regions) {
+    if (regionsById.has(region.id)) {
+      fail('duplicate_region_id', `region trùng id: ${region.id}`);
+    } else {
+      regionsById.set(region.id, region);
+    }
+
+    if (region.mapIds.length === 0) {
+      fail('region_without_maps', `${region.id} không có map nào`);
+    }
+
+    const seenInRegion = new Set<string>();
+
+    for (const mapId of region.mapIds) {
+      if (!mapsById.has(mapId)) {
+        fail('region_unknown_map', `${region.id} liệt kê map không tồn tại: ${mapId}`);
+      } else if (seenInRegion.has(mapId)) {
+        fail('region_unknown_map', `${region.id} liệt kê trùng map: ${mapId}`);
+      }
+
+      seenInRegion.add(mapId);
+    }
+
+    if (!region.mapIds.includes(region.entryMapId)) {
+      fail('region_entry_invalid', `${region.id}.entryMapId (${region.entryMapId}) không thuộc mapIds của nó`);
+    }
+
+    const respawn = region.respawn;
+
+    if (
+      respawn !== undefined &&
+      (mapsById.get(respawn.mapId) === undefined ||
+        mapsById.get(respawn.mapId)?.playerSpawns[respawn.spawnId] === undefined)
+    ) {
+      fail('region_invalid_respawn', `${region.id}.respawn trỏ tới nơi không tồn tại`);
+    }
+
+    const display = region.display;
+
+    if (
+      display.name.trim() === '' ||
+      !Number.isInteger(display.danger) ||
+      display.danger < 0 ||
+      display.danger > ZONE_DANGER_MAX ||
+      display.description.length > ZONE_DESCRIPTION_MAX_CHARS
+    ) {
+      fail('region_invalid_display', `${region.id} có thông tin hiển thị không hợp lệ (tên rỗng, danger ngoài 0–${ZONE_DANGER_MAX} hoặc mô tả quá ${ZONE_DESCRIPTION_MAX_CHARS} ký tự)`);
+    }
+  }
+
+  for (const map of world.maps) {
+    const owners = world.regions.filter((region) => region.mapIds.includes(map.id));
+    const declared = regionsById.get(map.regionId);
+
+    if (declared === undefined) {
+      fail('map_unknown_region', `${map.id}.regionId trỏ tới Region không tồn tại: ${map.regionId}`);
+    } else if (!declared.mapIds.includes(map.id) || owners.length !== 1) {
+      fail('region_membership_mismatch', `${map.id} phải thuộc đúng một Region và khớp regionId (${map.regionId})`);
+    }
+
+    if (typeof map.builderId !== 'string' || map.builderId.trim() === '') {
+      fail('map_invalid_builder', `${map.id}.builderId rỗng`);
+    }
+
+    const policy = { ...defaults, ...map.instance };
+
+    if (!Number.isInteger(policy.capacity) || policy.capacity < 1) {
+      fail('instance_invalid_capacity', `${map.id} có capacity không hợp lệ: ${String(policy.capacity)}`);
+    }
+
+    if (!Number.isFinite(policy.idleTtlMs) || policy.idleTtlMs < 0) {
+      fail('instance_invalid_ttl', `${map.id} có idleTtlMs không hợp lệ: ${String(policy.idleTtlMs)}`);
+    }
+
+    if (
+      !INSTANCE_MODES.includes(policy.mode) ||
+      !INSTANCE_PERSISTENCES.includes(policy.persistence) ||
+      !INSTANCE_ALLOCATIONS.includes(policy.allocation)
+    ) {
+      fail('instance_invalid_policy', `${map.id} có mode/persistence/allocation ngoài tập cho phép`);
     }
   }
 

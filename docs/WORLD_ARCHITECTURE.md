@@ -305,9 +305,9 @@ Mỗi gói đi theo `docs/studio/WORKFLOW.md`: baseline Git → Developer → QA
 
 | GĐ | Nội dung | Hành vi game |
 |---|---|---|
-| **P0a** | **Tài liệu** (`WORLD_ARCHITECTURE.md`, `DECISIONS.md`). **Đang chờ duyệt.** | Không |
-| **P0b** | Đổi tên thuần Region → Zone trong code (type, function, biến, hằng, id chuỗi, mã lỗi, chú thích). **Không đổi tên file.** | Không |
-| **P1** | Mô hình tĩnh Region/Instance + module thuần (`instance.ts`, `localInstanceAllocator.ts`, `arrival.ts`), chưa nối vào game | Không |
+| **P0a** | **Tài liệu** (`WORLD_ARCHITECTURE.md`, `DECISIONS.md`). **Đã duyệt, đã commit (aebd6bc).** | Không |
+| **P0b** (đã triển khai, QA Đạt, người dùng chơi thử 15/15 Đạt, đã commit 61335dd) | Đổi tên thuần Region → Zone trong code (type, function, biến, hằng, id chuỗi, mã lỗi, chú thích). **Không đổi tên file.** | Không |
+| **P1** (đã triển khai, QA Đạt, người dùng chơi thử 7/7 PASS, **ACCEPTED** 2026-11-17; chờ xác nhận commit) | Mô hình tĩnh Region/Instance + module thuần (`instance.ts`, `localInstanceAllocator.ts`, `arrival.ts`), chưa nối vào game | Không |
 | **P2** | Đường chuyển Map đúng nghĩa: `spawnId` thật, nhiều cổng/map, fade/chargeMs đọc từ connection, kẹp theo `MapDef.size` | Y hệt |
 | **P3** | `InstanceRuntime` + `LocalInstanceAllocator` nối vào game; tách `RunSession` theo lớp; `TravelTicket` thay kênh registry; **`DifficultyClock` với cài đặt `RunSessionClock`** (đồng hồ ở lại `RunSession`, Q1 = a) + test bảo toàn công thức (§5.4) | Y hệt |
 | **P4** | `MapScene` chung + registry builder; thêm Map/Region thứ hai để kiểm chứng | **Có nội dung mới** (cần thiết kế riêng; D3 hiện nói chưa thêm bản đồ mới) |
@@ -438,3 +438,5 @@ Phạm vi kiểm: toàn repository (trừ `node_modules/`, `dist/`, `.git/`, `pa
 - R8: Id `region.*` có thể còn trong ghi chú/log **ngoài repo** (không kiểm được); bảng ánh xạ cũ → mới trong test là chỗ tra.
 - R9: Trạng thái ngày/đêm là biến toàn cục cấp module (§10.2), cản trở chạy nhiều scene song song nếu sau này cần.
 - R10: `MapDef.lighting` có trong dữ liệu nhưng code chưa đọc; dễ tưởng đã có hiệu lực.
+- **R11 (ghi từ QA P1, không chặn):** `LocalInstanceAllocator` chỉ tái dùng Instance khi `mode 'shared'` và `capacity > 1`. Instance `persistent` với `private`/capacity 1 sẽ không bao giờ được tái dùng và `idleTtlMs` chưa được thi hành, nên Instance rỗng cộng dồn. Chưa có Map nào dùng tổ hợp này; khi nối vào game (P3) phải nêu rõ hoặc chặn bằng `validateWorld`.
+- **R12 (độ phủ test P1, không chặn):** chưa có test cho `hint.preferInstanceId` trỏ tới Instance đầy hoặc Map khác (code đã lọc đúng); bổ sung khi chạm allocator ở P3.
