@@ -285,7 +285,7 @@ type CharacterSaveV8 =
 
 ## 4. GÓI C — PlayerState thuần: Feature Specification (Cổng 1)
 
-Trạng thái: **chờ duyệt Cổng 1** (2026-11-15). Thay thế bản phác thảo cũ của mục này. Chưa code.
+Trạng thái: **Gói C hoàn tất (C1–C4 đã triển khai, QA đạt, đã chốt Cổng 2; xem `docs/studio/DECISIONS.md`)**. Duyệt Cổng 1 ngày 2026-11-15. Thay thế bản phác thảo cũ của mục này. Sau C4: lưu qua `playerState.toSave(economy, base)`, `WorldScene` không còn dùng cầu nối v7; thứ tự túi trên đĩa không còn vũ khí-trước-trang-bị và uid có thể cấp khác khi bỏ rồi nhặt lại trong cùng một lần lưu (đều hợp lệ, không phá bất biến v8).
 
 ### 4.1 Hiện trạng đã xác minh (Lead đọc `WorldScene.ts`, `StatSheet.ts`, `CharacterProgress.ts`)
 
