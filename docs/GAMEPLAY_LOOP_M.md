@@ -34,6 +34,18 @@ Viết cho: người duyệt/đang phát triển Pixel World và Developer sẽ 
 
 Phương án bị loại: hệ nhiệm vụ (cần state/UI/save mới và chưa có đa dạng quái); vùng/bản đồ thứ ba hoặc affix trang bị (D3 chưa thêm bản đồ; affix đụng `PlayerState`/`gearConfig`).
 
+### 3b. Lựa chọn hình ảnh đã duyệt (người dùng, "theo khuyến nghị", 2026-11-16; nguồn: báo cáo Visual Designer)
+
+| Mã | Lựa chọn |
+|---|---|
+| V1 | Nghệ thuật: **sheet procedural mới** cho Swarmer (`enemy-swarmer`: khối tròn, gai lưng, không tay, xanh ngọc `#2f7a6e`) và Brute (`enemy-bruiser`: thân hình thang, vai/nắm đấm to, mắt khe ngang, thép xám `#4a5568`); dùng đúng bộ clip 2/4/2/2 (idle 2, walk 4, attack 2, death 2; chết ≤ 340 ms, attack ≤ 200 ms); không đổi tên/xóa key cũ (`enemy`, `rangedEnemy`, `boss`) |
+| V2 | Hitbox **giữ 40×40** thế giới cho mọi archetype: `bodySize × displayScale = 40` (grunt 20×2; swarmer 25×1,6; brute 16×2,5); chỉ hình vẽ khác cỡ. Phương án hitbox theo cỡ (đổi gameplay) bị loại |
+| V3 | Màu Elite (M3): **ngà `#f2e8cc`** (không đụng hệ nguyên tố/đạn quái; không đỏ/cam) |
+| V4 | Elite ban đêm (M3): thanh máu + biểu tượng thấy được từ xa (ngoài tầm nhìn 238 px), vòng chân nằm dưới sprite |
+| V5 | Tên key: `enemy-swarmer`, `enemy-bruiser` (id archetype `swarmer`, `brute`; tránh `enemy-brute` vì tên visual `'brute'` hiện gán cho grunt) |
+
+Elite (M3): vẽ chồng bằng lớp phủ (vòng chân ngà + thanh máu nhỏ + biểu tượng affix: swift vòng đứt nét `>>`, armored vòng đôi có khía + khiên, escorted vòng ba chấm), không dùng tint (tint bị `clearTint` sau mỗi lần chớp).
+
 ## 4. Chia gói (tuần tự; mỗi gói baseline → Developer → QA → chơi thử → Cổng 2)
 
 Số liệu là **giá trị khởi điểm**, đặt ở `src/config/` (tên hằng đề xuất), chỉnh sau khi chơi thử.
