@@ -4,6 +4,10 @@ Trạng thái: **đã duyệt Cổng 1 (2026-11-16)** theo khuyến nghị D1–
 
 Viết cho: người duyệt/đang phát triển Pixel World và Developer sẽ lập brief W1–W3.
 
+## 0. Trạng thái triển khai (cập nhật 2026-11-16)
+
+W1 (a68057a), W2 (25dbd97), W3 (a4e695d) đã triển khai và chốt. Sau W3, `region.wilds` trong spec bên dưới đã tách thành `region.wilds_near` ({x:700,y:700,w:2400,h:1300}, offset 0) và `region.wilds_far` (phần còn lại, offset +1); các số này là giá trị khởi điểm ở `src/config/worldConfig.ts`. Bậc theo vùng chỉ áp cho quái SINH ra (chỉ số và vàng); trần quái, nhịp sinh, Boss, HUD vẫn theo bậc thời gian toàn cục. Tên vùng: Làng Khởi Nguyên (an toàn), Đồng Hoang Úa ◆, Hoang Địa Sâu ◆◆. Các phần dưới là spec lịch sử đã duyệt.
+
 ## 1. Hiện trạng [XM]
 
 - Bản đồ chính 120×80 ô × 32 px (`config/constants.ts`). Làng = `VILLAGE_ZONE` hình chữ nhật (`config/economyConfig.ts`); `isInsideVillage` dùng nó.
