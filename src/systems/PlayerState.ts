@@ -23,7 +23,7 @@ import { validateSaveV8, type CharacterSaveV8 } from '../progression/saveV8';
 
 /**
  * PlayerState (Gói C1): luật kho đồ / trang bị / cấp đồ của người chơi, THUẦN.
- * Chưa nối vào game (dự kiến C2a). Không đụng engine đồ họa, không toast; mọi thao tác trả
+ * Đã nối vào WorldScene: vũ khí từ C2a, trang bị + cấp đồ từ C2b. Không đụng engine đồ họa, không toast; mọi thao tác trả
  * kết quả dạng { ok: true, ... } | { ok: false, reason }. API theo defId; uid
  * chỉ là định danh bên trong và trên đĩa. Không dùng ngẫu nhiên hay thời gian.
  */

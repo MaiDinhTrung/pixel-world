@@ -110,14 +110,10 @@ import {
 import { NEON, NEON_CSS } from '../config/palette';
 import {
   applyGearBonuses,
-  createEmptyGearLoadout,
   GEAR_INFO,
   GEAR_SLOT_LABELS,
-  getGearItemLevel,
   isGearId,
-  MAX_GEAR_LEVEL,
   type GearId,
-  type GearLevels,
   type GearSlot,
 } from '../config/gearConfig';
 import { gearLookKey, resolveGearLook } from '../config/gearLook';
@@ -369,10 +365,6 @@ export class WorldScene extends Phaser.Scene {
   private autoAimTarget: EnemyBase | null = null;
   /** Chủ duy nhất của vũ khí (túi + 2 ô) từ C2a; trang bị/cấp còn ở scene tới C2b. */
   private playerState!: PlayerState;
-  private gearInventory: GearId[] = [];
-  private equippedGear: Record<GearSlot, GearId | null> =
-    createEmptyGearLoadout();
-  private gearLevels: GearLevels = {};
   private heroLookKey = '';
   private panelOpen = false;
   /** Vàng, ngọc, lỗ ngọc và giao dịch ở làng. */
@@ -721,9 +713,6 @@ export class WorldScene extends Phaser.Scene {
         startingGear: this.character.startingGear,
       },
     );
-    this.gearInventory = [...save.gearInventory];
-    this.equippedGear = { ...save.equippedGear };
-    this.gearLevels = { ...save.gearLevels };
     this.village = new VillageService(this.createVillageHost(), {
       gold: save.gold,
       gems: save.gems,
@@ -1576,17 +1565,13 @@ export class WorldScene extends Phaser.Scene {
       return;
     }
 
-    const currentLevel = getGearItemLevel(this.gearLevels, id);
-    const rewardLevel = Math.min(
-      MAX_GEAR_LEVEL,
-      Math.max(tier + 1, currentLevel + 1),
-    );
+    const reward = this.playerState.rewardGear(id, tier);
 
-    this.gearLevels[id] = rewardLevel;
-
-    if (!this.gearInventory.includes(id)) {
-      this.gearInventory.push(id);
+    if (!reward.ok) {
+      return;
     }
+
+    const rewardLevel = reward.level;
 
     this.applyPlayerStatistics();
     this.saveProgress();
@@ -2513,9 +2498,9 @@ export class WorldScene extends Phaser.Scene {
       stats: { ...this.statsAllocation },
       inventory: this.playerState.getWeapons(),
       equipped: this.playerState.getEquippedWeapons(),
-      gearInventory: [...this.gearInventory],
-      equippedGear: { ...this.equippedGear },
-      gearLevels: { ...this.gearLevels },
+      gearInventory: this.playerState.getGear(),
+      equippedGear: this.playerState.getEquippedGear(),
+      gearLevels: this.playerState.getGearLevels(),
       gold: this.village.getGold(),
       gems: { ...this.village.getGems() },
       gearSockets: this.village.getSocketsSnapshot(),
@@ -2574,7 +2559,7 @@ export class WorldScene extends Phaser.Scene {
       return;
     }
 
-    const look = resolveGearLook(this.equippedGear);
+    const look = resolveGearLook(this.playerState.getEquippedGear());
     const key = gearLookKey(look);
 
     if (key === this.heroLookKey) {
@@ -2595,13 +2580,13 @@ export class WorldScene extends Phaser.Scene {
     this.refreshHeroLook();
     const base = applyGearBonuses(
       this.statSheet.getCombatStats(),
-      this.equippedGear,
-      this.gearLevels,
+      this.playerState.getEquippedGear(),
+      this.playerState.getGearLevels(),
     );
 
     // Ngọc khảm trên đồ đang mặc.
     const gems = computeGemBonuses(
-      this.equippedGear,
+      this.playerState.getEquippedGear(),
       this.village.getSocketsSnapshot(),
     );
 
@@ -2671,7 +2656,7 @@ export class WorldScene extends Phaser.Scene {
   }
 
   getGearLevel(gearId: GearId): number {
-    return getGearItemLevel(this.gearLevels, gearId);
+    return this.playerState.getGearLevel(gearId);
   }
 
   addStatPoint(statId: StatId): boolean {
@@ -2891,17 +2876,12 @@ export class WorldScene extends Phaser.Scene {
   }
 
   equipGearFromInventory(gearId: GearId): boolean {
-    if (!this.gearInventory.includes(gearId)) {
+    if (!this.playerState.equipGear(gearId).ok) {
       return false;
     }
 
     const info = GEAR_INFO[gearId];
 
-    if (this.equippedGear[info.slot] === gearId) {
-      return false;
-    }
-
-    this.equippedGear[info.slot] = gearId;
     this.applyPlayerStatistics();
     this.saveProgress();
     this.hud.showToast(
@@ -2913,13 +2893,14 @@ export class WorldScene extends Phaser.Scene {
   }
 
   unequipGear(slot: GearSlot): boolean {
-    const gearId = this.equippedGear[slot];
+    const unequipped = this.playerState.unequipGear(slot);
 
-    if (!gearId) {
+    if (!unequipped.ok) {
       return false;
     }
 
-    this.equippedGear[slot] = null;
+    const gearId = unequipped.id;
+
     this.applyPlayerStatistics();
     this.saveProgress();
     this.hud.showToast(
@@ -2951,17 +2932,16 @@ export class WorldScene extends Phaser.Scene {
   }
 
   discardGear(gearId: GearId): boolean {
-    if (!this.gearInventory.includes(gearId)) {
+    const result = this.playerState.discardGear(gearId);
+
+    if (!result.ok) {
+      if (result.reason === 'equipped') {
+        this.hud.showToast('HÃY THÁO RA TRƯỚC KHI VỨT BỎ', '#ff8fa3');
+      }
+
       return false;
     }
 
-    if (Object.values(this.equippedGear).includes(gearId)) {
-      this.hud.showToast('HÃY THÁO RA TRƯỚC KHI VỨT BỎ', '#ff8fa3');
-      return false;
-    }
-
-    this.gearInventory = this.gearInventory.filter((id) => id !== gearId);
-    delete this.gearLevels[gearId];
     this.village.releaseGear(gearId);
     this.saveProgress();
     this.hud.showToast(
@@ -3040,7 +3020,8 @@ export class WorldScene extends Phaser.Scene {
     weaponInventory: WeaponId[];
     gearInventory: GearId[];
   } {
-    const equippedGearIds = Object.values(this.equippedGear);
+    const equippedGear = this.playerState.getEquippedGear();
+    const equippedGearIds = Object.values(equippedGear);
     const equippedWeapons = this.playerState.getEquippedWeapons();
 
     return {
@@ -3051,16 +3032,16 @@ export class WorldScene extends Phaser.Scene {
         { slot: 1, weaponId: equippedWeapons[1] },
       ],
       gear: [
-        { slot: 'hat', gearId: this.equippedGear.hat },
-        { slot: 'armor', gearId: this.equippedGear.armor },
-        { slot: 'boots', gearId: this.equippedGear.boots },
+        { slot: 'hat', gearId: equippedGear.hat },
+        { slot: 'armor', gearId: equippedGear.armor },
+        { slot: 'boots', gearId: equippedGear.boots },
       ],
       weaponInventory: this.playerState
         .getWeapons()
         .filter((weaponId) => !equippedWeapons.includes(weaponId)),
-      gearInventory: this.gearInventory.filter(
-        (gearId) => !equippedGearIds.includes(gearId),
-      ),
+      gearInventory: this.playerState
+        .getGear()
+        .filter((gearId) => !equippedGearIds.includes(gearId)),
     };
   }
 
@@ -3506,10 +3487,10 @@ export class WorldScene extends Phaser.Scene {
         equipped: equippedWeapons.includes(id),
         starting: this.character.startingWeapons.includes(id),
       })),
-      gear: this.gearInventory.map((id) => ({
+      gear: this.playerState.getGear().map((id) => ({
         id,
-        equipped: Object.values(this.equippedGear).includes(id),
-        level: getGearItemLevel(this.gearLevels, id),
+        equipped: Object.values(this.playerState.getEquippedGear()).includes(id),
+        level: this.playerState.getGearLevel(id),
       })),
     };
   }
@@ -3530,18 +3511,18 @@ export class WorldScene extends Phaser.Scene {
       removeWeapon: (id) => {
         this.playerState.removeWeapon(id);
       },
-      ownsGear: (id) => this.gearInventory.includes(id),
-      isGearEquipped: (id) => Object.values(this.equippedGear).includes(id),
+      ownsGear: (id) => this.playerState.ownsGear(id),
+      isGearEquipped: (id) =>
+        Object.values(this.playerState.getEquippedGear()).includes(id),
       addGear: (id) => {
-        this.gearInventory.push(id);
+        this.playerState.addGear(id);
       },
       removeGear: (id) => {
-        this.gearInventory = this.gearInventory.filter((item) => item !== id);
-        delete this.gearLevels[id];
+        this.playerState.removeGear(id);
       },
-      getGearLevel: (id) => getGearItemLevel(this.gearLevels, id),
+      getGearLevel: (id) => this.playerState.getGearLevel(id),
       setGearLevel: (id, level) => {
-        this.gearLevels[id] = Math.min(MAX_GEAR_LEVEL, Math.max(1, level));
+        this.playerState.setGearLevel(id, level);
       },
       onChanged: () => {
         this.applyPlayerStatistics();
@@ -3838,12 +3819,11 @@ export class WorldScene extends Phaser.Scene {
     if (isGearId(id)) {
       const info = GEAR_INFO[id];
 
-      if (this.gearInventory.includes(id)) {
+      if (!this.playerState.addGear(id).ok) {
         this.hud.showToast(`${info.name} ĐÃ SỞ HỮU`, '#8b8fa3');
         return;
       }
 
-      this.gearInventory.push(id);
       this.saveProgress();
       this.hud.showToast(
         `${info.name} ĐÃ THÊM VÀO TRANG BỊ`,
