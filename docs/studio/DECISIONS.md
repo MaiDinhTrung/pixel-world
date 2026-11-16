@@ -16,6 +16,14 @@ Mẫu mục:
 
 ---
 
+### 2026-11-16 — Gói M: quái đa dạng theo vùng và Elite (từ rà soát vòng lặp cốt lõi)
+- **Quyết định (người dùng duyệt Cổng 1, "duyệt gói M", 2026-11-16, theo khuyến nghị):** đi theo thứ tự ưu tiên "gameplay và cơ chế cốt lõi". Ba gói tuần tự: **M1** archetype quái thành dữ liệu, hành vi giữ nguyên (2:1); **M2** hai archetype mới (Swarmer, Brute) + mẫu sinh khác nhau theo vùng + EXP theo archetype/bậc; **M3** Elite có affix theo mốc số quái hạ trong vùng. M-D1…M-D6: EXP theo archetype và bậc; Elite theo số quái; Elite cả hai vùng; nguyên tố quái cận chiến để sau; hạ drop demo ở gói cân bằng riêng sau M3; gọi Visual Designer cho hình dáng quái mới trước M2/M3.
+- **Lý do:** vòng lặp có hai loại quái, hai vùng chỉ khác +1 bậc, EXP phẳng, không có mục tiêu giữa hai lần Boss; M tái dùng khung `spawnTable`/`eliteSlots` đã có từ W1 và không đụng save/Boss/hitbox.
+- **Phương án bị loại:** hệ nhiệm vụ (cần state/UI/save mới, chưa có đa dạng quái); vùng/bản đồ thứ ba hoặc affix trang bị (D3, đụng `PlayerState`/`gearConfig`).
+- **Ảnh hưởng (dự kiến):** `config/{worldConfig,progressionConfig}`, `config/enemyConfig.ts` (mới), `world/{worldGraph,spawnPattern,eliteRules}`, `entities/{Enemy,RangedEnemy,EnemyBase}`, `scenes/WorldScene.ts`, `docs/PROJECT_MAP.md`. Không đổi `combatConfig.ts` (trừ khi gói nêu rõ), Boss, save, hitbox/timing.
+- **Trạng thái:** Cổng 1 đã duyệt; M1–M3 chưa bắt đầu (M1 bắt đầu ngay sau ghi này); mỗi gói QA + chơi thử + Cổng 2 riêng.
+- **Tài liệu liên quan:** `docs/GAMEPLAY_LOOP_M.md`
+
 ### 2026-11-16 — Đổi thứ tự ưu tiên: hoãn tối ưu Android; World/Region/Map (W0) đã duyệt
 - **Quyết định (người dùng chỉ đạo):** tạm hoãn giai đoạn tối ưu hiệu năng Android chuyên sâu. Thứ tự: (1) World/Region/Map và kết nối bản đồ, (2) gameplay và cơ chế cốt lõi, (3) nhân vật/lớp/quái/Elite/Boss, (4) kỹ năng/cây kỹ năng/trang bị/tiến trình, (5) animation/VFX/UI/HUD, (6) kiểm thử, cân bằng; sau đó mới benchmark và tối ưu Android thật. Không tối ưu sớm phần còn thay đổi; vẫn giữ kiến trúc mở rộng được, tách logic và hiển thị, tái dùng VFX, bảo toàn hitbox/damage timing/cooldown.
 - **Không làm:** M1 (mở rộng `src/utils/perfOverlay.ts`), cập nhật phương pháp Android vào `PERF_BASELINE.md`, gọi Developer cho M1. Giữ nguyên `docs/perf/MOBILE_BENCHMARK_PLAN.md` làm tham khảo giai đoạn sau; `PERF_BASELINE.md` vẫn là mẫu trống.
