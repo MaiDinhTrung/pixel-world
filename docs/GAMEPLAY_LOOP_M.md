@@ -46,6 +46,18 @@ Phương án bị loại: hệ nhiệm vụ (cần state/UI/save mới và chưa
 
 Elite (M3): vẽ chồng bằng lớp phủ (vòng chân ngà + thanh máu nhỏ + biểu tượng affix: swift vòng đứt nét `>>`, armored vòng đôi có khía + khiên, escorted vòng ba chấm), không dùng tint (tint bị `clearTint` sau mỗi lần chớp).
 
+### 3c. Chi tiết M3 (Gameplay Designer, 2026-11-16; người dùng "làm m3" = theo khuyến nghị)
+
+| Mã | Chốt |
+|---|---|
+| E1 | Archetype nền: vùng gần `eliteSlots ['grunt']`, vùng xa `['brute']`; chỉ cận chiến ở bản đầu (caster HP nền 5 ×5 vẫn mỏng, nguyên tố chọn bằng `Math.random`; swarmer + swift quá nhanh và trùng vai escorted). `eliteSlots` đổi kiểu `readonly ArchetypeId[]`; làng/Arena rỗng. Hàm thuần `eliteArchetype(baseId, affix)`: `healthMult × ELITE_HEALTH_MULT`, `speedMult × affix.speedMult`, `xpMult × ELITE_XP_MULT`; `Enemy` nhận `statProfile?` tùy chọn (hình vẫn theo id nền); scale/hitbox giữ nguyên |
+| E2 | Armored: `EnemyBase.damageTakenMult` (mặc định 1) nhân vào đúng hai điểm sát thương nhận vào (`takeDamage` sau `getVulnerableMult`; `takeStatusDamage`), không đổi `resolveDamage`; số sát thương hiển thị dùng giá trị thực nhận; Boss mặc định 1 |
+| E3 | Sinh: `shouldSpawnElite({killsInRegion, aliveElites, sinceLastEliteMs}, region)` thuần; đếm kill theo VỊ TRÍ CHẾT, chỉ quái thường (không Elite/escort/minion Boss); `ELITE_KILLS_INTERVAL = 25`, `ELITE_MAX_ALIVE = 1`, `ELITE_MIN_GAP_MS = 30000`; reset bộ đếm vùng khi sinh Elite; trạng thái trong bộ nhớ, đặt lại cùng `spawnIndex` ở `create()`; điểm sinh = điểm sinh của vùng gần người chơi nhất nhưng cách ≥ `ELITE_SPAWN_MIN_PLAYER_DISTANCE = 600` px (không có thì điểm xa nhất); bậc theo `effectiveThreatTier` của vùng; sinh bỏ qua kiểm trần nhưng được tính vào `getEnemies().length` |
+| E4 | Affix xoay vòng xác định `['swift','armored','escorted'][eliteIndex % 3]` (không ngẫu nhiên); swift `speedMult 1.4`, armored `damageTakenMult 0.7`, escorted kèm 3 swarmer (`ELITE_ESCORT_RADIUS ≈ 64`, góc cố định `i·2π/3`; escort rơi loot thường, không đếm vào bộ đếm Elite) |
+| E5 | Thưởng: XP = `killXp(eliteArchetype, tier)`; `ELITE_GEM_COUNT = 2` ngọc (như `dropBossLoot`); 1 hòm thường chắc chắn (`spawnWeaponChest(x,y,false)`), bỏ lượt `maybeDropWeaponChest` thường cho Elite; `dropLoot` thường vẫn chạy; xác (`corpses.add`) truyền `maxHealth` của archetype nền (không ×5, tránh nổ xác Triệu Hồn Sư ×5) |
+| E6 | Báo hiệu: toast (ngà `#f2e8cc`) `TINH ANH THẦN TỐC / GIÁP DÀY / CÓ HỘ TỐNG XUẤT HIỆN`, hạ gục `HẠ TINH ANH!`; `ring.shock` ngà ~110 px 600 ms; `EliteMarker` (vòng chân dưới sprite, thanh máu nhỏ + biểu tượng affix depth ≈ 2701,5 thấy từ xa ban đêm), dọn bằng `died` + `DESTROY` |
+| E7 | Đã biết, chấp nhận ở bản đầu: Titan Roar execute (ngưỡng 20% máu) không loại trừ Elite và armored có thể không chết bởi execute; swift bậc cao ≈ 246 px/s > `PLAYER_SPEED` 240; Elite có thể bị stun-lock bởi đòn nhanh; mô tả Chain Pull nói "boss/elite" nhưng code chỉ xét Boss; escort rơi loot demo (chỉnh ở M-D5) |
+
 ## 4. Chia gói (tuần tự; mỗi gói baseline → Developer → QA → chơi thử → Cổng 2)
 
 Số liệu là **giá trị khởi điểm**, đặt ở `src/config/` (tên hằng đề xuất), chỉnh sau khi chơi thử.
