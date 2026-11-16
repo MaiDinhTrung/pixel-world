@@ -217,6 +217,12 @@ import {
   REGION_TRACKER,
   WORLD,
 } from '../config/worldConfig';
+import {
+  DEFAULT_MELEE_ARCHETYPE,
+  DEFAULT_RANGED_ARCHETYPE,
+  ENEMY_ARCHETYPES,
+} from '../config/enemyConfig';
+import { pickArchetype } from '../world/spawnPattern';
 import { RegionBanner } from '../ui/RegionBanner';
 import { createRegionTracker, type RegionTracker } from '../world/regionTracker';
 import {
@@ -1299,7 +1305,16 @@ export class WorldScene extends Phaser.Scene {
   private spawnEnemy(): void {
     const point =
       this.town.enemySpawns[this.spawnIndex % this.town.enemySpawns.length];
-    const isRanged = this.spawnIndex % 3 === 2;
+    const spawnRegion = regionAt(this.getMapDef(), point.x, point.y);
+    const archetypeId =
+      spawnRegion === null
+        ? null
+        : pickArchetype(spawnRegion.spawnTable.pattern, this.spawnIndex);
+    // Pattern rỗng/không có vùng (không xảy ra với dữ liệu hiện có) → hành vi cũ: chỉ số % 3 === 2 là bắn xa.
+    const isRanged =
+      archetypeId === null
+        ? this.spawnIndex % 3 === 2
+        : ENEMY_ARCHETYPES[archetypeId].kind === 'ranged';
     const margin = 48;
     const spawnX = Phaser.Math.Clamp(
       point.x + Phaser.Math.Between(-48, 48),
@@ -1321,8 +1336,15 @@ export class WorldScene extends Phaser.Scene {
         ? this.getThreatTier(this.time.now)
         : effectiveThreatTier(this.time.now - this.runStartedAt, region);
     const enemy = isRanged
-      ? new RangedEnemy(this, spawnX, spawnY, this.enemyBullets, tier)
-      : new Enemy(this, spawnX, spawnY, tier);
+      ? new RangedEnemy(
+          this,
+          spawnX,
+          spawnY,
+          this.enemyBullets,
+          tier,
+          archetypeId ?? DEFAULT_RANGED_ARCHETYPE,
+        )
+      : new Enemy(this, spawnX, spawnY, tier, archetypeId ?? DEFAULT_MELEE_ARCHETYPE);
 
     enemy.once('died', () => {
       spawnBurst(this, enemy.x, enemy.y, enemy.getDeathColor(), 10, 150);

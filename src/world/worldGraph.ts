@@ -7,6 +7,7 @@
  * không ngẫu nhiên, không đọc thời gian hệ thống. Dữ liệu cụ thể ở `config/worldConfig.ts`.
  */
 import { MAX_THREAT_TIER, THREAT_INTERVAL_MS } from '../config/combatConfig';
+import { findArchetype, type ArchetypeId } from '../config/enemyConfig';
 import {
   getPortalDenyReason,
   type PortalAccessInput,
@@ -35,10 +36,11 @@ export interface Rect {
   readonly height: number;
 }
 
-export type EnemyKind = 'melee' | 'ranged';
+/** Id archetype quái (M1): định nghĩa ở `config/enemyConfig.ts`. */
+export type EnemyKind = ArchetypeId;
 
 export interface SpawnTable {
-  /** Xoay vòng theo chỉ số sinh (spawnIndex % pattern.length). Rỗng = không sinh quái. */
+  /** Xoay vòng theo chỉ số sinh (spawnIndex % pattern.length). Mỗi phần tử là id archetype. Rỗng = không sinh quái. */
   readonly pattern: readonly EnemyKind[];
   /** Điểm sinh riêng của vùng; rỗng = dùng điểm sinh mặc định của map (chưa mô tả ở W1). */
   readonly points: readonly Point[];
@@ -274,6 +276,7 @@ export type WorldErrorCode =
   | 'region_out_of_bounds'
   | 'region_invalid_tier'
   | 'region_invalid_display'
+  | 'region_unknown_archetype'
   | 'multiple_fallback_regions'
   | 'no_regions'
   | 'connection_from_out_of_bounds'
@@ -357,6 +360,12 @@ export function validateWorld(world: WorldDef): WorldError[] {
 
       if (region.tierFloor > region.tierCap) {
         fail('region_invalid_tier', `${region.id} có tierFloor > tierCap`);
+      }
+
+      for (const archetypeId of region.spawnTable.pattern) {
+        if (findArchetype(archetypeId) === undefined) {
+          fail('region_unknown_archetype', `${region.id} có spawnTable.pattern chứa archetype không tồn tại: ${String(archetypeId)}`);
+        }
       }
 
       const display = region.display;

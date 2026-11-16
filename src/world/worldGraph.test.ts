@@ -69,6 +69,9 @@ const PURE_SOURCES: Record<string, string> = {
   'src/world/worldGraph.ts': fileURLToPath(new URL('./worldGraph.ts', import.meta.url)),
   'src/config/worldConfig.ts': fileURLToPath(new URL('../config/worldConfig.ts', import.meta.url)),
   'src/world/regionTracker.ts': fileURLToPath(new URL('./regionTracker.ts', import.meta.url)),
+  'src/config/enemyConfig.ts': fileURLToPath(new URL('../config/enemyConfig.ts', import.meta.url)),
+  'src/world/spawnPattern.ts': fileURLToPath(new URL('./spawnPattern.ts', import.meta.url)),
+  'src/systems/enemyStats.ts': fileURLToPath(new URL('../systems/enemyStats.ts', import.meta.url)),
 };
 
 describe('độ thuần của worldGraph/worldConfig', () => {
@@ -203,7 +206,7 @@ describe('dữ liệu worldConfig', () => {
 
     for (const wilds of [near, far]) {
       expect(wilds?.safe).toBe(false);
-      expect(wilds?.spawnTable.pattern).toEqual(['melee', 'melee', 'ranged']);
+      expect(wilds?.spawnTable.pattern).toEqual(['grunt', 'grunt', 'caster']);
       expect(wilds?.tierFloor).toBe(0);
       expect(wilds?.tierCap).toBe(MAX_THREAT_TIER);
     }
@@ -395,6 +398,7 @@ describe('validateWorld', () => {
       ['region_invalid_display', (w) => { w.maps[0].regions[1].display.danger = 4; }],
       ['region_invalid_display', (w) => { w.maps[0].regions[1].display.danger = 1.5; }],
       ['region_invalid_display', (w) => { w.maps[0].regions[2].display.name = '  '; }],
+      ['region_unknown_archetype', (w) => { w.maps[0].regions[1].spawnTable.pattern = ['grunt', 'khong_co']; }],
       ['multiple_fallback_regions', (w) => { w.maps[0].regions[0].bounds = null; }],
       ['no_regions', (w) => { w.maps[1].regions = []; }],
       ['connection_from_out_of_bounds', (w) => { w.maps[0].connections[0].from.x = -5; }],

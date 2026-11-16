@@ -1,20 +1,17 @@
 import Phaser from 'phaser';
 
 import {
-  ENEMY_BULLET_DAMAGE,
   ENEMY_BULLET_SPEED,
-  ENEMY_DAMAGE_TIER_STEP,
-  ENEMY_HEALTH_MULT_PER_TIER,
   RANGED_ENEMY_COOLDOWN_MS,
-  RANGED_ENEMY_MAX_HEALTH,
   RANGED_ENEMY_PREFERRED_DISTANCE,
   RANGED_ENEMY_SHOOT_RANGE,
-  RANGED_ENEMY_SPEED,
   RANGED_ENEMY_SPREAD_DEGREES,
   RANGED_ENEMY_TELEGRAPH_MS,
   RANGED_ENEMY_TRIPLE_SHOT_TIER,
 } from '../config/combatConfig';
 import { TEXTURE_KEYS } from '../config/constants';
+import { DEFAULT_RANGED_ARCHETYPE, type ArchetypeId } from '../config/enemyConfig';
+import { rangedStats } from '../systems/enemyStats';
 import { NEON } from '../config/palette';
 import { ENEMY_TELEGRAPH_GLOW_ALPHA } from '../config/vfxConfig';
 import { spawnGlow, spawnHitSpark, spawnRing } from '../utils/effects';
@@ -38,6 +35,7 @@ export class RangedEnemy extends EnemyBase {
   private readonly projectiles: Phaser.Physics.Arcade.Group;
   private readonly tier: number;
   private readonly bulletDamage: number;
+  private readonly moveSpeed: number;
   /** Nguyên tố của đạn; undefined = vật lý. */
   private element: ElementType | undefined;
 
@@ -51,16 +49,17 @@ export class RangedEnemy extends EnemyBase {
     y: number,
     projectiles: Phaser.Physics.Arcade.Group,
     tier = 0,
+    archetype: ArchetypeId = DEFAULT_RANGED_ARCHETYPE,
   ) {
+    const stats = rangedStats(tier, archetype);
+
     super(
       scene,
       x,
       y,
       TEXTURE_KEYS.rangedEnemy,
       TEXTURE_KEYS.rangedEnemy,
-      Math.round(
-        RANGED_ENEMY_MAX_HEALTH * (1 + tier * ENEMY_HEALTH_MULT_PER_TIER),
-      ),
+      stats.maxHealth,
       20,
       20,
       NEON.rangedEnemy,
@@ -68,8 +67,8 @@ export class RangedEnemy extends EnemyBase {
 
     this.projectiles = projectiles;
     this.tier = tier;
-    const physicalDamage =
-      ENEMY_BULLET_DAMAGE + Math.floor(tier / ENEMY_DAMAGE_TIER_STEP);
+    this.moveSpeed = stats.moveSpeed;
+    const physicalDamage = stats.bulletDamage;
 
     if (
       ELEMENTAL_ENEMIES_ENABLED &&
@@ -155,7 +154,7 @@ export class RangedEnemy extends EnemyBase {
     }
 
     const normalized = direction.normalize();
-    const speed = RANGED_ENEMY_SPEED * this.getSpeedMultiplier(time);
+    const speed = this.moveSpeed * this.getSpeedMultiplier(time);
 
     if (distance > RANGED_ENEMY_PREFERRED_DISTANCE + 80) {
       this.setVelocity(

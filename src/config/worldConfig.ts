@@ -41,10 +41,10 @@ export const CONN_VILLAGE_TO_ARENA: ConnectionId = 'conn.village_to_arena';
 export const CONN_ARENA_TO_VILLAGE: ConnectionId = 'conn.arena_to_village';
 
 /**
- * Quy tắc xoay vòng hiện tại của WorldScene.spawnEnemy: `spawnIndex % 3 === 2` → ranged,
- * còn lại melee (tỉ lệ 2:1). [ĐÃ XÁC MINH ở WorldScene.ts ~dòng 1244]
+ * Mẫu xoay vòng hiện tại (M1): id archetype (`enemyConfig.ts`); `grunt`,`grunt`,`caster` = cận chiến, cận chiến,
+ * bắn xa (tỉ lệ 2:1, tương đương `spawnIndex % 3 === 2` → bắn xa của WorldScene.spawnEnemy cũ).
  */
-const CURRENT_SPAWN_PATTERN = ['melee', 'melee', 'ranged'] as const;
+const CURRENT_SPAWN_PATTERN = ['grunt', 'grunt', 'caster'] as const;
 
 /**
  * Vị trí người chơi xuất hiện ở bản đồ chính (lúc vào game VÀ khi về từ Arena: RunSession không lưu tọa độ

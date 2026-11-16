@@ -1,16 +1,9 @@
 import Phaser from 'phaser';
 
-import {
-  ENEMY_CONTACT_DAMAGE,
-  ENEMY_DAMAGE_TIER_STEP,
-  ENEMY_HEALTH_MULT_PER_TIER,
-  ENEMY_MAX_HEALTH,
-  ENEMY_MAX_SPEED_MULT,
-  ENEMY_SPEED,
-  ENEMY_SPEED_MULT_PER_TIER,
-} from '../config/combatConfig';
 import { TEXTURE_KEYS } from '../config/constants';
+import { DEFAULT_MELEE_ARCHETYPE, type ArchetypeId } from '../config/enemyConfig';
 import { NEON } from '../config/palette';
+import { meleeStats } from '../systems/enemyStats';
 import { EnemyBase, type EnemyTarget } from './EnemyBase';
 
 /** Quái cận chiến: đuổi thẳng tới Player và gây sát thương khi chạm. */
@@ -19,27 +12,29 @@ export class Enemy extends EnemyBase {
   private readonly contactDamage: number;
   private nextLungeAt = 0;
 
-  constructor(scene: Phaser.Scene, x: number, y: number, tier = 0) {
+  constructor(
+    scene: Phaser.Scene,
+    x: number,
+    y: number,
+    tier = 0,
+    archetype: ArchetypeId = DEFAULT_MELEE_ARCHETYPE,
+  ) {
+    const stats = meleeStats(tier, archetype);
+
     super(
       scene,
       x,
       y,
       TEXTURE_KEYS.enemy,
       TEXTURE_KEYS.enemy,
-      Math.round(ENEMY_MAX_HEALTH * (1 + tier * ENEMY_HEALTH_MULT_PER_TIER)),
+      stats.maxHealth,
       20,
       20,
       NEON.meleeEnemy,
     );
 
-    this.moveSpeed =
-      ENEMY_SPEED *
-      Math.min(
-        ENEMY_MAX_SPEED_MULT,
-        1 + tier * ENEMY_SPEED_MULT_PER_TIER,
-      );
-    this.contactDamage =
-      ENEMY_CONTACT_DAMAGE + Math.floor(tier / ENEMY_DAMAGE_TIER_STEP);
+    this.moveSpeed = stats.moveSpeed;
+    this.contactDamage = stats.contactDamage;
   }
 
   override getContactDamage(): number {
