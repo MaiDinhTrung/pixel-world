@@ -16,6 +16,8 @@ import {
   shouldSpawnArenaMinions,
 } from '../world/bossArenaRules';
 import type { TownInfo } from '../world/town';
+import { findMap, type MapId } from '../world/worldGraph';
+import { MAP_BOSS_ARENA_1, WORLD } from '../config/worldConfig';
 import { WorldScene } from './WorldScene';
 
 /**
@@ -30,6 +32,10 @@ export class BossArenaScene extends WorldScene {
 
   protected get inBossArena(): boolean {
     return true;
+  }
+
+  protected getMapId(): MapId {
+    return MAP_BOSS_ARENA_1;
   }
 
   protected buildMap(): TownInfo {
@@ -89,8 +95,14 @@ export class BossArenaScene extends WorldScene {
 
   /** Chết ở Arena: reset lượt chơi và về WorldScene (như `scene.restart()` ở map chính). */
   protected restartRun(): void {
+    const respawnMap = findMap(WORLD, this.getMapDef().deathRespawn.mapId);
+
+    if (respawnMap === null) {
+      throw new Error('deathRespawn của map Arena trỏ tới map không tồn tại');
+    }
+
     this.clearRunSession();
-    this.scene.start(SCENE_KEYS.world, { characterId: this.characterId });
+    this.scene.start(respawnMap.sceneKey, { characterId: this.characterId });
   }
 
   update(time: number, delta: number): void {

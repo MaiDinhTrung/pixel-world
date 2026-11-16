@@ -11,6 +11,7 @@ import {
 import { VILLAGE_MARKER } from '../config/atmosphereConfig';
 import { TEXTURE_KEYS, WORLD_HEIGHT, WORLD_WIDTH } from '../config/constants';
 import { VILLAGE_NPCS, VILLAGE_ZONE } from '../config/economyConfig';
+import { CONN_VILLAGE_TO_ARENA, MAIN_DEFAULT_SPAWN } from '../config/worldConfig';
 import { VILLAGE_VILLAGERS } from '../config/villageConfig';
 import { Npc } from '../entities/Npc';
 import { Villager } from '../entities/Villager';
@@ -518,13 +519,14 @@ export function buildTown(
     x: BOSS_ARENA_ENTRANCE.x,
     y: BOSS_ARENA_ENTRANCE.y,
     kind: 'enter',
+    connectionId: CONN_VILLAGE_TO_ARENA,
     color: BOSS_ARENA_ENTRY_COLOR,
     label: BOSS_ARENA_ENTRANCE_LABEL,
     labelColor: BOSS_ARENA_ENTRY_COLOR_CSS,
   });
 
   return {
-    playerSpawn: { x: 1920, y: 1440 },
+    playerSpawn: { ...MAIN_DEFAULT_SPAWN },
     enemySpawns: ENEMY_SPAWNS.map((point) => ({ ...point })),
     npcs,
     portal,

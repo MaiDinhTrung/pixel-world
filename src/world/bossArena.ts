@@ -49,6 +49,7 @@ import {
   CASTLE_SHEAR,
 } from '../config/castleConfig';
 import { DESIGN_HEIGHT, DESIGN_WIDTH } from '../config/constants';
+import { CONN_ARENA_TO_VILLAGE } from '../config/worldConfig';
 import { isTouchDevice } from '../utils/device';
 import { drawBrickBox } from '../vfx/brickBox';
 import { createPortal } from './portal';
@@ -560,6 +561,7 @@ export function buildBossArena(
     x: BOSS_ARENA_RETURN_PORTAL.x,
     y: BOSS_ARENA_RETURN_PORTAL.y,
     kind: 'return',
+    connectionId: CONN_ARENA_TO_VILLAGE,
     color: BOSS_ARENA_RETURN_COLOR,
     label: BOSS_ARENA_RETURN_LABEL,
     labelColor: BOSS_ARENA_RETURN_COLOR_CSS,

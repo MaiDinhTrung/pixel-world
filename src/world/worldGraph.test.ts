@@ -193,13 +193,12 @@ describe('dữ liệu worldConfig', () => {
     expect(BOSS_ARENA.lighting).toBe('fixed');
   });
 
-  it('spawn mặc định của map chính khớp số viết cứng trong world/town.ts (chống lệch)', () => {
+  it('spawn mặc định của map chính là {1920, 1440} và world/town.ts đọc đúng nguồn này (chống lệch)', () => {
     const text = readFileSync(fileURLToPath(new URL('./town.ts', import.meta.url)), 'utf8');
-    const match = /playerSpawn:\s*\{\s*x:\s*(\d+),\s*y:\s*(\d+)\s*\}/.exec(text);
 
-    expect(match).not.toBeNull();
-    expect(Number(match?.[1])).toBe(MAIN_DEFAULT_SPAWN.x);
-    expect(Number(match?.[2])).toBe(MAIN_DEFAULT_SPAWN.y);
+    expect(MAIN_DEFAULT_SPAWN).toEqual({ x: 1920, y: 1440 });
+    expect(STARTING_LANDS.playerSpawns.default).toEqual({ x: 1920, y: 1440 });
+    expect(/playerSpawn:\s*\{\s*\.\.\.MAIN_DEFAULT_SPAWN\s*\}/.test(text)).toBe(true);
   });
 });
 

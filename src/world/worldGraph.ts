@@ -2,7 +2,7 @@
  * Mô hình World/Region/Map THUẦN (Gói W1, docs/WORLD_MAP_DESIGN.md §3): kiểu dữ liệu, tra cứu vùng,
  * luật khóa cổng, thời gian → bậc độ khó theo vùng, kiểm tra dữ liệu.
  *
- * CHƯA NỐI VÀO GAME (W1): không scene/entity nào import file này. Không phụ thuộc Phaser,
+ * ĐÃ NỐI (W2): WorldScene/BossArenaScene đọc cổng, đích, khóa cổng và bậc thời gian từ đây. Không phụ thuộc Phaser,
  * không ngẫu nhiên, không đọc thời gian hệ thống. Dữ liệu cụ thể ở `config/worldConfig.ts`.
  */
 import { MAX_THREAT_TIER, THREAT_INTERVAL_MS } from '../config/combatConfig';
@@ -182,6 +182,10 @@ export type TravelResult =
   | { readonly ok: true; readonly to: { readonly mapId: MapId; readonly spawnId: SpawnId } }
   | { readonly ok: false; readonly reason: TravelDenyReason };
 
+export function findMap(world: WorldDef, mapId: MapId): MapDef | null {
+  return world.maps.find((map) => map.id === mapId) ?? null;
+}
+
 export function findConnection(
   world: WorldDef,
   connectionId: ConnectionId,
@@ -223,6 +227,7 @@ export function requestTravel(
 /**
  * Bậc theo thời gian, CÙNG công thức WorldScene.getThreatTier:
  * min(MAX_THREAT_TIER, max(0, floor(elapsed / THREAT_INTERVAL_MS))).
+ * `elapsedMs` là `time − runStartedAt` (thời gian đã trôi của lượt chơi), KHÔNG phải thời gian tuyệt đối.
  */
 export function timeThreatTier(elapsedMs: number): number {
   return Math.min(
@@ -231,7 +236,10 @@ export function timeThreatTier(elapsedMs: number): number {
   );
 }
 
-/** tierEffective = clamp(timeTier + tierOffset, tierFloor, tierCap). */
+/**
+ * tierEffective = clamp(timeTier + tierOffset, tierFloor, tierCap).
+ * `elapsedMs` là `time − runStartedAt` (không phải thời gian tuyệt đối).
+ */
 export function effectiveThreatTier(
   elapsedMs: number,
   region: Pick<RegionDef, 'tierOffset' | 'tierFloor' | 'tierCap'>,

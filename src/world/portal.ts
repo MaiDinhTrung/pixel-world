@@ -9,6 +9,7 @@ import {
   PORTAL_VORTEX_SIZE,
 } from '../config/bossArenaConfig';
 import type { PortalKind } from './bossArenaRules';
+import type { ConnectionId } from './worldGraph';
 import { isTouchDevice } from '../utils/device';
 import { spawnBurst, spawnGlow, spawnRing } from '../utils/effects';
 
@@ -22,6 +23,7 @@ export interface PortalSpec {
   x: number;
   y: number;
   kind: PortalKind;
+  connectionId: ConnectionId;
   color: number;
   label: string;
   /** Màu chữ nhãn (CSS). */
@@ -33,6 +35,8 @@ export interface ScenePortal {
   x: number;
   y: number;
   kind: PortalKind;
+  /** Connection trong dữ liệu world (`config/worldConfig.ts`): luật khóa, đích, màu fade. */
+  connectionId: ConnectionId;
   visual: PortalVisual;
 }
 
@@ -310,6 +314,7 @@ export function createPortal(scene: Phaser.Scene, spec: PortalSpec): ScenePortal
     x: spec.x,
     y: spec.y,
     kind: spec.kind,
+    connectionId: spec.connectionId,
     visual: new PortalVisual(scene, spec),
   };
 }

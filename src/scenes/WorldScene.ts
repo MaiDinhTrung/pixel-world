@@ -61,12 +61,10 @@ import {
   MAX_BULLETS,
   MAX_ENEMY_BULLETS,
   MAX_LEGENDARY_CHESTS,
-  MAX_THREAT_TIER,
   MAX_WEAPON_CHESTS,
   MIN_RESPAWN_MS,
   RESPAWN_REDUCTION_PER_TIER,
   THREAT_ALIVE_BONUS,
-  THREAT_INTERVAL_MS,
   WEAPON_CHEST_DROP_CHANCE,
 } from '../config/combatConfig';
 import type { DamageType, ElementType } from '../config/damageTypeConfig';
@@ -211,10 +209,23 @@ import type { ScenePortal } from '../world/portal';
 import {
   decideBossAction,
   getPortalChargeProgress,
-  getPortalDenyReason,
   isPortalDenyToastWorthy,
   type PortalDenyReason,
 } from '../world/bossArenaRules';
+import {
+  MAP_STARTING_LANDS,
+  WORLD,
+} from '../config/worldConfig';
+import {
+  evaluateConnection,
+  findConnection,
+  findMap,
+  timeThreatTier,
+  type ConnectionDef,
+  type MapDef,
+  type MapId,
+  type WorldFacts,
+} from '../world/worldGraph';
 import {
   BOSS_ARENA_ENTRY_SPAWN_DELAY_MS,
   BOSS_ARENA_FADE_TO_ARENA,
@@ -425,6 +436,32 @@ export class WorldScene extends Phaser.Scene {
   /** true ở BossArenaScene: chỉ ở đó Boss mới được sinh. */
   protected get inBossArena(): boolean {
     return false;
+  }
+
+  /** Id map (dữ liệu `config/worldConfig.ts`) mà scene này hiển thị; scene con ghi đè. */
+  protected getMapId(): MapId {
+    return MAP_STARTING_LANDS;
+  }
+
+  /** MapDef của scene hiện tại (dữ liệu hợp lệ đã được test khóa; thiếu = lỗi lập trình). */
+  protected getMapDef(): MapDef {
+    const map = findMap(WORLD, this.getMapId());
+
+    if (map === null) {
+      throw new Error(`Không tìm thấy map trong WORLD: ${this.getMapId()}`);
+    }
+
+    return map;
+  }
+
+  private getPortalConnection(portal: ScenePortal): ConnectionDef {
+    const connection = findConnection(WORLD, portal.connectionId);
+
+    if (connection === null) {
+      throw new Error(`Không tìm thấy connection trong WORLD: ${portal.connectionId}`);
+    }
+
+    return connection;
   }
 
   /** Dựng bản đồ và trả thông tin điểm sinh/NPC/cổng. */
@@ -1278,13 +1315,7 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private getThreatTier(time: number): number {
-    return Math.min(
-      MAX_THREAT_TIER,
-      Math.max(
-        0,
-        Math.floor((time - this.runStartedAt) / THREAT_INTERVAL_MS),
-      ),
-    );
+    return timeThreatTier(time - this.runStartedAt);
   }
 
   private updateEnemySpawning(time: number): void {
@@ -3226,17 +3257,33 @@ export class WorldScene extends Phaser.Scene {
 
   // ---- Cổng dịch chuyển (vào/ra Đấu Trường Boss) ----
 
+  private getWorldFacts(): WorldFacts {
+    return {
+      bossAlive: this.boss !== null,
+      bossReady: this.bossReady,
+      playerLevel: this.playerState.getLevel(),
+    };
+  }
+
   private getPortalDeny(portal: ScenePortal, time: number): PortalDenyReason | null {
-    return getPortalDenyReason({
-      kind: portal.kind,
+    return evaluateConnection(this.getPortalConnection(portal), this.getWorldFacts(), {
       panelOpen: this.panelOpen,
       playerDead: this.player.isDead(),
       now: time,
       portalCooldownUntil: this.portalCooldownUntil,
       leaping: this.player.isLeaping(),
       traveling: this.portalTraveling,
-      bossAlive: this.boss !== null,
     });
+  }
+
+  /**
+   * NGUỒN DUY NHẤT của "cổng đang khóa vì Boss" (toast, prompt, trạng thái khóa visual dùng chung).
+   * Đầu vào truy cập trung tính (evaluateConnection mặc định) nên chỉ còn lý do 'boss_alive' có thể xảy ra.
+   */
+  private isPortalLockedByBoss(portal: ScenePortal): boolean {
+    return (
+      evaluateConnection(this.getPortalConnection(portal), this.getWorldFacts()) === 'boss_alive'
+    );
   }
 
   private getPortalPrompt(portal: ScenePortal): string {
@@ -3244,7 +3291,7 @@ export class WorldScene extends Phaser.Scene {
       return 'ĐANG KÍCH HOẠT CỔNG…';
     }
 
-    if (portal.kind === 'return' && this.boss !== null) {
+    if (this.isPortalLockedByBoss(portal)) {
       return 'CỔNG KHÓA — HẠ TRÙM ĐỂ MỞ';
     }
 
@@ -3308,8 +3355,15 @@ export class WorldScene extends Phaser.Scene {
 
   /** Lưu tiến trình, chụp RunSession rồi mờ màn hình và stop→start sang scene đích. */
   private startPortalTravel(portal: ScenePortal, time: number): void {
-    const toArena = portal.kind === 'enter';
-    const fade = toArena ? BOSS_ARENA_FADE_TO_ARENA : BOSS_ARENA_FADE_TO_WORLD;
+    const connection = this.getPortalConnection(portal);
+    const targetMap = findMap(WORLD, connection.to.mapId);
+
+    if (targetMap === null) {
+      throw new Error(`Không tìm thấy map đích trong WORLD: ${connection.to.mapId}`);
+    }
+
+    const fade =
+      connection.direction === 'enter' ? BOSS_ARENA_FADE_TO_ARENA : BOSS_ARENA_FADE_TO_WORLD;
 
     this.portalTraveling = true;
     this.portalChargeStartedAt = null;
@@ -3338,7 +3392,7 @@ export class WorldScene extends Phaser.Scene {
       }),
     );
 
-    const targetKey = toArena ? SCENE_KEYS.bossArena : SCENE_KEYS.world;
+    const targetKey = targetMap.sceneKey;
     const camera = this.cameras.main;
 
     camera.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => {
@@ -3354,7 +3408,7 @@ export class WorldScene extends Phaser.Scene {
       return;
     }
 
-    portal.visual.setLocked(portal.kind === 'return' && this.boss !== null);
+    portal.visual.setLocked(this.isPortalLockedByBoss(portal));
     portal.visual.update(time);
   }
 

@@ -1,7 +1,7 @@
 /**
  * Dữ liệu World/Region/Map (Gói W1, docs/WORLD_MAP_DESIGN.md): mô tả ĐÚNG hai bản đồ hiện có.
- * CHƯA NỐI VÀO GAME — chưa scene nào đọc file này. Chỉ THAM CHIẾU hằng số có sẵn, không sao chép số
- * (ngoại lệ duy nhất: MAIN_DEFAULT_SPAWN, xem chú thích bên dưới).
+ * ĐÃ NỐI (W2): WorldScene/BossArenaScene/town/bossArena đọc id, đích và luật cổng từ đây. Chỉ THAM CHIẾU
+ * hằng số có sẵn, không sao chép số (MAIN_DEFAULT_SPAWN là nguồn thật, xem chú thích bên dưới).
  */
 import type { MapDef, MapId, RegionId, ConnectionId, WorldDef } from '../world/worldGraph';
 import {
@@ -45,8 +45,7 @@ const CURRENT_SPAWN_PATTERN = ['melee', 'melee', 'ranged'] as const;
 /**
  * Vị trí người chơi xuất hiện ở bản đồ chính (lúc vào game VÀ khi về từ Arena: RunSession không lưu tọa độ
  * nên WorldScene.create luôn đặt người chơi ở `town.playerSpawn`). [ĐÃ XÁC MINH]
- * Hiện là số viết cứng ở world/town.ts (`playerSpawn: { x: 1920, y: 1440 }`), chưa có hằng số trong config
- * để tham chiếu → SAO CHÉP tạm ở đây; W2 nên chuyển nguồn thật về file này. Test khóa hai giá trị khớp nhau.
+ * NGUỒN THẬT (W2): world/town.ts đọc `playerSpawn` từ đây. Test khóa giá trị {1920, 1440}.
  */
 export const MAIN_DEFAULT_SPAWN = { x: 1920, y: 1440 } as const;
 
