@@ -6,5 +6,4 @@ AI Lead đọc file này **đầu mỗi phiên** (WORKFLOW §0), rồi chỉ đ�
 |---|---|---|---|---|---|---|
 | — | (không có nhiệm vụ đang mở) | | | | | |
 
-Chờ người dùng quyết (không phải nhiệm vụ): push ~52 commit (fetch trước để so với GitHub).
 Đã đóng gần đây: xem `TASK_HISTORY.md`.

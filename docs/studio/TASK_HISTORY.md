@@ -7,6 +7,11 @@ Quy ước commit (từ ST-02): ghi `git log --grep=<ID>` thay vì SHA, để đ
 
 Các nhiệm vụ trước khi có Task Map (ST-01) không có file `tasks/`; tóm tắt lấy từ `DECISIONS.md` và `TOKEN_LOG.md`.
 
+### FIX-01 — `npm test` lỗi khi cwd là `d:\` (chữ thường) · 2026-11-17 → 2026-11-17 · ACCEPTED
+- Kết quả: `npm test` chạy qua `scripts/run-vitest.mjs` (chuẩn hoá chữ hoa/thường ổ đĩa của cwd bằng `realpathSync.native` trước khi spawn vitest); cwd `d:\` và `D:\` đều 44/44 file, 778/778; tsc + build qua.
+- Commit: `git log --grep=FIX-01` (đã push). Task Map: `tasks/FIX-01_test_drive_case.md`.
+- Tồn đọng: `npx vitest run --root . <file>` chạy trực tiếp từ `d:\` vẫn có thể lỗi giả ở 2 file có `vi.mock`.
+
 ### ST-02 — Luật baseline tài liệu Lead (T2) + Chế độ tự chủ (T4) · 2026-11-17 → 2026-11-17 · ACCEPTED
 - Kết quả: WORKFLOW §6a quy tắc "tài liệu Lead" (ưu tiên commit trước baseline; nếu song song thì khai mẫu `docs/**`, QA xếp loại "Lead"); WORKFLOW §14 Chế độ tự chủ (memory chỉ trỏ về đây); mẫu FEATURE_BRIEF/AGENT_REPORTS/LEAD cập nhật. Chỉ tài liệu.
 - Commit: `git log --grep=ST-02` (chưa push; gồm commit chính + commit bổ sung mục lịch sử này). Task Map: `tasks/ST-02_baseline_autonomy.md`. DECISIONS "ST-02".

@@ -1,6 +1,6 @@
 # PROJECT_MAP — Pixel World (Codebase Map, cấp L1)
 
-Stack: Phaser 4.2.1 + TypeScript + Vite (`npm run dev` / `npm run build` / `npm test` = vitest, `*.test.ts` cạnh mã nguồn). Gameplay cho người chơi: `README.md`. Định hướng: `docs/DESIGN_PILLARS.md`.
+Stack: Phaser 4.2.1 + TypeScript + Vite (`npm run dev` / `npm run build` / `npm test` = vitest qua `scripts/run-vitest.mjs` — chuẩn hoá chữ hoa/thường ổ đĩa của cwd trên Windows trước khi chạy (FIX-01); `*.test.ts` cạnh mã nguồn). Gameplay cho người chơi: `README.md`. Định hướng: `docs/DESIGN_PILLARS.md`.
 **Index First, Read on Demand:** đọc file này → mở đúng **một** file `docs/codemap/<hệ thống>.md` → Grep/đọc file thật theo offset. Bản đồ là chỉ mục, **không** phải nguồn sự thật: trước khi sửa code luôn đọc file thật và kiểm người gọi (WORKFLOW §13).
 Không đọc: `node_modules/`, `dist/`, `package-lock.json`. Bản cũ (trước 2026-11-17, nhiều lịch sử GĐ/Gói): `docs/archive/PROJECT_MAP_legacy.md`.
 
