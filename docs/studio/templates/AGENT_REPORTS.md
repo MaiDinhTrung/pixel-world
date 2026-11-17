@@ -26,7 +26,7 @@ Vai: <Developer|QA|Gameplay|Visual> · Gói: <ID> · Brief: <đường dẫn> ·
 QA tự lấy phạm vi từ git (WORKFLOW §6a), **không** dùng danh sách file của Developer.
 ```
 1. LỆNH: build/tsc/test (số) · HEAD khớp baseline? Có/Không
-2. PHẠM VI (git): <n> sửa / <m> tạo / D,R: <k> / ngoài danh sách: <x> / vùng cấm: <y> — chỉ liệt kê đường dẫn khi bất thường
+2. PHẠM VI (git): <n> sửa / <m> tạo / D,R: <k> / Lead (mẫu đã khai): <l> / ngoài danh sách: <x> / vùng cấm: <y> — chỉ liệt kê đường dẫn khi bất thường
 3. TIÊU CHÍ A: <ID>: Đạt/Không — 1 dòng
 4. TIÊU CHÍ Q: <ID>: Đạt/Không/Rủi ro — file:dòng
 5. HỒI QUY: <mục C>: Đạt/Rủi ro

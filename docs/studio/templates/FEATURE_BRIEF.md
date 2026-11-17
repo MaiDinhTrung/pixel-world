@@ -13,7 +13,7 @@ Chép từ dòng dưới đây:
 
 Cấp: **<S/M/L/XL>** (lý do). Cổng 1: người dùng duyệt <ngày> ("<trích lời>"; DECISIONS mục <tên>). Task Map: `docs/studio/tasks/<ID>_<slug>.md`. Báo cáo agent **≤ 10 dòng** theo `docs/studio/templates/AGENT_REPORTS.md`.
 
-BASELINE: HEAD=<sha đầy đủ> · nhánh=<tên> · tracked sạch · untracked có sẵn: <mẫu> (<số>)
+BASELINE: HEAD=<sha đầy đủ> · nhánh=<tên> · tracked sạch · untracked có sẵn: <mẫu> (<số>) [· tài liệu Lead: <mẫu docs/**> — chỉ khi Lead buộc phải sửa song song, WORKFLOW §6a; ưu tiên commit trước]
 Test baseline: <n> file, <m> test qua; `npx tsc --noEmit` sạch.
 
 ## 1. Mục tiêu

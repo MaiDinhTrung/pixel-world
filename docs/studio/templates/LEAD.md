@@ -42,5 +42,6 @@ Push: không (cần đồng ý riêng)
 2. `TASK_HISTORY.md`: thêm 3–5 dòng (kết quả · commit · tài liệu · tồn đọng).
 3. `CURRENT_TASK.md`: xoá hàng.
 4. `TOKEN_LOG.md`: số thật của subagent.
-5. `DECISIONS.md`: "đã triển khai, đã nghiệm thu" + SHA (không xoá lịch sử quyết định/nghiệm thu).
+5. `DECISIONS.md`: "đã triển khai, đã nghiệm thu" + `git log --grep=<ID>` (không ghi SHA để đóng được trong cùng commit; không xoá lịch sử quyết định/nghiệm thu).
+Thứ tự: làm bước 1–5 **trước**, rồi commit một lần (message chứa `(<ID>)`) — không để lại diff sau commit.
 6. Báo cáo 5 dòng cho người dùng: đã làm gì · file đã đổi · kết quả QA · tồn đọng · **"đã xong"**.

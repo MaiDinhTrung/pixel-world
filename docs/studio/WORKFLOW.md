@@ -1,6 +1,6 @@
 # WORKFLOW — Quy trình AI Studio
 
-Mô hình hub-and-spoke: **AI Lead** (session chính) là trung tâm duy nhất; subagent không gọi nhau, mọi bàn giao đi qua AI Lead. Giữ nhẹ: việc nhỏ không cần đủ quy trình; phân cấp S/M/L/XL (Lean) ở §12; vòng đời nhiệm vụ + Task Map + Codebase Map ở §13.
+Mô hình hub-and-spoke: **AI Lead** (session chính) là trung tâm duy nhất; subagent không gọi nhau, mọi bàn giao đi qua AI Lead. Giữ nhẹ: việc nhỏ không cần đủ quy trình; phân cấp S/M/L/XL (Lean) ở §12; vòng đời nhiệm vụ + Task Map + Codebase Map ở §13; chế độ tự chủ ở §14.
 
 ## 0. Khởi động phiên (AI Lead)
 1. Đọc `docs/studio/CURRENT_TASK.md` → chỉ đọc Task Map của nhiệm vụ đang làm (`docs/studio/tasks/<ID>_*.md`). Không đọc Task Map khác, không đọc lại DECISIONS/brief cũ trừ khi Task Map trỏ tới.
@@ -71,10 +71,11 @@ Brief phải tự đủ ý và trỏ tới file cụ thể (codemap + đường 
 1. Chạy `git rev-parse HEAD`, `git branch --show-current`, `git status --porcelain --untracked-files=no`.
 2. **Cây tracked phải sạch** (lệnh thứ ba không in gì). Chưa sạch → Lead **không** gọi Developer: báo người dùng file nào đang dơ và xin ý kiến (commit / stash / hoàn tác / chấp nhận). Lead không tự quyết.
    - **Ngoại lệ có chủ đích:** nếu người dùng chỉ thị rõ vẫn tiếp tục khi cây chưa sạch, baseline phải liệt kê từng file tracked đang dơ kèm `git hash-object <file>` (và hash của file untracked mà Developer được phép SỬA). QA đối chiếu hash từng file; file không đổi hash coi như không bị đụng. Ghi ngoại lệ này vào báo cáo.
+   - **Tài liệu Lead (ST-02):** Lead ưu tiên commit tài liệu của mình **trước** khi lập baseline (Cổng 2 gọn, một câu xác nhận). Nếu buộc phải sửa tài liệu **trong lúc** Developer làm (Task Map, DECISIONS, PROJECT_MAP/codemap, playtest…), dòng BASELINE thêm `· tài liệu Lead: <mẫu đường dẫn>` — chỉ được nằm trong `docs/**` (vd `docs/studio/**`, `docs/codemap/**`, `docs/PROJECT_MAP.md`). Các đường dẫn này: Developer **không** được sửa/tạo (nằm trong KHÔNG đụng của brief); QA xếp loại **"Lead"** (không phải "ngoài phạm vi", không phải lỗi) và ghi một dòng trong báo cáo; đường dẫn đổi ngoài mẫu đã khai vẫn là lỗi Chặn. File đã dơ **trước** khi lập baseline không thuộc quy tắc này — vẫn theo ngoại lệ hash ở trên.
 3. Chạy `git ls-files --others --exclude-standard` để biết file untracked có sẵn; ghi dưới dạng mẫu thư mục (ví dụ `docs/references/visual/**`, kèm số lượng). Đây không phải kết quả của Developer.
 4. Dán một dòng vào mọi brief của nhiệm vụ:
 ```
-BASELINE: HEAD=<sha đầy đủ> · nhánh=<tên> · tracked sạch · untracked có sẵn: <mẫu> (<số lượng>)
+BASELINE: HEAD=<sha đầy đủ> · nhánh=<tên> · tracked sạch · untracked có sẵn: <mẫu> (<số lượng>) [· tài liệu Lead: <mẫu docs/**>]
 ```
 Baseline lập **một lần cho cả nhiệm vụ** và giữ nguyên qua hai vòng sửa lỗi (§9); chỉ lập lại khi bắt đầu nhiệm vụ mới.
 
@@ -84,7 +85,8 @@ Baseline lập **một lần cho cả nhiệm vụ** và giữ nguyên qua hai v
 3. `git ls-files --others --exclude-standard` (hoặc `git status --porcelain --untracked-files=all`) → file mới; **trừ** các mẫu untracked có sẵn trong baseline. Lưu ý: git bọc đường dẫn có ký tự ngoài ASCII hoặc khoảng trắng trong dấu `"` kèm escape; bỏ dấu `"` đầu dòng khi so với mẫu baseline, kẻo file cũ bị tính nhầm là file mới.
 4. Phân loại từng đường dẫn đã đổi:
    - file tracked nằm trong ĐƯỢC SỬA, hoặc file mới nằm trong ĐƯỢC TẠO → Đạt;
-   - ngoài cả hai danh sách → lỗi **Chặn** "ngoài phạm vi";
+   - khớp mẫu `tài liệu Lead` đã khai trong BASELINE → loại **"Lead"**, ghi chú, không phải lỗi;
+   - ngoài cả hai danh sách (và ngoài mẫu tài liệu Lead) → lỗi **Chặn** "ngoài phạm vi";
    - thuộc vùng cấm (§8) → lỗi **Chặn**, kể cả khi có trong brief;
    - có trong danh sách nhưng không đổi, hoặc đặt sai danh sách (mới mà ở ĐƯỢC SỬA, v.v.) → ghi chú, không phải lỗi chặn.
 5. Giới hạn phải ghi vào mục "Chưa kiểm được": file bị `.gitignore` (`dist/`, `*.local`) không hiện trong git. `git diff` cũng **không thấy** file untracked bị sửa; với file untracked trong ĐƯỢC SỬA hoặc trong baseline, QA so `git hash-object` với hash ghi trong baseline.
@@ -224,3 +226,23 @@ Chỉ Lead ghi Task Map / CURRENT_TASK / TASK_HISTORY (subagent không ghi). Ti�
 - **Kích hoạt:** thêm/xoá/đổi tên/di chuyển file, đổi trách nhiệm module, thêm hệ thống, hoặc thấy bản đồ lệch.
 - **Chuỗi phát hiện:** Developer khai dòng "CẤU TRÚC ĐỔI" (`AGENT_REPORTS.md`) → QA đối chiếu file A/D/R trong `git diff --name-status` → Lead đánh dấu file codemap ở Task Map → Lead cập nhật codemap (+ PROJECT_MAP nếu đổi L1, + bảng "Tìm file…") và đổi `Xác minh: HEAD <sha>` **trước Cổng 2**, cùng commit với thay đổi code.
 - Khung một file codemap và quy tắc ghi: `docs/PROJECT_MAP.md` §6.
+
+## 14. Chế độ tự chủ (ST-02)
+
+Trạng thái: **ĐÃ DUYỆT (người dùng, 2026-11-17)**. Người dùng bật chế độ này từ 2026-11-17 để chỉ tập trung chơi thử và phản hồi. Chế độ tự chủ **bỏ việc xin duyệt từng bước kỹ thuật**, không bỏ cổng nào ở §5. Người dùng tắt/bật bằng một câu; khi tắt, mọi bước quay về hỏi như §4.
+
+**Lead tự quyết (không hỏi):**
+- Chọn việc tiếp theo trong backlog theo thứ tự ưu tiên người dùng đã nêu: (1) việc còn dở của gói đang làm, (2) tính năng chưa được chơi thử, (3) lỗi đã biết theo mức nghiêm trọng, (4) chuẩn bị gói kế tiếp theo kiến trúc đã duyệt, (5) tiếp tục theo Feature Brief + Lean (§12).
+- Các bước kỹ thuật **trong phạm vi đã duyệt**: phân cấp, gọi Designer/Developer/QA, viết brief, lập baseline, tự kiểm, tối đa 2 vòng sửa (§9), cập nhật Task Map/codemap, viết checklist playtest. Không dừng chỉ để báo tiến độ.
+- Chỉnh thông số nhỏ sau phản hồi playtest khi người dùng đã nêu hướng rõ (vd "quá khó") — vẫn báo giá trị cũ → mới trong checklist kiểm lại.
+
+**Vẫn phải qua cổng / hỏi người dùng:**
+- **Cổng 1:** thiết kế mới, đổi kiến trúc đã duyệt, đổi số liệu cân bằng chiến đấu ngoài phản hồi playtest, gói mới chưa có thiết kế (vd M4, Visual Overhaul), mọi thay đổi `.claude/` (quyền, hook, agent).
+- **Cổng 2:** commit (sau nghiệm thu); **push** là đồng ý riêng, chỉ sau khi đã `git fetch` và rà toàn bộ tập commit.
+- Cây tracked dơ khi lập baseline (§6a.2), vòng sửa thứ 3 (§9.4), cần file ngoài danh sách đã duyệt (§8).
+
+**Không bao giờ (kể cả khi tự chủ):**
+- Xoá hoặc ghi đè save/dữ liệu người chơi; xoá/ghi đè file untracked không rõ nguồn; `git clean/reset --hard`, xoá asset.
+- Tự đánh PASS playtest hoặc tuyên bố "đã nghiệm thu" khi người dùng chưa xác nhận (§9a); bỏ qua QA ở cấp L/XL.
+
+**Mỗi nhiệm vụ tự chủ:** Task Map (§13) · nhãn trạng thái READY FOR PLAYTEST / NEEDS REVISION / ACCEPTED · tự rà trước khi bàn giao: đúng yêu cầu? trái kiến trúc? ảnh hưởng ngoài phạm vi? hồi quy? tiêu chí nào chưa kiểm? · báo cáo ≤ 10 dòng, không khẳng định PASS khi chưa chạy kiểm tra tương ứng.

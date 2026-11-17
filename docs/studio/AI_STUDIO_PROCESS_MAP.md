@@ -70,7 +70,7 @@ Mô hình **hub-and-spoke** (WORKFLOW đầu tài liệu, §1): subagent **khôn
 | Task Map / Codebase Map | Giấy | `CURRENT_TASK.md`, `tasks/`, `TASK_HISTORY.md`; `PROJECT_MAP.md` + `docs/codemap/` (WORKFLOW §0, §13) | [GIẤY] Lead cập nhật; lỗi thời phát hiện bằng dòng "Kiểm lỗi thời" |
 | Baseline Git + QA kiểm phạm vi | Giấy (QA tự chạy git) | WORKFLOW §6a | Hook **không** kiểm danh sách ĐƯỢC SỬA/ĐƯỢC TẠO |
 | Playtest Handover | Giấy + memory | WORKFLOW §9a–9b, §12.5; memory `playtest-handover-workflow` | [GIẤY]/[MEMORY] checklist ở `docs/studio/playtests/` |
-| Chế độ tự chủ | **Chỉ memory** | memory `autonomous-work-protocol` (2026-11-17) | [MEMORY] không có trong repo |
+| Chế độ tự chủ | Giấy | WORKFLOW §14 (ST-02); memory `autonomous-work-protocol` chỉ trỏ về §14 | [GIẤY] |
 | Token log | Giấy | `lean-handoff/TOKEN_LOG.md`, §12.7 | Chỉ số subagent; số session chính chưa từng có |
 
 ---
@@ -307,9 +307,9 @@ stateDiagram-v2
 | # | Điểm | Chi tiết |
 |---|---|---|
 | T1 ✅ ST-01 | File agent lệch Lean §12 | `qa-tester.md` vẫn mô tả báo cáo dài (5 mục, dán đầu ra); `game-developer.md` chỉ yêu cầu `npm test` "nếu có logic thuần" trong khi §12 yêu cầu tự kiểm tsc/test/build. Đã ghi là "điểm còn mở" trong `DECISIONS.md` (mục Lean) |
-| T2 | Baseline "tracked sạch" | §6a yêu cầu sạch, ngoại lệ chỉ khi người dùng chỉ thị rõ + hash từng file. Brief P4b ghi "tracked sạch (trừ tài liệu Lead sửa song song)" — một dạng ngoại lệ **chưa có trong §6a** |
+| T2 ✅ ST-02 (WORKFLOW §6a "tài liệu Lead") | Baseline "tracked sạch" | §6a yêu cầu sạch, ngoại lệ chỉ khi người dùng chỉ thị rõ + hash từng file. Brief P4b ghi "tracked sạch (trừ tài liệu Lead sửa song song)" — một dạng ngoại lệ **chưa có trong §6a** |
 | T3 | Trần 2 vòng | Lặp ở §4, §9.4, §12.3, file agent — đồng nhất nội dung nhưng 4 chỗ phải sửa cùng lúc |
-| T4 | Chế độ tự chủ vs Cổng | Memory nói "không xin duyệt từng bước"; WORKFLOW §5 yêu cầu Cổng 1 cho mọi thiết kế mới. Memory tự giới hạn (thiết kế mới vẫn qua Cổng 1) nhưng WORKFLOW không nhắc chế độ này → người đọc repo không biết ranh giới |
+| T4 ✅ ST-02 (WORKFLOW §14) | Chế độ tự chủ vs Cổng | Memory nói "không xin duyệt từng bước"; WORKFLOW §5 yêu cầu Cổng 1 cho mọi thiết kế mới. Memory tự giới hạn (thiết kế mới vẫn qua Cổng 1) nhưng WORKFLOW không nhắc chế độ này → người đọc repo không biết ranh giới |
 | T5 ✅ ST-01 | Mẫu "thử nghiệm" | `REPORT_TEMPLATE.md`, `QA_PLAN_TEMPLATE.md` tiêu đề còn "(thử nghiệm)" dù §12 đã duyệt |
 | T6 ✅ ST-01 | Brief + QA Plan | Mẫu tách hai file (`M4_FEATURE_BRIEF.md` + `M4_QA_PLAN.md`); thực tế từ P2 gộp một file "FEATURE BRIEF + QA Plan" |
 | T7 ✅ ST-01 | Đọc WORKFLOW mỗi lần | Cả 4 file agent bắt đọc toàn `WORKFLOW.md` (~200 dòng) ở bước 0 — mâu thuẫn mục tiêu tiết kiệm token §12.3 |
@@ -327,8 +327,8 @@ stateDiagram-v2
 
 ### 9.6 Đề xuất cải thiện (chưa làm — cần Cổng 1 vì đụng `.claude/` hoặc WORKFLOW)
 1. ✅ **Đã làm ở ST-01.** **Đồng bộ file agent với §12** (T1, T7): giới hạn 10 dòng, dùng `REPORT_TEMPLATE.md`; bước 0 chỉ đọc mục WORKFLOW liên quan (vd Developer: §6, §6a, §8; QA: §6a, §9, §12.4).
-2. **Bổ sung §6a** ngoại lệ "tài liệu do Lead sửa song song" (danh sách mẫu đường dẫn chỉ `docs/**`, ghi hash) cho khớp thực tế (T2).
-3. **Thêm mục "Chế độ tự chủ" vào WORKFLOW** (tóm tắt từ memory, ranh giới với Cổng 1/2) để quy trình nằm trong repo (T4).
+2. ✅ **Đã làm ở ST-02.** **Bổ sung §6a** ngoại lệ "tài liệu do Lead sửa song song" (danh sách mẫu đường dẫn chỉ `docs/**`, ghi hash) cho khớp thực tế (T2).
+3. ✅ **Đã làm ở ST-02 (§14).** **Thêm mục "Chế độ tự chủ" vào WORKFLOW** (tóm tắt từ memory, ranh giới với Cổng 1/2) để quy trình nằm trong repo (T4).
 4. **Quy định push + nhánh**: vd "mỗi gói L/XL một nhánh hoặc commit ngay sau nghiệm thu; push theo lô sau khi build/test qua và người dùng đồng ý".
 5. **Luật "một gói chưa commit tại một thời điểm"** trừ khi người dùng chỉ thị khác.
 6. **Gỡ `Bash(python -)`** khỏi `settings.local.json` (hoặc thu hẹp), cân nhắc thay `Bash(npm test *)` bằng dạng chính xác.

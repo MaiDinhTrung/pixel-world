@@ -16,6 +16,12 @@ Mẫu mục:
 
 ---
 
+### 2026-11-17 — ST-02: Baseline khi Lead sửa tài liệu song song (T2) + Chế độ tự chủ trong WORKFLOW (T4)
+- **Quyết định (người dùng duyệt 2026-11-17: "làm tiếp #3 #4", sau báo cáo kiểm tra sau ST-01):** (T2) WORKFLOW §6a thêm quy tắc "tài liệu Lead": Lead ưu tiên commit tài liệu **trước** khi lập baseline; nếu buộc phải sửa song song thì dòng BASELINE khai `tài liệu Lead: <mẫu đường dẫn>` (chỉ `docs/**`, không gồm `docs/studio/DECISIONS.md` trừ khi Lead ghi), Developer không được sửa các đường dẫn đó, QA xếp loại "Lead" (không phải "ngoài phạm vi"); file đã dơ **trước** baseline vẫn theo ngoại lệ hash hiện có. (T4) WORKFLOW §14 "Chế độ tự chủ": tóm tắt memory `autonomous-work-protocol` thành luật trong repo (Lead tự quyết gì, cái gì vẫn qua Cổng 1/2, điều cấm); memory chỉ trỏ về §14.
+- **Phương án bị loại:** cấm hẳn Lead sửa tài liệu khi Developer làm (thực tế P4b cần cập nhật DECISIONS/Task Map liên tục); để chế độ tự chủ chỉ trong memory (phiên/máy khác không thấy).
+- **Ảnh hưởng:** chỉ tài liệu: `WORKFLOW.md`, `templates/FEATURE_BRIEF.md`, `AI_STUDIO_PROCESS_MAP.md`; memory.
+- **Trạng thái:** đã triển khai, người dùng đồng ý commit (2026-11-17, "commit st02") → `git log --grep=ST-02`, chưa push. Task Map `docs/studio/tasks/ST-02_baseline_autonomy.md` (CLOSED).
+
 ### 2026-11-17 — ST-01: Task Map + Codebase Map + Agent Templates
 - **Quyết định (người dùng duyệt Cổng 1, 2026-11-17: "duyệt khuyến nghị làm liền từ g1 - g4"):** (1) Codebase Map 3 cấp: `docs/PROJECT_MAP.md` thành chỉ mục L1 + bảng "Tìm file…", chi tiết L2/L3 ở 9 file `docs/codemap/*.md` có dòng `Xác minh: <sha>` để phát hiện lỗi thời; (2) 6 mẫu chuẩn ở `docs/studio/templates/` (README ma trận agent × mẫu, TASK_MAP, LEAD, FEATURE_BRIEF gộp QA Plan, AGENT_REPORTS, PLAYTEST); mẫu cũ `lean-handoff/{QA_PLAN_TEMPLATE,REPORT_TEMPLATE}.md` thay bằng dòng trỏ, không xoá; (3) Task Map: `docs/studio/CURRENT_TASK.md` + `docs/studio/tasks/<ID>_<slug>.md` + `docs/studio/TASK_HISTORY.md`; tiến độ nằm ở Task Map, DECISIONS chỉ giữ quyết định và kết quả nghiệm thu; (4) WORKFLOW §0 + §13 (Index First, Read on Demand), file agent trỏ tới mẫu (sửa T1, T5, T6, T7 của `AI_STUDIO_PROCESS_MAP.md`); (5) làm liền G1–G4, Lead tự làm (chỉ tài liệu), không sửa code gameplay, không commit.
 - **Phương án bị loại:** Codebase Map một file (đọc tốn token như PROJECT_MAP cũ ~37k token); xoá mẫu cũ (gãy tham chiếu trong brief lịch sử).
