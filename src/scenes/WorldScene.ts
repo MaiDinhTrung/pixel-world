@@ -246,7 +246,6 @@ import {
   findConnection,
   findMap,
   zoneAt,
-  timeThreatTier,
   type ConnectionDef,
   type ConnectionId,
   type MapDef,
@@ -267,6 +266,11 @@ import {
   BOSS_ARENA_PORTAL_INTERACT_RADIUS,
   BOSS_ARENA_PORTAL_TOAST_COOLDOWN_MS,
 } from '../config/bossArenaConfig';
+import {
+  createRunSessionClock,
+  newRunClockState,
+  type DifficultyClock,
+} from '../progression/difficultyClock';
 import {
   RUN_SESSION_REGISTRY_KEY,
   applyRunSessionToPlayer,
@@ -422,11 +426,8 @@ export class WorldScene extends Phaser.Scene {
   private lastLootSaveAt = 0;
 
   protected boss: BossEnemy | null = null;
-  protected bossNumber = 0;
-  protected nextBossAt = 0;
-  private bossWarningShown = false;
-  /** Hết giờ ở map chính: Boss đang chờ ở Đấu Trường (chỉ BossArenaScene mới sinh Boss). */
-  protected bossReady = false;
+  /** Đồng hồ độ khó và lịch Boss (runStartedAt, nextBossAt, bossNumber, bossReady, bossWarningShown); tạo mới ở mỗi create(). */
+  protected clock!: DifficultyClock;
   /** Thời điểm tuyệt đối vào Đấu Trường (null ở map chính). */
   protected arenaEntryAt: number | null = null;
   private portalCooldownUntil = 0;
@@ -474,7 +475,6 @@ export class WorldScene extends Phaser.Scene {
   private readonly fearReadyAt = new WeakMap<EnemyBase, number>();
   private nextMomentumAt = 0;
 
-  private runStartedAt = 0;
   private nextSpawnAt = 0;
 
   constructor(key: string = SCENE_KEYS.world) {
@@ -667,8 +667,6 @@ export class WorldScene extends Phaser.Scene {
     this.panelOpen = false;
     this.deathAt = 0;
     this.boss = null;
-    this.bossNumber = 0;
-    this.bossWarningShown = false;
     this.character = CHARACTERS[this.characterId];
     this.allSkills = [
       ...this.character.skills,
@@ -680,16 +678,16 @@ export class WorldScene extends Phaser.Scene {
     const restored = this.takeRunSession();
     const arrival = resolveSceneArrival(WORLD, this.getMapId(), this.arrivalConnectionId);
 
-    this.bossReady = false;
     this.arenaEntryAt = this.inBossArena ? startNow : null;
     this.portalTraveling = false;
     this.portalChargeStartedAt = null;
     this.chargingPortal = null;
     this.portalCooldownUntil = 0;
     this.lastPortalToastAt = 0;
-    this.runStartedAt = startNow;
     this.nextSpawnAt = startNow + 1000;
-    this.nextBossAt = startNow + BOSS_FIRST_DELAY_MS;
+    this.clock = createRunSessionClock(
+      newRunClockState(startNow, BOSS_FIRST_DELAY_MS),
+    );
 
     if (restored) {
       const carried = extractRunSceneState(restored);
@@ -697,11 +695,7 @@ export class WorldScene extends Phaser.Scene {
       this.skillCooldownUntil = carried.skillCooldownUntil as Partial<
         Record<SkillId, number>
       >;
-      this.runStartedAt = carried.runStartedAt;
-      this.nextBossAt = carried.nextBossAt;
-      this.bossNumber = carried.bossNumber;
-      this.bossReady = carried.bossReady;
-      this.bossWarningShown = carried.bossWarningShown;
+      this.clock = createRunSessionClock(carried);
       this.portalCooldownUntil = startNow + BOSS_ARENA_PORTAL_COOLDOWN_MS;
 
       const fade = arrival.fadeColor;
@@ -1195,7 +1189,7 @@ export class WorldScene extends Phaser.Scene {
       this.playerState.getStatPoints(),
     );
     this.hud.setRunInfo(
-      time - this.runStartedAt,
+      this.clock.elapsedMs(time),
       this.getThreatTier(time),
       this.getBossHudText(time),
     );
@@ -1413,7 +1407,7 @@ export class WorldScene extends Phaser.Scene {
     const tier =
       zone === null
         ? this.getThreatTier(this.time.now)
-        : effectiveThreatTier(this.time.now - this.runStartedAt, zone);
+        : effectiveThreatTier(this.clock.elapsedMs(this.time.now), zone);
     const enemy = isRanged
       ? new RangedEnemy(
           this,
@@ -1539,7 +1533,7 @@ export class WorldScene extends Phaser.Scene {
     const affixId = pickEliteAffix(eliteIndex);
     const affix = ELITE_AFFIXES[affixId];
     const profile = eliteArchetype(baseId, affixId);
-    const tier = effectiveThreatTier(this.time.now - this.runStartedAt, zone);
+    const tier = effectiveThreatTier(this.clock.elapsedMs(this.time.now), zone);
     const { x, y } = clampToMap(this.getMapDef(), point.x, point.y, 48);
 
     this.elitesSpawned += 1;
@@ -1596,7 +1590,7 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private getThreatTier(time: number): number {
-    return timeThreatTier(time - this.runStartedAt);
+    return this.clock.timeTier(time);
   }
 
   /** Biển tên vùng (W3): theo dõi vùng người chơi đứng, hiện biển khi vào vùng mới; ẩn khi chết/mở panel. */
@@ -1652,18 +1646,18 @@ export class WorldScene extends Phaser.Scene {
 
   private getBossHudText(time: number): string {
     if (this.boss) {
-      return `TRÙM ${this.bossNumber}`;
+      return `TRÙM ${this.clock.bossNumber}`;
     }
 
-    if (this.bossReady) {
+    if (this.clock.bossReady) {
       return this.inBossArena
-        ? `TRÙM ${this.bossNumber + 1} SẮP XUẤT HIỆN`
+        ? `TRÙM ${this.clock.bossNumber + 1} SẮP XUẤT HIỆN`
         : 'TRÙM ĐANG CHỜ Ở ĐẤU TRƯỜNG';
     }
 
     const remainingSeconds = Math.max(
       0,
-      Math.ceil((this.nextBossAt - time) / 1000),
+      Math.ceil((this.clock.nextBossAt - time) / 1000),
     );
     const minutes = Math.floor(remainingSeconds / 60);
     const seconds = String(remainingSeconds % 60).padStart(2, '0');
@@ -1679,10 +1673,10 @@ export class WorldScene extends Phaser.Scene {
     const action = decideBossAction({
       inArena: this.inBossArena,
       now: time,
-      nextBossAt: this.nextBossAt,
+      nextBossAt: this.clock.nextBossAt,
       bossAlive: this.boss !== null,
-      bossReady: this.bossReady,
-      bossWarningShown: this.bossWarningShown,
+      bossReady: this.clock.bossReady,
+      bossWarningShown: this.clock.bossWarningShown,
       warningMs: BOSS_WARNING_MS,
       arenaEntryAt: this.arenaEntryAt,
       entrySpawnDelayMs: BOSS_ARENA_ENTRY_SPAWN_DELAY_MS,
@@ -1691,12 +1685,12 @@ export class WorldScene extends Phaser.Scene {
     if (action === 'spawn') {
       this.spawnBoss();
     } else if (action === 'mark_ready') {
-      this.bossReady = true;
+      this.clock.markBossReady();
       this.hud.showToast('TRÙM ĐANG CHỜ Ở ĐẤU TRƯỜNG', '#ff8fa3');
     } else if (action === 'warn') {
-      this.bossWarningShown = true;
+      this.clock.markWarningShown();
       this.hud.showToast(
-        `TRÙM ${this.bossNumber + 1} SẮP XUẤT HIỆN`,
+        `TRÙM ${this.clock.bossNumber + 1} SẮP XUẤT HIỆN`,
         '#ff8fa3',
       );
     }
@@ -1708,8 +1702,7 @@ export class WorldScene extends Phaser.Scene {
       return;
     }
 
-    this.bossReady = false;
-    this.bossNumber += 1;
+    this.clock.onBossSpawned();
     this.clearArenaForBoss();
 
     const point = this.getBossSpawnPoint();
@@ -1717,7 +1710,7 @@ export class WorldScene extends Phaser.Scene {
       this,
       point.x,
       point.y,
-      this.bossNumber,
+      this.clock.bossNumber,
       this.playerState.getLevel(),
       {
         onSlam: (slam) => this.handleBossSlam(slam),
@@ -1737,7 +1730,7 @@ export class WorldScene extends Phaser.Scene {
     spawnBurst(this, point.x, point.y, NEON.boss, 18, 200);
     this.cameras.main.shake(360, 0.008);
     this.hud.showToast(
-      `TRÙM ${this.bossNumber} THỨC TỈNH`,
+      `TRÙM ${this.clock.bossNumber} THỨC TỈNH`,
       '#ff8fa3',
     );
   }
@@ -1851,9 +1844,8 @@ export class WorldScene extends Phaser.Scene {
       this.boss = null;
     }
 
-    this.nextBossAt = this.time.now + BOSS_RESPAWN_MS;
+    this.clock.onBossDefeated(this.time.now, BOSS_RESPAWN_MS);
     this.nextSpawnAt = this.time.now + 2500;
-    this.bossWarningShown = false;
 
     spawnBurst(this, boss.x, boss.y, NEON.boss, 24, 220);
     spawnGlow(this, boss.x, boss.y, NEON.legendary, 2.6, 800);
@@ -1861,11 +1853,11 @@ export class WorldScene extends Phaser.Scene {
     this.cameras.main.shake(420, 0.01);
 
     this.hud.showToast(
-      `TRÙM ${this.bossNumber} BỊ HẠ GỤC`,
+      `TRÙM ${this.clock.bossNumber} BỊ HẠ GỤC`,
       NEON_CSS.gold,
     );
-    this.grantExperience(XP_PER_KILL * (5 + this.bossNumber * 2));
-    this.grantBossLoot(this.bossNumber);
+    this.grantExperience(XP_PER_KILL * (5 + this.clock.bossNumber * 2));
+    this.grantBossLoot(this.clock.bossNumber);
     this.dropBossLoot(boss.x, boss.y);
     this.saveProgress();
   }
@@ -3565,7 +3557,7 @@ export class WorldScene extends Phaser.Scene {
   private getWorldFacts(): WorldFacts {
     return {
       bossAlive: this.boss !== null,
-      bossReady: this.bossReady,
+      bossReady: this.clock.bossReady,
       playerLevel: this.playerState.getLevel(),
     };
   }
@@ -3684,11 +3676,7 @@ export class WorldScene extends Phaser.Scene {
       RUN_SESSION_REGISTRY_KEY,
       captureRunSession(this.player, {
         skillCooldownUntil: this.skillCooldownUntil,
-        runStartedAt: this.runStartedAt,
-        nextBossAt: this.nextBossAt,
-        bossNumber: this.bossNumber,
-        bossReady: this.bossReady,
-        bossWarningShown: this.bossWarningShown,
+        ...this.clock.snapshot(),
       }),
     );
 
@@ -3826,7 +3814,7 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private dropBossLoot(x: number, y: number): void {
-    const gold = BOSS_GOLD_BASE + this.bossNumber * BOSS_GOLD_PER_NUMBER;
+    const gold = BOSS_GOLD_BASE + this.clock.bossNumber * BOSS_GOLD_PER_NUMBER;
     const chunks = 6;
 
     for (let i = 0; i < chunks; i += 1) {

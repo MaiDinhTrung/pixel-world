@@ -12,6 +12,8 @@ Nguồn các số bên dưới: thông báo hoàn tất của từng subagent (t
 | P1 | | QA | 54 846 | 20 | 71 s | — |
 | P2 chuyển Map theo dữ liệu | L (Lean, brief dùng chung) | Developer | 97 832 | 62 | 131 s | — |
 | P2 | | QA | 53 141 | 19 | 49 s | — |
+| P3a DifficultyClock | L (Lean, brief dùng chung) | Developer | 67 292 | 48 | 113 s | — |
+| P3a | | QA | 45 834 | 12 | 48 s | — |
 
 Ghi chú:
 - P2 là nhiệm vụ đầu tiên chạy theo Lean (một Feature Brief + QA Plan dùng chung, báo cáo ≤ 10 dòng); số liệu chỉ để xem xu hướng, các gói khác kích thước nên không so trực tiếp.

@@ -16,6 +16,12 @@ Mẫu mục:
 
 ---
 
+### 2026-11-17 — P3: Instance cục bộ, chia 3 gói (P3a DifficultyClock, P3b TravelTicket, P3c InstanceRuntime)
+- **Quyết định (người dùng: "bắt đầu p3", 2026-11-17; kiến trúc đã duyệt ở W-A10, W-A12, Q1(a)):** Lead chia P3 thành 3 gói tuần tự, mỗi gói cấp L có QA và playtest riêng, gói sau chỉ bắt đầu khi gói trước nghiệm thu: **P3a** `DifficultyClock` (gom `runStartedAt`/`nextBossAt`/`bossNumber`/`bossReady`/`bossWarningShown` sau interface, cài đặt `RunSessionClock`, `RunSession.ts` không đổi); **P3b** `TravelTicket` thay kênh Phaser registry + tách `RunSession` (phần mang theo / phần còn lại); **P3c** `InstanceRuntime` + `LocalInstanceAllocator` nối vào game (gom trạng thái quái/drop/hòm/Boss thành một đối tượng tạo mới mỗi lần vào map, thay `resetInstanceRuntimeState`).
+- **Lý do chia:** `WorldScene.ts` lớn, mỗi gói đổi một lớp trách nhiệm; P3a thuần nhất và làm P3b/P3c dễ hơn.
+- **P3a trạng thái:** đã triển khai (Developer: 2 file sửa + 2 file tạo `progression/difficultyClock.ts` + test), **QA Đạt** (build, tsc, 691/691 test, HEAD khớp baseline, phạm vi sạch, Q1–Q6 Đạt, mô hình đối chiếu lịch Boss độc lập với cài đặt; lệch định dạng một dấu cách do Lead sửa sau QA, chạy lại 691/691). **Playtest P3a: 8/10 Đạt, 0 Không đạt, PT-08 (quái mạnh dần) và PT-09 (Elite) Chưa kiểm tra (người dùng, 2026-11-17); người dùng nghiệm thu → ACCEPTED** (chấp nhận 2 mục chưa kiểm bằng chơi thật; đã khoá bằng test và QA đọc mã) (`docs/studio/playtests/P3a_difficulty_clock.md`). Chờ người dùng xác nhận commit (chưa commit). P3b chưa bắt đầu. Brief + QA Plan: `docs/studio/lean-handoff/P3A_FEATURE_BRIEF.md`. Token subagent: Developer 67 292 / 48 tool uses / 113 s; QA 45 834 / 12 / 48 s.
+- **P3b, P3c:** chưa bắt đầu.
+
 ### 2026-11-17 — P2: chuyển Map theo dữ liệu (cấp L, hướng (b))
 - **Quyết định (người dùng, 2026-11-17: "chọn b triển khai"):** nối `resolveArrival` (P1) vào scene; màu fade và thời gian sạc cổng lấy từ `ConnectionDef` (`fadeColor`, `chargeMs`); một Map có thể có nhiều cổng (`TownInfo.portals`); vị trí sinh quái/Elite/hộ tống/hòm kẹp theo `MapDef.size` (hướng (b), không giữ y hệt kẹp theo kích thước Map chính). Với dữ liệu hiện có không đổi gì người chơi thấy (điểm sinh Arena ± 48 nằm trong biên Arena).
 - **Lý do:** G2, G3, G5 trong `WORLD_ARCHITECTURE.md` §3.3; mở đường cho Map/cổng mới (P4).

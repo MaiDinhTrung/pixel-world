@@ -73,11 +73,11 @@ export class BossArenaScene extends WorldScene {
   protected canSpawnEnemies(time: number): boolean {
     return shouldSpawnArenaMinions({
       inArena: true,
-      bossNumber: this.bossNumber,
+      bossNumber: this.clock.bossNumber,
       bossAlive: this.boss !== null,
-      bossReady: this.bossReady,
+      bossReady: this.clock.bossReady,
       now: time,
-      nextBossAt: this.nextBossAt,
+      nextBossAt: this.clock.nextBossAt,
     });
   }
 
