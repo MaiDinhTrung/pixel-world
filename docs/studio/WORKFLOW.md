@@ -1,6 +1,11 @@
 # WORKFLOW — Quy trình AI Studio
 
-Mô hình hub-and-spoke: **AI Lead** (session chính) là trung tâm duy nhất; subagent không gọi nhau, mọi bàn giao đi qua AI Lead. Giữ nhẹ: việc nhỏ không cần đủ quy trình; phân cấp S/M/L/XL (Lean) ở §12.
+Mô hình hub-and-spoke: **AI Lead** (session chính) là trung tâm duy nhất; subagent không gọi nhau, mọi bàn giao đi qua AI Lead. Giữ nhẹ: việc nhỏ không cần đủ quy trình; phân cấp S/M/L/XL (Lean) ở §12; vòng đời nhiệm vụ + Task Map + Codebase Map ở §13.
+
+## 0. Khởi động phiên (AI Lead)
+1. Đọc `docs/studio/CURRENT_TASK.md` → chỉ đọc Task Map của nhiệm vụ đang làm (`docs/studio/tasks/<ID>_*.md`). Không đọc Task Map khác, không đọc lại DECISIONS/brief cũ trừ khi Task Map trỏ tới.
+2. `git status` + `git log -3` để đối chiếu với Task Map (bước nào đã DONE, có gì chưa commit).
+3. Nhiệm vụ mới → §13. Định dạng mọi đầu ra: `docs/studio/templates/README.md`.
 
 ## 1. Vai trò
 
@@ -32,7 +37,7 @@ Mô hình hub-and-spoke: **AI Lead** (session chính) là trung tâm duy nhất;
 ## 4. Luồng một nhiệm vụ
 
 ```
-Yêu cầu → AI Lead: phạm vi, tra PROJECT_MAP
+Yêu cầu → AI Lead: phạm vi, tra PROJECT_MAP → codemap, tạo Task Map (§13)
         → Visual ∥ Gameplay (chỉ đọc) → AI Lead tổng hợp, xử lý mâu thuẫn
         → ◆ CỔNG 1: người dùng duyệt thiết kế ◆
         → ghi DECISIONS.md → BASELINE Git (§6a: cây tracked phải sạch)
@@ -41,7 +46,7 @@ Yêu cầu → AI Lead: phạm vi, tra PROJECT_MAP
         → PLAYTEST (§9a): Lead hướng dẫn chạy game + checklist → người dùng chơi thử
         → có phản hồi → FEEDBACK LOOP (§9b): phân tích → đề xuất + tiêu chí → ◆ người dùng duyệt ◆ → Developer sửa → QA kiểm lại → người dùng chơi thử lại (lặp tới khi nghiệm thu)
         → ◆ CỔNG 2: người dùng đã nghiệm thu, đồng ý chốt/commit ◆
-        → cập nhật PROJECT_MAP/catalog, báo cáo, nói rõ "đã xong"
+        → cập nhật codemap/PROJECT_MAP/catalog, đóng Task Map, báo cáo, nói rõ "đã xong"
 ```
 
 ## 5. Hai cổng duyệt
@@ -52,24 +57,13 @@ Yêu cầu → AI Lead: phạm vi, tra PROJECT_MAP
 
 ## 6. Mẫu bàn giao
 
-**Brief cho Developer** (bắt buộc đủ):
-```
-Mục tiêu:
-Thiết kế đã được người dùng duyệt: (nêu tóm tắt / link mục DECISIONS)
-BASELINE: (dán nguyên văn dòng baseline từ §6a)
-File ĐƯỢC SỬA (đã tồn tại): (danh sách đường dẫn)
-File ĐƯỢC TẠO (chưa tồn tại): (đường dẫn hoặc mẫu; gồm cả PROJECT_MAP/catalog nếu cần cập nhật)
-Số liệu đặt ở: src/config/… (tên hằng số)
-Tiêu chí nghiệm thu:
-Không được làm: (luôn gồm: commit/push; sửa hoặc tạo ngoài hai danh sách; vùng cấm ở §8)
-```
-**Brief cho QA** (bắt buộc đủ): tiêu chí nghiệm thu · BASELINE nguyên văn · hai danh sách ĐƯỢC SỬA / ĐƯỢC TẠO nguyên văn như đã duyệt · lệnh cần chạy (`npm run build`, `npm test`, `npx tsc --noEmit`). **Không** đưa danh sách "file đã đổi" do Developer khai: QA tự lấy từ git (§6a) để phép kiểm không bị vòng tròn.
+Mẫu là nguồn duy nhất cho định dạng (không chép lại ở đây): **`docs/studio/templates/`** — bảng "agent nào dùng mẫu nào, khi nào, đầu vào, đầu ra, ai nhận" ở `templates/README.md`.
+- **Brief cho Developer và QA:** một file `templates/FEATURE_BRIEF.md` (Brief + QA Plan). Bắt buộc đủ: mục tiêu · dòng "đã duyệt" · BASELINE nguyên văn (§6a) · ĐƯỢC SỬA · ĐƯỢC TẠO · số liệu ở `src/config/` · tiêu chí · không được làm (luôn gồm commit/push, ngoài hai danh sách, vùng cấm §8). **Không** đưa danh sách "file đã đổi" do Developer khai cho QA: QA tự lấy từ git (§6a).
+- **Brief khảo sát cho Designer, đề xuất Cổng 1, báo cáo Cổng 2, đóng nhiệm vụ:** `templates/LEAD.md`.
+- **Báo cáo Developer / QA / Gameplay / Visual + mẫu báo lỗi** (Mức · Bước tái hiện · Kết quả thực · Kết quả mong đợi · File nghi ngờ): `templates/AGENT_REPORTS.md`.
+- **Checklist playtest:** `templates/PLAYTEST.md`. **Task Map:** `templates/TASK_MAP.md`.
 
-**Báo lỗi (QA):** Mức (Chặn/Không chặn) · Bước tái hiện · Kết quả thực · Kết quả mong đợi · File nghi ngờ.
-
-**Báo cáo Designer:** Phạm vi / Hiện trạng / (Tái dùng) / Đề xuất / Tiêu chí nghiệm thu / Rủi ro.
-
-Brief phải tự đủ ý và trỏ tới file cụ thể; subagent không nhớ hội thoại trước.
+Brief phải tự đủ ý và trỏ tới file cụ thể (codemap + đường dẫn); subagent không nhớ hội thoại trước.
 
 ## 6a. Baseline Git và kiểm phạm vi
 
@@ -153,11 +147,12 @@ Nghiệm thu xong mới sang Cổng 2; `DECISIONS.md` cập nhật "đã triển
 - Quyết định → một mục trong `DECISIONS.md` (sau Cổng 1). Chỉ AI Lead ghi.
 - Tính năng lớn → thêm file thiết kế (như `CLASS_REDESIGN.md`).
 - Số liệu → `src/config/`, tài liệu chỉ trỏ tới.
-- Đổi cấu trúc/trách nhiệm file → cập nhật `docs/PROJECT_MAP.md`; đổi asset → `docs/assets/ASSET_CATALOG.md`.
+- Đổi cấu trúc/trách nhiệm file → cập nhật `docs/codemap/<hệ thống>.md` (+ `docs/PROJECT_MAP.md` nếu đổi L1/"Tìm file…", §13.3); đổi asset → `docs/assets/ASSET_CATALOG.md`.
+- Tiến độ nhiệm vụ → Task Map (`docs/studio/tasks/`), danh sách đang làm `CURRENT_TASK.md`, lịch sử ngắn `TASK_HISTORY.md` (§13).
 
 ## 11. Kết thúc nhiệm vụ
 
-Danh sách kiểm: build qua · tiêu chí đạt · người dùng đã chơi thử và nghiệm thu (§9a–§9b) · PROJECT_MAP/catalog đã cập nhật nếu cần · quyết định đã ghi. Báo cáo 5 dòng: đã làm gì · file đã đổi · kết quả QA · việc tồn đọng · **câu "đã xong" rõ ràng**.
+Danh sách kiểm: build qua · tiêu chí đạt · người dùng đã chơi thử và nghiệm thu (§9a–§9b) · Task Map đóng, TASK_HISTORY + CURRENT_TASK cập nhật (§13) · codemap/PROJECT_MAP/catalog đã cập nhật nếu cần · quyết định đã ghi. Báo cáo 5 dòng: đã làm gì · file đã đổi · kết quả QA · việc tồn đọng · **câu "đã xong" rõ ràng**.
 
 ## 12. Lean AI Workflow (phân cấp S/M/L/XL)
 
@@ -184,10 +179,10 @@ Hiệu lực: chỉ cho nhiệm vụ **bắt đầu sau khi duyệt**; không đ
 - **Visual/Gameplay Designer:** chỉ gọi khi nhiệm vụ thực sự cần chuyên môn của họ (hình ảnh/asset; cơ chế/cân bằng); không gọi để "xác nhận" việc đã rõ.
 
 ### 12.3 Tối ưu context và token
-- Không đọc lại toàn bộ dự án; chỉ đọc tài liệu/source liên quan trực tiếp (tra `docs/PROJECT_MAP.md`, Grep rồi đọc theo offset/limit).
-- **Một Feature Brief + một QA Plan dùng chung** (Developer và QA cùng đọc, không viết brief riêng cho từng bên): mẫu ở `docs/studio/lean-handoff/` (`QA_PLAN_TEMPLATE.md`, `REPORT_TEMPLATE.md`; `M4_FEATURE_BRIEF.md` là ví dụ cho Feature Brief). Brief tự đủ ý, trỏ tới file cụ thể, không chép lại spec đã có.
+- Không đọc lại toàn bộ dự án; chỉ đọc tài liệu/source liên quan trực tiếp (Index First §13.2: `docs/PROJECT_MAP.md` → `docs/codemap/`, Grep rồi đọc theo offset/limit).
+- **Một Feature Brief + một QA Plan dùng chung** (Developer và QA cùng đọc, không viết brief riêng cho từng bên): mẫu `docs/studio/templates/FEATURE_BRIEF.md`; báo cáo `templates/AGENT_REPORTS.md` (thay `lean-handoff/QA_PLAN_TEMPLATE.md`, `REPORT_TEMPLATE.md` từ ST-01). Brief tự đủ ý, trỏ tới file cụ thể, không chép lại spec đã có.
 - Việc tuần tự được thì không gọi nhiều agent song song; không để hai agent phân tích cùng một thứ. Hỏi tiếp việc cùng phạm vi bằng `SendMessage` tới agent cũ (còn context) thay vì gọi agent mới.
-- **Báo cáo agent tối đa 10 dòng** (thay giới hạn ~40 dòng trong mẫu thử nghiệm): mỗi mục một dòng, kết luận trước, lỗi Chặn trước. Vì định nghĩa agent ở `.claude/agents/` chưa đổi, **Lead ghi giới hạn này vào từng brief**.
+- **Báo cáo agent tối đa 10 dòng**: mỗi mục một dòng, kết luận trước, lỗi Chặn trước. File agent ở `.claude/agents/` trỏ tới `templates/AGENT_REPORTS.md` (từ ST-01); brief vẫn nhắc lại giới hạn.
 - **Tối đa 2 vòng tự sửa** rồi báo vấn đề cho Lead (§9); Lead vòng 3 thì dừng và hỏi người dùng.
 
 ### 12.4 QA lean
@@ -203,3 +198,29 @@ Không tự đổi kiến trúc đã duyệt; không commit/push khi chưa đư�
 
 ### 12.7 Đo lường
 Chỉ ghi số liệu **có thật**, vào `docs/studio/lean-handoff/TOKEN_LOG.md` (mỗi nhiệm vụ một hàng): input tokens, cache read/write, output tokens, token subagent. Nguồn hiện có: thông báo hoàn tất của subagent (`subagent_tokens`, `tool_uses`, `duration_ms`). Số của session chính (input/cache/output) **chỉ ghi khi người dùng cung cấp** (ví dụ từ `/cost`); không có thì để trống, không suy đoán. Số liệu chỉ để so sánh xu hướng, không dùng để kết luận chất lượng.
+
+## 13. Vòng đời nhiệm vụ: Task Map + Codebase Map (ST-01)
+
+Trạng thái: **ĐÃ DUYỆT (người dùng, 2026-11-17)**. Bổ sung (không thay) §4/§12: §4 vẫn là luồng của cấp L/XL; §13 thêm cách theo dõi và cách định vị.
+
+### 13.1 Bảy bước của AI Lead
+| # | Bước | Mẫu / tài liệu | Cập nhật Task Map |
+|---|---|---|---|
+| 1 | Nhận yêu cầu; phân cấp S/M/L/XL (§12.1) | — | — |
+| 2 | Đọc bản đồ: `docs/PROJECT_MAP.md` (L1) → **một** `docs/codemap/<hệ thống>.md` → tài liệu thiết kế nó trỏ tới | Codebase Map | — |
+| 3 | Tạo Task Map + hàng trong `CURRENT_TASK.md` (mọi cấp; cấp S có thể chỉ 3–4 bước) | `templates/TASK_MAP.md` | tạo |
+| 4 | Gọi Agent phù hợp (§2, §12.2) với brief đúng mẫu; Cổng 1 khi có thiết kế mới | `templates/LEAD.md`, `FEATURE_BRIEF.md` | mỗi lần gọi / nhận kết quả |
+| 5 | Theo dõi: bước xong → `DONE` + đầu ra; vướng → `BLOCKED` + lý do + chờ ai; cập nhật **ngay**, không gom cuối nhiệm vụ; `CURRENT_TASK.md` theo bước hiện tại | Task Map | liên tục |
+| 6 | QA (§6a, §12.4) → Playtest handover (§9a–9b) | `AGENT_REPORTS.md`, `PLAYTEST.md` | mỗi vòng |
+| 7 | Đóng: Codebase Map, Cổng 2, TASK_HISTORY, xoá khỏi CURRENT_TASK, TOKEN_LOG, báo cáo 5 dòng | `LEAD.md` §C–§D | `CLOSED` |
+Chỉ Lead ghi Task Map / CURRENT_TASK / TASK_HISTORY (subagent không ghi). Tiến độ nằm ở Task Map; `DECISIONS.md` chỉ ghi quyết định + kết quả nghiệm thu (trường Trạng thái 1 dòng + link Task Map). Đóng nhiệm vụ **không** xoá Task Map, mục DECISIONS hay checklist playtest.
+
+### 13.2 Index First, Read on Demand
+- Tra chỉ mục trước (PROJECT_MAP → codemap → Grep), chỉ đọc file/đoạn liên quan; không đọc lại toàn dự án, không đọc tài liệu không liên quan tới nhiệm vụ.
+- **Bản đồ không phải nguồn sự thật.** Trước khi sửa code (Lead, Developer) và trước khi viết brief có đường dẫn/dòng: đọc file thật, Grep người gọi/phụ thuộc cần thiết. Dấu hiệu lỗi thời — dòng "Kiểm lỗi thời" của codemap có commit mới, đường dẫn/ký hiệu không còn, số dòng lệch nhiều — thì tin code, không tin bản đồ, và ghi vào mục "Codebase Map cần cập nhật" của Task Map.
+- Agent nhận trong brief đúng file codemap cần đọc; không tự đọc cả thư mục `docs/codemap/`.
+
+### 13.3 Giữ Codebase Map đúng
+- **Kích hoạt:** thêm/xoá/đổi tên/di chuyển file, đổi trách nhiệm module, thêm hệ thống, hoặc thấy bản đồ lệch.
+- **Chuỗi phát hiện:** Developer khai dòng "CẤU TRÚC ĐỔI" (`AGENT_REPORTS.md`) → QA đối chiếu file A/D/R trong `git diff --name-status` → Lead đánh dấu file codemap ở Task Map → Lead cập nhật codemap (+ PROJECT_MAP nếu đổi L1, + bảng "Tìm file…") và đổi `Xác minh: HEAD <sha>` **trước Cổng 2**, cùng commit với thay đổi code.
+- Khung một file codemap và quy tắc ghi: `docs/PROJECT_MAP.md` §6.
