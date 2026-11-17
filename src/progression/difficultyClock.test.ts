@@ -10,7 +10,6 @@ import {
 } from './difficultyClock';
 import {
   captureRunSession,
-  extractRunSceneState,
   type RunVitals,
 } from './RunSession';
 
@@ -177,9 +176,9 @@ describe('DifficultyClock qua RunSession', () => {
 
     const session = captureRunSession(makePlayer(), {
       skillCooldownUntil: {},
-      ...clock.snapshot(),
+      clock: clock.snapshot(),
     });
-    const restored = createRunSessionClock(extractRunSceneState(session));
+    const restored = createRunSessionClock(session.clock);
 
     expect(restored.snapshot()).toEqual(clock.snapshot());
     expect(restored).not.toBe(clock);
@@ -192,9 +191,9 @@ describe('DifficultyClock qua RunSession', () => {
 
     const session = captureRunSession(makePlayer(), {
       skillCooldownUntil: {},
-      ...clock.snapshot(),
+      clock: clock.snapshot(),
     });
-    const carried = createRunSessionClock(extractRunSceneState(session));
+    const carried = createRunSessionClock(session.clock);
 
     expect(carried.runStartedAt).toBe(1000);
     expect(carried.nextBossAt).toBe(1000 + FIRST_DELAY);

@@ -1,11 +1,12 @@
 /**
- * Trạng thái lượt chơi KHÔNG nằm trong save, dùng chung giữa WorldScene và BossArenaScene.
+ * Trạng thái lượt chơi KHÔNG nằm trong save, mang qua cổng bằng dữ liệu của `scene.start`.
  * Logic thuần (không phụ thuộc Phaser): scene chụp vào đây trước khi chuyển, scene đích áp lại.
+ * Tách hai phần: `carry` (HP/giáp/năng lượng, hồi chiêu, dash) và `clock` (đồng hồ Boss).
  * Mọi mốc thời gian là thời gian TUYỆT ĐỐI của game (`game.loop.time`), không phải đồng hồ riêng của scene.
  */
 
-/** Khoá lưu trong Phaser registry. */
-export const RUN_SESSION_REGISTRY_KEY = 'runSession';
+import type { CharacterCarry } from '../world/instance';
+import type { RunClockState } from './difficultyClock';
 
 export interface RunVitals {
   health: number;
@@ -14,18 +15,8 @@ export interface RunVitals {
 }
 
 export interface RunSession {
-  /** true = vừa chụp để chuyển scene, scene đích phải áp lại rồi hạ cờ; false = lượt mới. */
-  pendingRestore: boolean;
-  vitals: RunVitals | null;
-  skillCooldownUntil: Record<string, number>;
-  dashChargeReadyAt: number[];
-  dashReadyAt: number;
-  runStartedAt: number;
-  nextBossAt: number;
-  bossNumber: number;
-  /** Hết giờ ở map chính, Boss đang chờ ở Đấu Trường. */
-  bossReady: boolean;
-  bossWarningShown: boolean;
+  carry: CharacterCarry;
+  clock: RunClockState;
 }
 
 /** Phía nguồn: những gì cần đọc từ Player. */
@@ -42,56 +33,36 @@ export interface RunVitalsTarget {
   setDashReadyAt(readyAt: number): void;
 }
 
-/** Trạng thái scene (không thuộc Player) cần mang theo. */
-export interface RunSceneState {
-  skillCooldownUntil: Readonly<Record<string, number | undefined>>;
-  runStartedAt: number;
-  nextBossAt: number;
-  bossNumber: number;
-  bossReady: boolean;
-  bossWarningShown: boolean;
-}
-
-/** Lượt chơi mới: đồng hồ Boss bắt đầu từ `now`. */
-export function createRunSession(now: number, firstBossDelayMs: number): RunSession {
-  return {
-    pendingRestore: false,
-    vitals: null,
-    skillCooldownUntil: {},
-    dashChargeReadyAt: [],
-    dashReadyAt: 0,
-    runStartedAt: now,
-    nextBossAt: now + firstBossDelayMs,
-    bossNumber: 0,
-    bossReady: false,
-    bossWarningShown: false,
-  };
-}
-
 /** Chụp trạng thái trước khi chuyển scene. Trả về bản sao độc lập (không giữ tham chiếu vào scene). */
 export function captureRunSession(
   player: RunVitalsSource,
-  scene: RunSceneState,
+  input: {
+    skillCooldownUntil: Readonly<Record<string, number | undefined>>;
+    clock: RunClockState;
+  },
 ): RunSession {
   const cooldowns: Record<string, number> = {};
 
-  for (const [id, until] of Object.entries(scene.skillCooldownUntil)) {
+  for (const [id, until] of Object.entries(input.skillCooldownUntil)) {
     if (typeof until === 'number') {
       cooldowns[id] = until;
     }
   }
 
   return {
-    pendingRestore: true,
-    vitals: { ...player.getVitals() },
-    skillCooldownUntil: cooldowns,
-    dashChargeReadyAt: [...player.getDashChargeReadyAt()],
-    dashReadyAt: player.getDashReadyAt(),
-    runStartedAt: scene.runStartedAt,
-    nextBossAt: scene.nextBossAt,
-    bossNumber: scene.bossNumber,
-    bossReady: scene.bossReady,
-    bossWarningShown: scene.bossWarningShown,
+    carry: {
+      vitals: { ...player.getVitals() },
+      skillCooldownUntil: cooldowns,
+      dashChargeReadyAt: [...player.getDashChargeReadyAt()],
+      dashReadyAt: player.getDashReadyAt(),
+    },
+    clock: {
+      runStartedAt: input.clock.runStartedAt,
+      nextBossAt: input.clock.nextBossAt,
+      bossNumber: input.clock.bossNumber,
+      bossReady: input.clock.bossReady,
+      bossWarningShown: input.clock.bossWarningShown,
+    },
   };
 }
 
@@ -100,27 +71,72 @@ export function applyRunSessionToPlayer(
   session: RunSession,
   player: RunVitalsTarget,
 ): void {
-  if (session.vitals) {
-    player.setVitals({ ...session.vitals });
+  const { carry } = session;
+
+  if (carry.vitals) {
+    player.setVitals({ ...carry.vitals });
   }
 
-  player.setDashChargeReadyAt(session.dashChargeReadyAt);
-  player.setDashReadyAt(session.dashReadyAt);
+  player.setDashChargeReadyAt(carry.dashChargeReadyAt);
+  player.setDashReadyAt(carry.dashReadyAt);
 }
 
-/** Trạng thái scene thu về từ phiên (hồi chiêu là bản sao mới). */
-export function extractRunSceneState(session: RunSession): RunSceneState {
-  return {
-    skillCooldownUntil: { ...session.skillCooldownUntil },
-    runStartedAt: session.runStartedAt,
-    nextBossAt: session.nextBossAt,
-    bossNumber: session.bossNumber,
-    bossReady: session.bossReady,
-    bossWarningShown: session.bossWarningShown,
-  };
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-/** Phiên có cờ đang chờ áp lại không (chỉ hợp lệ khi scene đích vừa được start sau khi chụp). */
-export function isRestorable(session: RunSession | null | undefined): session is RunSession {
-  return !!session && session.pendingRestore;
+function isNum(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+/** Kiểm cấu trúc và kiểu mọi trường (dữ liệu `scene.start` là `unknown`). */
+export function isRunSession(value: unknown): value is RunSession {
+  if (!isObject(value)) {
+    return false;
+  }
+
+  const { carry, clock } = value;
+
+  if (!isObject(carry) || !isObject(clock)) {
+    return false;
+  }
+
+  const { vitals, skillCooldownUntil, dashChargeReadyAt, dashReadyAt } = carry;
+
+  if (vitals !== null) {
+    if (
+      !isObject(vitals) ||
+      !isNum(vitals.health) ||
+      !isNum(vitals.armor) ||
+      !isNum(vitals.energy)
+    ) {
+      return false;
+    }
+  }
+
+  if (!isObject(skillCooldownUntil)) {
+    return false;
+  }
+
+  for (const until of Object.values(skillCooldownUntil)) {
+    if (!isNum(until)) {
+      return false;
+    }
+  }
+
+  if (!Array.isArray(dashChargeReadyAt) || !dashChargeReadyAt.every(isNum)) {
+    return false;
+  }
+
+  if (!isNum(dashReadyAt)) {
+    return false;
+  }
+
+  return (
+    isNum(clock.runStartedAt) &&
+    isNum(clock.nextBossAt) &&
+    isNum(clock.bossNumber) &&
+    typeof clock.bossReady === 'boolean' &&
+    typeof clock.bossWarningShown === 'boolean'
+  );
 }

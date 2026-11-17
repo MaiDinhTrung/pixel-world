@@ -89,7 +89,7 @@ export class BossArenaScene extends WorldScene {
     return { ...BOSS_ARENA_BOSS_SPAWN };
   }
 
-  /** Chết ở Arena: reset lượt chơi và về WorldScene (như `scene.restart()` ở map chính). */
+  /** Chết ở Arena: reset lượt chơi và về WorldScene (như restartRun ở map chính). */
   protected restartRun(): void {
     const respawnMap = findMap(WORLD, this.getMapDef().deathRespawn.mapId);
 
@@ -97,7 +97,6 @@ export class BossArenaScene extends WorldScene {
       throw new Error('deathRespawn của map Arena trỏ tới map không tồn tại');
     }
 
-    this.clearRunSession();
     this.scene.start(respawnMap.sceneKey, { characterId: this.characterId });
   }
 
