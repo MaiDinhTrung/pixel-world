@@ -65,8 +65,9 @@ Mô hình **hub-and-spoke** (WORKFLOW đầu tài liệu, §1): subagent **khôn
 | Skills dự án | **Không** | không có `.claude/skills/` | — |
 | CI / git hooks | **Không** | không có `.github/`, `.git/hooks` chỉ có mẫu | Kiểm build/test hoàn toàn do agent chạy tay |
 | Lean S/M/L/XL | Giấy | WORKFLOW §12 (duyệt 2026-11-17) | [GIẤY] Lead tự phân cấp |
-| Báo cáo ≤10 dòng | Giấy | WORKFLOW §12.3, `lean-handoff/REPORT_TEMPLATE.md` | [GIẤY] file agent **chưa** cập nhật, Lead ghi vào từng brief |
-| Feature Brief + QA Plan | Giấy | `lean-handoff/*_FEATURE_BRIEF.md`, `QA_PLAN_TEMPLATE.md` | [GIẤY] |
+| Báo cáo ≤10 dòng | Giấy | WORKFLOW §12.3, `templates/AGENT_REPORTS.md` | [GIẤY] file agent trỏ tới mẫu (ST-01) |
+| Feature Brief + QA Plan | Giấy | mẫu `templates/FEATURE_BRIEF.md`; brief thật `lean-handoff/*_FEATURE_BRIEF.md` | [GIẤY] |
+| Task Map / Codebase Map | Giấy | `CURRENT_TASK.md`, `tasks/`, `TASK_HISTORY.md`; `PROJECT_MAP.md` + `docs/codemap/` (WORKFLOW §0, §13) | [GIẤY] Lead cập nhật; lỗi thời phát hiện bằng dòng "Kiểm lỗi thời" |
 | Baseline Git + QA kiểm phạm vi | Giấy (QA tự chạy git) | WORKFLOW §6a | Hook **không** kiểm danh sách ĐƯỢC SỬA/ĐƯỢC TẠO |
 | Playtest Handover | Giấy + memory | WORKFLOW §9a–9b, §12.5; memory `playtest-handover-workflow` | [GIẤY]/[MEMORY] checklist ở `docs/studio/playtests/` |
 | Chế độ tự chủ | **Chỉ memory** | memory `autonomous-work-protocol` (2026-11-17) | [MEMORY] không có trong repo |
@@ -210,7 +211,7 @@ sequenceDiagram
 | Lead gọi agent thế nào? | Công cụ Agent với `subagent_type` = tên file agent; brief tự đủ ý vì subagent không nhớ hội thoại (§6); hỏi tiếp cùng phạm vi bằng `SendMessage` tới agent cũ (§12.3) | [GIẤY] |
 | Tuần tự hay song song? | Song song: việc chỉ-đọc độc lập (2 Designer); nhiều Developer chỉ khi tập file không giao nhau. Tuần tự: Designer → duyệt → Developer → QA. File lớn dùng chung luôn tuần tự (§3) | [GIẤY] |
 | Tránh hai agent sửa cùng file | Chỉ `game-developer` ghi được (hook); hai danh sách trong brief; Developer song song không trùng file (§8) | Hook [CẤU HÌNH] cho "ai được ghi"; **trùng file giữa hai Developer không có cơ chế ép** |
-| Chuyển giao kết quả | Báo cáo ≤10 dòng theo `REPORT_TEMPLATE.md` → Lead đọc → Lead viết brief tiếp. Không agent nào đọc báo cáo của agent khác trực tiếp | [GIẤY] |
+| Chuyển giao kết quả | Báo cáo ≤10 dòng theo `templates/AGENT_REPORTS.md` → Lead đọc, cập nhật Task Map → Lead viết brief tiếp. Không agent nào đọc báo cáo của agent khác trực tiếp | [GIẤY] |
 | QA phát hiện lỗi | Mẫu: Mức · Bước · Thực · Mong đợi · File. Lead chuyển Developer kèm tiêu chí gốc; QA kiểm lại phần lỗi + build/test + phạm vi; baseline và 2 danh sách giữ nguyên (§9) | [GIẤY] |
 | Số vòng tự sửa | Developer tự sửa ≤2; vòng sửa sau QA ≤2; vòng 3 Lead dừng, hỏi người dùng. Vòng Feedback Loop **không** tính vào trần này (§9b) | [GIẤY] |
 | Khi gọi Designer | Chỉ khi cần chuyên môn thật (§12.2); tính năng có cả hình lẫn cơ chế → cả hai song song (§2) | [GIẤY] |
@@ -325,14 +326,14 @@ stateDiagram-v2
 | Thấp | Self-test hook chạy tay | Không có CI; đổi hook mà quên chạy self-test thì không ai phát hiện |
 
 ### 9.6 Đề xuất cải thiện (chưa làm — cần Cổng 1 vì đụng `.claude/` hoặc WORKFLOW)
-1. **Đồng bộ file agent với §12** (T1, T7): giới hạn 10 dòng, dùng `REPORT_TEMPLATE.md`; bước 0 chỉ đọc mục WORKFLOW liên quan (vd Developer: §6, §6a, §8; QA: §6a, §9, §12.4).
+1. ✅ **Đã làm ở ST-01.** **Đồng bộ file agent với §12** (T1, T7): giới hạn 10 dòng, dùng `REPORT_TEMPLATE.md`; bước 0 chỉ đọc mục WORKFLOW liên quan (vd Developer: §6, §6a, §8; QA: §6a, §9, §12.4).
 2. **Bổ sung §6a** ngoại lệ "tài liệu do Lead sửa song song" (danh sách mẫu đường dẫn chỉ `docs/**`, ghi hash) cho khớp thực tế (T2).
 3. **Thêm mục "Chế độ tự chủ" vào WORKFLOW** (tóm tắt từ memory, ranh giới với Cổng 1/2) để quy trình nằm trong repo (T4).
 4. **Quy định push + nhánh**: vd "mỗi gói L/XL một nhánh hoặc commit ngay sau nghiệm thu; push theo lô sau khi build/test qua và người dùng đồng ý".
 5. **Luật "một gói chưa commit tại một thời điểm"** trừ khi người dùng chỉ thị khác.
 6. **Gỡ `Bash(python -)`** khỏi `settings.local.json` (hoặc thu hẹp), cân nhắc thay `Bash(npm test *)` bằng dạng chính xác.
 7. **Một bước smoke test runtime** tùy chọn (mở `npm run dev` + công cụ trình duyệt, chụp màn hình, đọc console) để bắt lỗi đỏ trước khi giao playtest — giảm tải PT "Console sạch".
-8. Gộp mẫu Brief + QA Plan thành **một mẫu** khớp thực tế (T6), bỏ chữ "thử nghiệm" (T5).
+8. ✅ **Đã làm ở ST-01** (`templates/FEATURE_BRIEF.md`). Gộp mẫu Brief + QA Plan thành **một mẫu** khớp thực tế (T6), bỏ chữ "thử nghiệm" (T5).
 9. Thêm script `npm run guard:test` (= self-test hook) để chạy cùng QA khi đụng `.claude/`.
 
 ---

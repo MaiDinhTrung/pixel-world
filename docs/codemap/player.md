@@ -1,7 +1,7 @@
 # Codemap — Player / Character + Progression (EXP, Level, Stat)
 
 Xác minh: HEAD `31f5264` (2026-11-17) · Theo dõi: `src/entities/Player.ts src/systems/PlayerState.ts src/progression/{LevelSystem,StatSheet,progressionConfig,difficultyClock}.ts src/config/{characters,statConfig,scaleConfig}.ts src/utils/placeholderPlayer.ts`
-Kiểm lỗi thời: `git log --oneline 31f5264..HEAD -- <các đường dẫn trên>`
+Kiểm lỗi thời: `git log --oneline 31f5264..HEAD -- src/entities/Player.ts src/systems/PlayerState.ts src/progression/LevelSystem.ts src/progression/StatSheet.ts src/progression/progressionConfig.ts src/progression/difficultyClock.ts src/config/characters.ts src/config/statConfig.ts src/config/scaleConfig.ts src/utils/placeholderPlayer.ts`
 
 **Vai trò:** nhân vật người chơi trong scene (di chuyển, máu/giáp/năng lượng, dash, trạng thái) và luật tiến trình thuần (level, EXP, stat, kho đồ — `PlayerState`).
 
