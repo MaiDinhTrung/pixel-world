@@ -79,6 +79,7 @@ const PURE_SOURCES: Record<string, string> = {
   'src/world/spawnPattern.ts': fileURLToPath(new URL('./spawnPattern.ts', import.meta.url)),
   'src/systems/enemyStats.ts': fileURLToPath(new URL('../systems/enemyStats.ts', import.meta.url)),
   'src/world/eliteRules.ts': fileURLToPath(new URL('./eliteRules.ts', import.meta.url)),
+  'src/world/instanceState.ts': fileURLToPath(new URL('./instanceState.ts', import.meta.url)),
 };
 
 describe('độ thuần của worldGraph/worldConfig', () => {

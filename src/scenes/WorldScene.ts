@@ -238,6 +238,7 @@ import {
   shouldSpawnElite,
 } from '../world/eliteRules';
 import { pickArchetype, pickStaggeredArchetype } from '../world/spawnPattern';
+import { createInstanceGameplayState, type InstanceGameplayState } from '../world/instanceState';
 import { ZoneBanner } from '../ui/RegionBanner';
 import { createZoneTracker, type ZoneTracker } from '../world/regionTracker';
 import {
@@ -391,17 +392,8 @@ export class WorldScene extends Phaser.Scene {
   private hud!: Hud;
   private damageNumbers!: DamageNumberManager;
   private playerBars!: PlayerBars;
-  private spawnIndex = 0;
-  /** M2: số lần đã sinh quái theo vùng (id vùng → đếm), dùng chọn archetype lệch pha với điểm sinh. */
-  private readonly zoneSpawnCounts = new Map<string, number>();
-  /** M2: số điểm sinh của từng vùng (tính một lần mỗi lượt chơi). */
-  private readonly zoneSpawnPoints = new Map<string, number>();
-  /** M3: số quái thường đã hạ theo vùng của VỊ TRÍ CHẾT kể từ lần Elite gần nhất của vùng (id vùng → đếm). Chỉ trong bộ nhớ. */
-  private readonly zoneKillCounts = new Map<string, number>();
-  /** M3: số Elite đã sinh trong lượt này (chọn affix xoay vòng và archetype nền theo chỉ số này). */
-  private elitesSpawned = 0;
-  /** M3: thời điểm (`time.now`) Elite xuất hiện gần nhất; null = chưa có. */
-  private lastEliteAt: number | null = null;
+  /** P3c-1: bộ đếm gameplay thuộc Instance; tạo MỚI mỗi lần create() (xem src/world/instanceState.ts). */
+  private instanceState!: InstanceGameplayState;
   /** Mục tiêu auto-aim đang khoá khi cầm Kiếm (xem `updateAutoAim`). */
   private autoAimTarget: EnemyBase | null = null;
   /** Chủ duy nhất của kho đồ, trang bị, cấp đồ (C2a/C2b) và tiến trình: cấp, điểm chỉ số, cây/ô kỹ năng (C3). */
@@ -473,8 +465,6 @@ export class WorldScene extends Phaser.Scene {
   private chilledNearby = 0;
   private readonly fearReadyAt = new WeakMap<EnemyBase, number>();
   private nextMomentumAt = 0;
-
-  private nextSpawnAt = 0;
 
   constructor(key: string = SCENE_KEYS.world) {
     super(key);
@@ -565,10 +555,11 @@ export class WorldScene extends Phaser.Scene {
   }
 
   /**
-   * Instance scene được DÙNG LẠI qua scene.start/restart nên mọi trường runtime không được create() nạp lại
-   * phải được đặt về mặc định ở đây (cờ skill bật/tắt, mốc ICD passive, nhiệt, cache mục tiêu...).
+   * Runtime của người chơi (KHÔNG phải Instance): scene được DÙNG LẠI qua scene.start/restart nên mọi trường
+   * runtime không được create() nạp lại phải được đặt về mặc định ở đây (cờ skill bật/tắt, mốc ICD passive,
+   * nhiệt, cache mục tiêu...).
    */
-  private resetInstanceRuntimeState(): void {
+  private resetPlayerRuntimeState(): void {
     this.dualGuardActive = false;
     this.vanishActive = false;
     this.fortress = null;
@@ -619,12 +610,7 @@ export class WorldScene extends Phaser.Scene {
   }
 
   create(): void {
-    this.spawnIndex = 0;
-    this.zoneSpawnCounts.clear();
-    this.zoneSpawnPoints.clear();
-    this.zoneKillCounts.clear();
-    this.elitesSpawned = 0;
-    this.lastEliteAt = null;
+    this.instanceState = createInstanceGameplayState();
     this.nextAfterimageAt = 0;
     this.attackWasDown = false;
     this.chests = [];
@@ -632,7 +618,7 @@ export class WorldScene extends Phaser.Scene {
     this.lifestealCarry = 0;
     this.insideVillage = false;
     this.lootDirty = false;
-    this.resetInstanceRuntimeState();
+    this.resetPlayerRuntimeState();
     this.skillCooldownUntil = {};
     // Skill có thể xin làm mới hồi chiêu của chính nó sau khi WorldScene đã đặt hồi chiêu.
     this.events.off('skill-cooldown-reset');
@@ -669,7 +655,7 @@ export class WorldScene extends Phaser.Scene {
     this.chargingPortal = null;
     this.portalCooldownUntil = 0;
     this.lastPortalToastAt = 0;
-    this.nextSpawnAt = startNow + 1000;
+    this.instanceState.nextSpawnAt = startNow + 1000;
     this.clock = createRunSessionClock(
       newRunClockState(startNow, BOSS_FIRST_DELAY_MS),
     );
@@ -1342,10 +1328,10 @@ export class WorldScene extends Phaser.Scene {
     const table = zone.spawnTable;
 
     if (table.points.length > 0) {
-      return pickArchetype(table.pattern, this.spawnIndex);
+      return pickArchetype(table.pattern, this.instanceState.spawnIndex);
     }
 
-    let points = this.zoneSpawnPoints.get(zone.id);
+    let points = this.instanceState.zoneSpawnPoints.get(zone.id);
 
     if (points === undefined) {
       points = 0;
@@ -1356,25 +1342,25 @@ export class WorldScene extends Phaser.Scene {
         }
       }
 
-      this.zoneSpawnPoints.set(zone.id, points);
+      this.instanceState.zoneSpawnPoints.set(zone.id, points);
     }
 
-    const count = this.zoneSpawnCounts.get(zone.id) ?? 0;
+    const count = this.instanceState.zoneSpawnCounts.get(zone.id) ?? 0;
 
-    this.zoneSpawnCounts.set(zone.id, count + 1);
+    this.instanceState.zoneSpawnCounts.set(zone.id, count + 1);
 
     return pickStaggeredArchetype(table.pattern, count, points);
   }
 
   private spawnEnemy(): void {
     const point =
-      this.town.enemySpawns[this.spawnIndex % this.town.enemySpawns.length];
+      this.town.enemySpawns[this.instanceState.spawnIndex % this.town.enemySpawns.length];
     const spawnZone = zoneAt(this.getMapDef(), point.x, point.y);
     const archetypeId = this.pickSpawnArchetype(spawnZone);
     // Pattern rỗng/không có vùng (không xảy ra với dữ liệu hiện có) → hành vi cũ: chỉ số % 3 === 2 là bắn xa.
     const isRanged =
       archetypeId === null
-        ? this.spawnIndex % 3 === 2
+        ? this.instanceState.spawnIndex % 3 === 2
         : ENEMY_ARCHETYPES[archetypeId].kind === 'ranged';
     const { x: spawnX, y: spawnY } = clampToMap(
       this.getMapDef(),
@@ -1383,7 +1369,7 @@ export class WorldScene extends Phaser.Scene {
       48,
     );
 
-    this.spawnIndex += 1;
+    this.instanceState.spawnIndex += 1;
 
     // Bậc theo vùng của ĐIỂM SINH GỐC (W3, D2): vùng offset 0 = bậc thời gian toàn cục như trước.
     const zone = zoneAt(this.getMapDef(), point.x, point.y);
@@ -1471,10 +1457,10 @@ export class WorldScene extends Phaser.Scene {
       return;
     }
 
-    const kills = (this.zoneKillCounts.get(zone.id) ?? 0) + 1;
+    const kills = (this.instanceState.zoneKillCounts.get(zone.id) ?? 0) + 1;
     const now = this.time.now;
 
-    this.zoneKillCounts.set(zone.id, kills);
+    this.instanceState.zoneKillCounts.set(zone.id, kills);
 
     const aliveElites = this.getEnemies().filter((enemy) => enemy.getData(ELITE_DATA_KEY) === true).length;
 
@@ -1483,13 +1469,13 @@ export class WorldScene extends Phaser.Scene {
         {
           killsInZone: kills,
           aliveElites,
-          sinceLastEliteMs: this.lastEliteAt === null ? Number.POSITIVE_INFINITY : now - this.lastEliteAt,
+          sinceLastEliteMs: this.instanceState.lastEliteAt === null ? Number.POSITIVE_INFINITY : now - this.instanceState.lastEliteAt,
         },
         zone,
       ) &&
       this.spawnElite(zone)
     ) {
-      this.zoneKillCounts.set(zone.id, 0);
+      this.instanceState.zoneKillCounts.set(zone.id, 0);
     }
   }
 
@@ -1511,7 +1497,7 @@ export class WorldScene extends Phaser.Scene {
       return false;
     }
 
-    const eliteIndex = this.elitesSpawned;
+    const eliteIndex = this.instanceState.elitesSpawned;
     const baseId = zone.eliteSlots[eliteIndex % zone.eliteSlots.length];
     const affixId = pickEliteAffix(eliteIndex);
     const affix = ELITE_AFFIXES[affixId];
@@ -1519,8 +1505,8 @@ export class WorldScene extends Phaser.Scene {
     const tier = effectiveThreatTier(this.clock.elapsedMs(this.time.now), zone);
     const { x, y } = clampToMap(this.getMapDef(), point.x, point.y, 48);
 
-    this.elitesSpawned += 1;
-    this.lastEliteAt = this.time.now;
+    this.instanceState.elitesSpawned += 1;
+    this.instanceState.lastEliteAt = this.time.now;
 
     const elite = new Enemy(this, x, y, tier, baseId, profile);
 
@@ -1613,7 +1599,7 @@ export class WorldScene extends Phaser.Scene {
       return;
     }
 
-    if (time < this.nextSpawnAt) {
+    if (time < this.instanceState.nextSpawnAt) {
       return;
     }
 
@@ -1624,7 +1610,7 @@ export class WorldScene extends Phaser.Scene {
       ENEMY_RESPAWN_MS - tier * RESPAWN_REDUCTION_PER_TIER,
     );
 
-    this.nextSpawnAt = time + interval;
+    this.instanceState.nextSpawnAt = time + interval;
   }
 
   private getBossHudText(time: number): string {
@@ -1706,7 +1692,7 @@ export class WorldScene extends Phaser.Scene {
     this.watchEnemyHits(boss);
     this.enemies.add(boss);
     this.boss = boss;
-    this.nextSpawnAt = this.time.now + BOSS_RESPAWN_MS;
+    this.instanceState.nextSpawnAt = this.time.now + BOSS_RESPAWN_MS;
 
     spawnRing(this, point.x, point.y, 150, NEON.boss, 700);
     spawnGlow(this, point.x, point.y, NEON.boss, 2.2, 700);
@@ -1828,7 +1814,7 @@ export class WorldScene extends Phaser.Scene {
     }
 
     this.clock.onBossDefeated(this.time.now, BOSS_RESPAWN_MS);
-    this.nextSpawnAt = this.time.now + 2500;
+    this.instanceState.nextSpawnAt = this.time.now + 2500;
 
     spawnBurst(this, boss.x, boss.y, NEON.boss, 24, 220);
     spawnGlow(this, boss.x, boss.y, NEON.legendary, 2.6, 800);
