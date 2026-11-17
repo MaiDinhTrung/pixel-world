@@ -11,7 +11,13 @@ import {
 import { VILLAGE_MARKER } from '../config/atmosphereConfig';
 import { TEXTURE_KEYS, WORLD_HEIGHT, WORLD_WIDTH } from '../config/constants';
 import { VILLAGE_NPCS, VILLAGE_ZONE } from '../config/economyConfig';
-import { CONN_VILLAGE_TO_ARENA } from '../config/worldConfig';
+import {
+  WOODS_ENTRANCE,
+  WOODS_ENTRANCE_LABEL,
+  WOODS_PORTAL_COLOR,
+  WOODS_PORTAL_COLOR_CSS,
+} from '../config/witheredWoodsConfig';
+import { CONN_LANDS_TO_WOODS, CONN_VILLAGE_TO_ARENA } from '../config/worldConfig';
 import { VILLAGE_VILLAGERS } from '../config/villageConfig';
 import { Npc } from '../entities/Npc';
 import { Villager } from '../entities/Villager';
@@ -46,7 +52,7 @@ interface PropSpec {
 }
 
 /** Vật trang trí thuần hình ảnh (không vật cản), đặt để làng có vẻ cũ kỹ nhưng vẫn có người ở. */
-interface DecorSpec {
+export interface DecorSpec {
   asset: VillageAssetKey;
   x: number;
   y: number;
@@ -57,7 +63,7 @@ export interface TownInfo {
   enemySpawns: { x: number; y: number }[];
   /** NPC tương tác trong làng (thương nhân, thợ rèn, trưởng làng). */
   npcs: Npc[];
-  /** Các cổng dịch chuyển trong map (map chính: cổng vào Đấu Trường; Arena: cổng về). */
+  /** Các cổng dịch chuyển trong map (map chính: cổng vào Đấu Trường + cổng Rừng Sâu; Arena/Rừng: cổng về). */
   portals: ScenePortal[];
 }
 
@@ -197,7 +203,8 @@ const ENEMY_SPAWNS = [
   { x: 2900, y: 2350 },
 ] as const;
 
-function addGround(
+/** Dải nền lặp (tileSprite). Xuất để builder khác (P4b `witheredWoods.ts`) dùng chung; hành vi làng không đổi. */
+export function addGround(
   scene: Phaser.Scene,
   key: string,
   x: number,
@@ -229,7 +236,7 @@ function addShadow(
     .setDepth(depth);
 }
 
-function addObstacle(
+export function addObstacle(
   scene: Phaser.Scene,
   group: Phaser.Physics.Arcade.StaticGroup,
   x: number,
@@ -269,7 +276,7 @@ function addBuilding(
   );
 }
 
-function addTree(
+export function addTree(
   scene: Phaser.Scene,
   obstacles: Phaser.Physics.Arcade.StaticGroup,
   x: number,
@@ -322,7 +329,7 @@ function addProp(
 }
 
 /** Vật trang trí thuần hình ảnh: không vật cản, có thể nghiêng, vẫn được tint và phát sáng nếu là nguồn sáng. */
-function addDecor(scene: Phaser.Scene, spec: DecorSpec): void {
+export function addDecor(scene: Phaser.Scene, spec: DecorSpec): void {
   const decor = scene.add
     .image(spec.x, spec.y, VILLAGE[spec.asset].key)
     .setOrigin(0.5, 1)
@@ -524,9 +531,20 @@ export function buildTown(
     labelColor: BOSS_ARENA_ENTRY_COLOR_CSS,
   });
 
+  // P4b: cổng Rừng Sâu ở Hoang Địa Sâu (cuối đường lát đá phía Đông), cùng kiểu cổng Arena, màu xanh có sẵn.
+  const woodsPortal = createPortal(scene, {
+    x: WOODS_ENTRANCE.x,
+    y: WOODS_ENTRANCE.y,
+    kind: 'enter',
+    connectionId: CONN_LANDS_TO_WOODS,
+    color: WOODS_PORTAL_COLOR,
+    label: WOODS_ENTRANCE_LABEL,
+    labelColor: WOODS_PORTAL_COLOR_CSS,
+  });
+
   return {
     enemySpawns: ENEMY_SPAWNS.map((point) => ({ ...point })),
     npcs,
-    portals: [portal],
+    portals: [portal, woodsPortal],
   };
 }

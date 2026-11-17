@@ -25,7 +25,7 @@ W1 (a68057a), W2 (25dbd97), W3 (a4e695d) đã triển khai và chốt. Sau W3, `
 |---|---|
 | D1 | Vùng hình chữ nhật (khớp `VILLAGE_ZONE`) |
 | D2 | Độ khó vùng **cộng**: `tierEffective = clamp(timeTier + region.tierOffset, tierFloor, tierCap)`; mọi công thức theo tier giữ nguyên |
-| D3 | 3 vùng trên 2 map hiện có (`region.village`, `region.wilds` → tách gần/xa ở W3, `region.arena`); **chưa thêm bản đồ mới** |
+| D3 | **Sửa 2026-11-17 (người dùng duyệt P4):** Khởi Nguyên giữ 3 vùng trên 2 map. P4b thêm **đúng một** Region thứ hai (**Rừng Úa**) gồm **một** Map overworld (**Rừng Sâu**: 2 vùng **Bìa Rừng** / **Lõi Rừng**, không Boss, không vùng an toàn, ánh sáng cố định hoàng hôn) để kiểm chứng kiến trúc. Map thứ ba, Boss thứ hai, ambient theo vùng để sau. D5/D6 giữ (vị trí không lưu, chết về làng). Bản cũ: "3 vùng trên 2 map hiện có; chưa thêm bản đồ mới". |
 | D4 | Elite: gói riêng sau W3 (đổi gameplay); W1 chỉ chừa `eliteSlots: []` |
 | D5 | Không lưu bản đồ hiện tại vào save |
 | D6 | Mỗi map một điểm xuất phát `default`; chết về làng, run reset như hiện nay |

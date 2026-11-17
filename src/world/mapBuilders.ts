@@ -8,6 +8,7 @@ import {
 } from '../config/bossArenaConfig';
 import { buildBossArena } from './bossArena';
 import { buildTown, type TownInfo } from './town';
+import { buildWitheredWoods } from './witheredWoods';
 
 /**
  * Registry `builderId → MapBuilder` (P4a): `WorldScene` dựng nội dung Map theo `MapDef.builderId`.
@@ -42,9 +43,15 @@ const BOSS_ARENA_BUILDER: MapBuilder = {
   },
 };
 
+/** Rừng Sâu (P4b): khung camera = khung thế giới, không điểm Boss cố định (Boss chỉ ở Arena). */
+const WITHERED_WOODS_BUILDER: MapBuilder = {
+  build: (scene, obstacles) => buildWitheredWoods(scene, obstacles),
+};
+
 export const MAP_BUILDERS: Readonly<Record<string, MapBuilder>> = Object.freeze({
   town: TOWN_BUILDER,
   boss_arena: BOSS_ARENA_BUILDER,
+  withered_woods: WITHERED_WOODS_BUILDER,
 });
 
 /** Builder theo `MapDef.builderId`; không có → ném lỗi (dữ liệu sai = lỗi lập trình). */

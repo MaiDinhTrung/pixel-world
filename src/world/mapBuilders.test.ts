@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 vi.mock('phaser', () => ({ default: {} }));
 vi.mock('./town', () => ({ buildTown: vi.fn(() => ({ tag: 'town' })) }));
 vi.mock('./bossArena', () => ({ buildBossArena: vi.fn(() => ({ tag: 'boss_arena' })) }));
+vi.mock('./witheredWoods', () => ({ buildWitheredWoods: vi.fn(() => ({ tag: 'withered_woods' })) }));
 
 import {
   BOSS_ARENA_BOSS_SPAWN,
@@ -15,6 +16,7 @@ import { WORLD } from '../config/worldConfig';
 import { buildBossArena } from './bossArena';
 import { getMapBuilder, MAP_BUILDERS } from './mapBuilders';
 import { buildTown } from './town';
+import { buildWitheredWoods } from './witheredWoods';
 
 describe('MAP_BUILDERS', () => {
   it('mọi builderId trong WORLD.maps đều có builder', () => {
@@ -37,6 +39,17 @@ describe('MAP_BUILDERS', () => {
     expect(buildTown).toHaveBeenCalledWith(scene, obstacles);
     expect(getMapBuilder('boss_arena').build(scene, obstacles)).toEqual({ tag: 'boss_arena' });
     expect(buildBossArena).toHaveBeenCalledWith(scene, obstacles);
+    expect(getMapBuilder('withered_woods').build(scene, obstacles)).toEqual({ tag: 'withered_woods' });
+    expect(buildWitheredWoods).toHaveBeenCalledWith(scene, obstacles);
+  });
+
+  it('P4b: WORLD có 3 map, builder đủ cho cả ba; hồ sơ withered_woods không cameraBounds/bossSpawnPoint', () => {
+    expect(WORLD.maps.map((map) => map.builderId)).toEqual(['town', 'boss_arena', 'withered_woods']);
+
+    const woods = getMapBuilder('withered_woods');
+
+    expect(woods.cameraBounds).toBeUndefined();
+    expect(woods.bossSpawnPoint).toBeUndefined();
   });
 
   it('hồ sơ boss_arena: khung camera chừa đỉnh tường Bắc, điểm Boss cố định', () => {

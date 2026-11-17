@@ -1,5 +1,5 @@
 /**
- * Dữ liệu World/Map/Zone (Region nhóm Map sẽ thêm ở gói sau; xem docs/WORLD_ARCHITECTURE.md) (Gói W1, docs/WORLD_MAP_DESIGN.md): mô tả ĐÚNG hai bản đồ hiện có.
+ * Dữ liệu World/Map/Zone (Region nhóm Map sẽ thêm ở gói sau; xem docs/WORLD_ARCHITECTURE.md) (Gói W1, docs/WORLD_MAP_DESIGN.md): mô tả ĐÚNG các bản đồ hiện có (P4b: thêm Region Rừng Úa / Map Rừng Sâu).
  * ĐÃ NỐI (W2; P4a: một scene WorldScene cho mọi Map): WorldScene/town/bossArena đọc id, đích và luật cổng từ đây. Chỉ THAM CHIẾU
  * hằng số có sẵn, không sao chép số (MAIN_DEFAULT_SPAWN là nguồn thật, xem chú thích bên dưới).
  */
@@ -35,11 +35,42 @@ import { VILLAGE_MARKER } from './atmosphereConfig';
 import { MAX_THREAT_TIER } from './combatConfig';
 import { SCENE_KEYS, WORLD_HEIGHT, WORLD_WIDTH } from './constants';
 import { VILLAGE_ZONE } from './economyConfig';
+import {
+  WOODS_ARRIVAL_IN_LANDS,
+  WOODS_DEEP_ELITE_SLOTS,
+  WOODS_DEEP_SPAWN_PATTERN,
+  WOODS_DEEP_TIER_FLOOR,
+  WOODS_DEEP_TIER_OFFSET,
+  WOODS_EDGE_BOUNDS,
+  WOODS_EDGE_ELITE_SLOTS,
+  WOODS_EDGE_SPAWN_PATTERN,
+  WOODS_EDGE_TIER_FLOOR,
+  WOODS_EDGE_TIER_OFFSET,
+  WOODS_ENTER_PROMPT,
+  WOODS_ENTRANCE,
+  WOODS_ENTRANCE_LABEL,
+  WOODS_FADE_TO_LANDS,
+  WOODS_FADE_TO_WOODS,
+  WOODS_HEIGHT,
+  WOODS_PLAYER_SPAWN,
+  WOODS_PORTAL_CHARGE_MS,
+  WOODS_PORTAL_COLOR,
+  WOODS_PORTAL_COLOR_CSS,
+  WOODS_RETURN_LABEL,
+  WOODS_RETURN_PORTAL,
+  WOODS_RETURN_PROMPT,
+  WOODS_TIER_CAP,
+  WOODS_WIDTH,
+} from './witheredWoodsConfig';
 
 export const MAP_STARTING_LANDS: MapId = 'map.starting_lands';
 export const MAP_BOSS_ARENA_1: MapId = 'map.boss_arena_1';
+/** Map overworld của Region Rừng Úa (P4b): "Rừng Sâu". */
+export const MAP_WITHERED_WOODS: MapId = 'map.withered_woods';
 
 export const REGION_STARTING: RegionId = 'region.starting';
+/** Region thứ hai (P4b): "Rừng Úa". */
+export const REGION_WITHERED: RegionId = 'region.withered';
 
 /**
  * Chính sách Instance mặc định (P1, GIÁ TRỊ KHỞI ĐIỂM): tái hiện hành vi hiện tại, mỗi lần chuyển Map tạo Instance
@@ -59,9 +90,15 @@ export const ZONE_WILDS_NEAR: ZoneId = 'zone.wilds_near';
 /** Vùng ngoài làng, XA làng (W3): "phần còn lại" của map, quái sinh ra mạnh hơn. */
 export const ZONE_WILDS_FAR: ZoneId = 'zone.wilds_far';
 export const ZONE_ARENA: ZoneId = 'zone.arena';
+/** Rừng Sâu (P4b): Bìa Rừng = nửa Nam (WOODS_EDGE_BOUNDS), Lõi Rừng = phần còn lại. */
+export const ZONE_WOODS_EDGE: ZoneId = 'zone.woods_edge';
+export const ZONE_WOODS_DEEP: ZoneId = 'zone.woods_deep';
 
 export const CONN_VILLAGE_TO_ARENA: ConnectionId = 'conn.village_to_arena';
 export const CONN_ARENA_TO_VILLAGE: ConnectionId = 'conn.arena_to_village';
+/** Cổng Hoang Địa Sâu → Rừng Sâu và cổng về (P4b). */
+export const CONN_LANDS_TO_WOODS: ConnectionId = 'conn.lands_to_woods';
+export const CONN_WOODS_TO_LANDS: ConnectionId = 'conn.woods_to_lands';
 
 /**
  * Mẫu xoay vòng của ARENA (giữ nguyên từ M1; M2 không đổi): id archetype (`enemyConfig.ts`); `grunt`,`grunt`,`caster`
@@ -141,7 +178,11 @@ const STARTING_LANDS: MapDef = {
   size: { width: WORLD_WIDTH, height: WORLD_HEIGHT },
   kind: 'overworld',
   lighting: 'day_night',
-  playerSpawns: { default: { ...MAIN_DEFAULT_SPAWN } },
+  playerSpawns: {
+    default: { ...MAIN_DEFAULT_SPAWN },
+    // Về từ Rừng Sâu (P4b): đặt cạnh cổng Rừng ở Hoang Địa Sâu (resolveArrival thử `fromPortal:<id>` trước).
+    [`fromPortal:${CONN_WOODS_TO_LANDS}`]: { ...WOODS_ARRIVAL_IN_LANDS },
+  },
   zones: [
     {
       id: ZONE_VILLAGE,
@@ -207,6 +248,27 @@ const STARTING_LANDS: MapDef = {
         labelColor: BOSS_ARENA_ENTRY_COLOR_CSS,
       },
     },
+    {
+      // P4b: cổng Rừng ở Hoang Địa Sâu (cuối đường lát đá phía Đông), luôn mở.
+      id: CONN_LANDS_TO_WOODS,
+      from: {
+        mapId: MAP_STARTING_LANDS,
+        x: WOODS_ENTRANCE.x,
+        y: WOODS_ENTRANCE.y,
+      },
+      to: { mapId: MAP_WITHERED_WOODS, spawnId: 'default' },
+      type: 'portal',
+      direction: 'enter',
+      lockRules: ['always_open'],
+      chargeMs: WOODS_PORTAL_CHARGE_MS,
+      fadeColor: { ...WOODS_FADE_TO_WOODS },
+      visual: {
+        color: WOODS_PORTAL_COLOR,
+        label: WOODS_ENTRANCE_LABEL,
+        labelColor: WOODS_PORTAL_COLOR_CSS,
+        prompt: WOODS_ENTER_PROMPT,
+      },
+    },
   ],
   deathRespawn: { mapId: MAP_STARTING_LANDS, spawnId: 'default' },
 };
@@ -264,6 +326,73 @@ const BOSS_ARENA_1: MapDef = {
   deathRespawn: { mapId: MAP_STARTING_LANDS, spawnId: 'default' },
 };
 
+/**
+ * Rừng Sâu (P4b, `world/witheredWoods.ts`): overworld ánh sáng cố định (hoàng hôn), không Boss, không vùng an toàn.
+ * Số liệu ở `config/witheredWoodsConfig.ts` (GIÁ TRỊ KHỞI ĐIỂM). Chết ở đây → lượt mới ở làng (D6).
+ */
+const WITHERED_WOODS: MapDef = {
+  id: MAP_WITHERED_WOODS,
+  regionId: REGION_WITHERED,
+  builderId: 'withered_woods',
+  sceneKey: SCENE_KEYS.world,
+  size: { width: WOODS_WIDTH, height: WOODS_HEIGHT },
+  kind: 'overworld',
+  lighting: 'fixed',
+  playerSpawns: { default: { ...WOODS_PLAYER_SPAWN } },
+  zones: [
+    {
+      id: ZONE_WOODS_EDGE,
+      mapId: MAP_WITHERED_WOODS,
+      bounds: { ...WOODS_EDGE_BOUNDS },
+      safe: false,
+      tierOffset: WOODS_EDGE_TIER_OFFSET,
+      tierFloor: WOODS_EDGE_TIER_FLOOR,
+      tierCap: WOODS_TIER_CAP,
+      spawnTable: { pattern: [...WOODS_EDGE_SPAWN_PATTERN], points: [] },
+      maxAliveCap: null,
+      eliteSlots: [...WOODS_EDGE_ELITE_SLOTS],
+      display: { name: 'Bìa Rừng', danger: 2, description: 'Lá úa rơi, bóng cây dày dần' },
+    },
+    {
+      id: ZONE_WOODS_DEEP,
+      mapId: MAP_WITHERED_WOODS,
+      bounds: null,
+      safe: false,
+      tierOffset: WOODS_DEEP_TIER_OFFSET,
+      tierFloor: WOODS_DEEP_TIER_FLOOR,
+      tierCap: WOODS_TIER_CAP,
+      spawnTable: { pattern: [...WOODS_DEEP_SPAWN_PATTERN], points: [] },
+      maxAliveCap: null,
+      eliteSlots: [...WOODS_DEEP_ELITE_SLOTS],
+      display: { name: 'Lõi Rừng', danger: 3, description: 'Không còn lối nào an toàn' },
+    },
+  ],
+  connections: [
+    {
+      id: CONN_WOODS_TO_LANDS,
+      from: {
+        mapId: MAP_WITHERED_WOODS,
+        x: WOODS_RETURN_PORTAL.x,
+        y: WOODS_RETURN_PORTAL.y,
+      },
+      // Đích là spawn `fromPortal:` của map chính: cạnh cổng Rừng (WOODS_ARRIVAL_IN_LANDS).
+      to: { mapId: MAP_STARTING_LANDS, spawnId: `fromPortal:${CONN_WOODS_TO_LANDS}` },
+      type: 'portal',
+      direction: 'enter',
+      lockRules: ['always_open'],
+      chargeMs: WOODS_PORTAL_CHARGE_MS,
+      fadeColor: { ...WOODS_FADE_TO_LANDS },
+      visual: {
+        color: WOODS_PORTAL_COLOR,
+        label: WOODS_RETURN_LABEL,
+        labelColor: WOODS_PORTAL_COLOR_CSS,
+        prompt: WOODS_RETURN_PROMPT,
+      },
+    },
+  ],
+  deathRespawn: { mapId: MAP_STARTING_LANDS, spawnId: 'default' },
+};
+
 /** Region đầu tiên (P1): GIÁ TRỊ KHỞI ĐIỂM, `danger` chưa hiển thị ở đâu; chưa khai báo `respawn`. */
 const REGION_STARTING_DEF: RegionDef = {
   id: REGION_STARTING,
@@ -272,7 +401,15 @@ const REGION_STARTING_DEF: RegionDef = {
   entryMapId: MAP_STARTING_LANDS,
 };
 
+/** Region thứ hai (P4b): GIÁ TRỊ KHỞI ĐIỂM; chưa khai báo `respawn` (chết → deathRespawn của Map, về làng). */
+const REGION_WITHERED_DEF: RegionDef = {
+  id: REGION_WITHERED,
+  display: { name: 'Rừng Úa', description: 'Khu rừng chết bên kia Hoang Địa', danger: 2 },
+  mapIds: [MAP_WITHERED_WOODS],
+  entryMapId: MAP_WITHERED_WOODS,
+};
+
 export const WORLD: WorldDef = {
-  regions: [REGION_STARTING_DEF],
-  maps: [STARTING_LANDS, BOSS_ARENA_1],
+  regions: [REGION_STARTING_DEF, REGION_WITHERED_DEF],
+  maps: [STARTING_LANDS, BOSS_ARENA_1, WITHERED_WOODS],
 };

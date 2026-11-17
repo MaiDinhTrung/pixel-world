@@ -7,11 +7,24 @@ import {
 } from '../config/bossArenaConfig';
 import { SCENE_KEYS, WORLD_HEIGHT, WORLD_WIDTH } from '../config/constants';
 import {
+  WOODS_ARRIVAL_IN_LANDS,
+  WOODS_ENTRANCE,
+  WOODS_FADE_TO_LANDS,
+  WOODS_FADE_TO_WOODS,
+  WOODS_PLAYER_SPAWN,
+  WOODS_PORTAL_CHARGE_MS,
+  WOODS_RETURN_PORTAL,
+} from '../config/witheredWoodsConfig';
+import {
   CONN_ARENA_TO_VILLAGE,
+  CONN_LANDS_TO_WOODS,
   CONN_VILLAGE_TO_ARENA,
+  CONN_WOODS_TO_LANDS,
   MAP_BOSS_ARENA_1,
   MAP_STARTING_LANDS,
+  MAP_WITHERED_WOODS,
   WORLD,
+  ZONE_WILDS_FAR,
 } from '../config/worldConfig';
 import {
   clampToMap,
@@ -19,7 +32,7 @@ import {
   nearestPortal,
   resolveSceneArrival,
 } from './travel';
-import { findMap, type ConnectionId, type MapDef } from './worldGraph';
+import { findMap, requestTravel, zoneAt, type ConnectionId, type MapDef } from './worldGraph';
 
 const MAIN = findMap(WORLD, MAP_STARTING_LANDS) as MapDef;
 const ARENA = findMap(WORLD, MAP_BOSS_ARENA_1) as MapDef;
@@ -85,6 +98,61 @@ describe('resolveSceneArrival', () => {
     expect(wrong.fadeColor).toBeNull();
     expect(unknown.point).toEqual({ x: 800, y: 900 });
     expect(unknown.fadeColor).toBeNull();
+  });
+});
+
+describe('P4b: đi lại Hoang Địa ↔ Rừng Sâu', () => {
+  const dist = (a: { x: number; y: number }, b: { x: number; y: number }): number =>
+    Math.hypot(a.x - b.x, a.y - b.y);
+
+  it('getConnectionTravelInfo hai chiều: đúng đích, scene world, màu fade và thời gian sạc từ dữ liệu', () => {
+    const go = getConnectionTravelInfo(WORLD, CONN_LANDS_TO_WOODS);
+    const back = getConnectionTravelInfo(WORLD, CONN_WOODS_TO_LANDS);
+
+    expect(go.targetMap.id).toBe(MAP_WITHERED_WOODS);
+    expect(go.sceneKey).toBe(SCENE_KEYS.world);
+    expect(go.fadeColor).toEqual(WOODS_FADE_TO_WOODS);
+    expect(go.chargeMs).toBe(WOODS_PORTAL_CHARGE_MS);
+    expect(back.targetMap.id).toBe(MAP_STARTING_LANDS);
+    expect(back.sceneKey).toBe(SCENE_KEYS.world);
+    expect(back.fadeColor).toEqual(WOODS_FADE_TO_LANDS);
+    expect(back.chargeMs).toBe(WOODS_PORTAL_CHARGE_MS);
+  });
+
+  it('requestTravel hai chiều thành công (luôn mở, kể cả khi Boss sống)', () => {
+    const facts = { bossAlive: true, bossReady: true, playerLevel: 1 };
+
+    expect(requestTravel(WORLD, CONN_LANDS_TO_WOODS, facts)).toEqual({
+      ok: true,
+      to: { mapId: MAP_WITHERED_WOODS, spawnId: 'default' },
+    });
+    expect(requestTravel(WORLD, CONN_WOODS_TO_LANDS, facts)).toMatchObject({
+      ok: true,
+      to: { mapId: MAP_STARTING_LANDS },
+    });
+  });
+
+  it('vào Rừng → điểm xuất hiện Rừng, lệch cổng về ≥ 120 px', () => {
+    const arrival = resolveSceneArrival(WORLD, MAP_WITHERED_WOODS, CONN_LANDS_TO_WOODS);
+
+    expect(arrival.point).toEqual(WOODS_PLAYER_SPAWN);
+    expect(arrival.fadeColor).toEqual(WOODS_FADE_TO_WOODS);
+    expect(dist(arrival.point, WOODS_RETURN_PORTAL)).toBeGreaterThanOrEqual(120);
+  });
+
+  it('về từ Rừng → cạnh cổng Rừng ở map chính (lệch ≥ 120 px, trong Hoang Địa Sâu), không phải giữa làng', () => {
+    const arrival = resolveSceneArrival(WORLD, MAP_STARTING_LANDS, CONN_WOODS_TO_LANDS);
+
+    expect(arrival.point).toEqual(WOODS_ARRIVAL_IN_LANDS);
+    expect(arrival.spawnId).toBe(`fromPortal:${CONN_WOODS_TO_LANDS}`);
+    expect(arrival.fadeColor).toEqual(WOODS_FADE_TO_LANDS);
+    expect(dist(arrival.point, WOODS_ENTRANCE)).toBeGreaterThanOrEqual(120);
+    expect(zoneAt(MAIN, arrival.point.x, arrival.point.y)?.id).toBe(ZONE_WILDS_FAR);
+  });
+
+  it('hồi quy: về từ Arena vẫn ra giữa làng; vào game không qua cổng vẫn ở làng', () => {
+    expect(resolveSceneArrival(WORLD, MAP_STARTING_LANDS, CONN_ARENA_TO_VILLAGE).point).toEqual({ x: 1920, y: 1440 });
+    expect(resolveSceneArrival(WORLD, MAP_STARTING_LANDS, null).point).toEqual({ x: 1920, y: 1440 });
   });
 });
 

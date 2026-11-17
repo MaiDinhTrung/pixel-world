@@ -38,6 +38,7 @@ import {
   findConnection,
   findRegion,
   regionOfMap,
+  safeZoneCenterAt,
   zoneAt,
   requestTravel,
   validateWorld,
@@ -437,7 +438,16 @@ describe('validateWorld', () => {
       ['spawn_out_of_bounds', (w) => { w.maps[1].playerSpawns.default = { x: 99999, y: 0 }; }],
       ['orphan_connection', (w) => { w.maps[0].connections[0].from.mapId = 'map.boss_arena_1'; }],
       ['map_without_exit', (w) => { w.maps[1].connections = []; }],
-      ['map_without_entrance', (w) => { w.maps[1].connections[0].to.mapId = 'map.boss_arena_1'; }],
+      // P4b: map chính có hai đường vào (Arena, Rừng) → phải bẻ cả hai cổng về mới mất lối vào.
+      ['map_without_entrance', (w) => {
+        w.maps[1].connections[0].to.mapId = 'map.boss_arena_1';
+        w.maps[2].connections[0].to = { mapId: 'map.withered_woods', spawnId: 'default' };
+      }],
+      // Rừng mất cổng vào.
+      ['map_without_entrance', (w) => {
+        w.maps[0].connections = w.maps[0].connections.filter((conn: { id: string }) => conn.id !== 'conn.lands_to_woods');
+      }],
+      ['connection_invalid_prompt', (w) => { w.maps[2].connections[0].visual.prompt = '  '; }],
     ];
 
     for (const [expected, mutate] of cases) {
@@ -496,8 +506,8 @@ describe('validateWorld', () => {
 // ── Region và chính sách Instance (P1) ──────────────────────────────────────
 
 describe('Region và InstancePolicy (P1)', () => {
-  it('WORLD.regions có region.starting với 2 map; findRegion/regionOfMap', () => {
-    expect(WORLD.regions.map((region) => region.id)).toEqual(['region.starting']);
+  it('WORLD.regions có region.starting với 2 map (P4b: + region.withered); findRegion/regionOfMap', () => {
+    expect(WORLD.regions.map((region) => region.id)).toEqual(['region.starting', 'region.withered']);
 
     const region = findRegion(WORLD, worldConfig.REGION_STARTING);
 
@@ -746,7 +756,18 @@ describe('biển tên vùng (dữ liệu)', () => {
         expect(zone.display, zone.id).not.toBeNull();
         expect(zone.display?.name.length).toBeGreaterThan(0);
         expect(zone.display?.description.length).toBeLessThanOrEqual(40);
-        expect(zone.display?.danger).toBe(zone.safe ? 0 : zone.id === ZONE_WILDS_NEAR ? 1 : 2);
+        // P4b: Bìa Rừng ◆2, Lõi Rừng ◆3.
+        const expectedDanger = zone.safe
+          ? 0
+          : zone.id === ZONE_WILDS_NEAR
+            ? 1
+            : zone.id === worldConfig.ZONE_WOODS_EDGE
+              ? 2
+              : zone.id === worldConfig.ZONE_WOODS_DEEP
+                ? 3
+                : 2;
+
+        expect(zone.display?.danger, zone.id).toBe(expectedDanger);
       }
     }
   });
@@ -755,7 +776,7 @@ describe('biển tên vùng (dữ liệu)', () => {
 // ── Nhãn cổng khớp luật khóa (rủi ro QA W2) ─────────────────────────────────
 
 describe('portal.kind khớp lockRules cho mọi connection', () => {
-  const sources = ['./town.ts', './bossArena.ts'].map((file) =>
+  const sources = ['./town.ts', './bossArena.ts', './witheredWoods.ts'].map((file) =>
     readFileSync(fileURLToPath(new URL(file, import.meta.url)), 'utf8'),
   );
   const declared = new Map<string, string>();
@@ -776,10 +797,10 @@ describe('portal.kind khớp lockRules cho mọi connection', () => {
       }
     }
 
-    expect(count).toBe(2);
+    expect(count).toBe(4); // P4b: + lands_to_woods, woods_to_lands
   });
 
-  it('nhãn kind truyền cho createPortal ở town.ts/bossArena.ts khớp loại suy ra, phủ mọi connection', () => {
+  it('nhãn kind truyền cho createPortal ở town.ts/bossArena.ts/witheredWoods.ts khớp loại suy ra, phủ mọi connection', () => {
     const constants = worldConfig as unknown as Record<string, unknown>;
 
     for (const map of WORLD.maps) {
@@ -792,5 +813,125 @@ describe('portal.kind khớp lockRules cho mọi connection', () => {
         );
       }
     }
+  });
+});
+
+// ── P4b: Region Rừng Úa / Map Rừng Sâu ──────────────────────────────────────
+
+describe('P4b: Rừng Sâu (dữ liệu)', () => {
+  const WOODS = WORLD.maps.find((map) => map.id === worldConfig.MAP_WITHERED_WOODS) as MapDef;
+
+  it('WORLD: 2 Region, 3 Map; Rừng Sâu overworld, ánh sáng cố định, mọi vùng không an toàn, không điểm sinh riêng', () => {
+    expect(validateWorld(WORLD)).toEqual([]);
+    expect(WORLD.regions).toHaveLength(2);
+    expect(WORLD.maps).toHaveLength(3);
+    expect(WOODS.regionId).toBe(worldConfig.REGION_WITHERED);
+    expect(WOODS.builderId).toBe('withered_woods');
+    expect(WOODS.kind).toBe('overworld');
+    expect(WOODS.lighting).toBe('fixed');
+    expect(WOODS.instance).toBeUndefined();
+    expect(WOODS.deathRespawn).toEqual({ mapId: MAP_STARTING_LANDS, spawnId: 'default' });
+    expect(WOODS.zones.map((zone) => zone.id)).toEqual([worldConfig.ZONE_WOODS_EDGE, worldConfig.ZONE_WOODS_DEEP]);
+
+    for (const zone of WOODS.zones) {
+      expect(zone.safe, zone.id).toBe(false);
+      expect(zone.spawnTable.points, zone.id).toEqual([]);
+    }
+
+    const region = findRegion(WORLD, worldConfig.REGION_WITHERED);
+
+    expect(region?.display.name).toBe('Rừng Úa');
+    expect(region?.mapIds).toEqual([worldConfig.MAP_WITHERED_WOODS]);
+    expect(regionOfMap(WORLD, worldConfig.MAP_WITHERED_WOODS)?.id).toBe(worldConfig.REGION_WITHERED);
+    expect(WOODS.zones.map((zone) => zone.display?.name)).toEqual(['Bìa Rừng', 'Lõi Rừng']);
+  });
+
+  it('zoneAt: nửa Nam = Bìa Rừng, nửa Bắc = Lõi Rừng; không vùng an toàn ở toạ độ làng', () => {
+    expect(zoneAt(WOODS, 1280, 1680)?.id).toBe(worldConfig.ZONE_WOODS_EDGE);
+    expect(zoneAt(WOODS, 100, 960)?.id).toBe(worldConfig.ZONE_WOODS_EDGE);
+    expect(zoneAt(WOODS, 2500, 1900)?.id).toBe(worldConfig.ZONE_WOODS_EDGE);
+    expect(zoneAt(WOODS, 1280, 959)?.id).toBe(worldConfig.ZONE_WOODS_DEEP);
+    expect(zoneAt(WOODS, 100, 100)?.id).toBe(worldConfig.ZONE_WOODS_DEEP);
+    // Toạ độ tâm làng ở map chính không phải vùng an toàn trong Rừng.
+    expect(zoneAt(WOODS, MAIN_DEFAULT_SPAWN.x, MAIN_DEFAULT_SPAWN.y)?.safe).toBe(false);
+  });
+
+  it('bậc: Bìa Rừng khởi điểm 1, Lõi Rừng khởi điểm 3, Lõi ≥ Bìa ở mọi mốc, trần MAX_THREAT_TIER', () => {
+    const [edge, deep] = WOODS.zones;
+
+    expect(effectiveThreatTier(0, edge)).toBe(1);
+    expect(effectiveThreatTier(0, deep)).toBe(3);
+
+    for (let tier = 0; tier <= MAX_THREAT_TIER + 2; tier += 1) {
+      for (const elapsed of [tier * THREAT_INTERVAL_MS - 1, tier * THREAT_INTERVAL_MS, tier * THREAT_INTERVAL_MS + 1]) {
+        expect(effectiveThreatTier(elapsed, deep)).toBeGreaterThanOrEqual(effectiveThreatTier(elapsed, edge));
+        expect(effectiveThreatTier(elapsed, deep)).toBeLessThanOrEqual(MAX_THREAT_TIER);
+      }
+    }
+
+    expect(effectiveThreatTier(1e9, edge)).toBe(MAX_THREAT_TIER);
+  });
+
+  it('Elite hợp lệ: Bìa Rừng grunt, Lõi Rừng brute', () => {
+    expect(WOODS.zones.map((zone) => zone.eliteSlots)).toEqual([['grunt'], ['brute']]);
+  });
+
+  it('cổng: map chính có cổng Rừng luôn mở trong Hoang Địa Sâu; Rừng có cổng về luôn mở', () => {
+    const toWoods = findConnection(WORLD, worldConfig.CONN_LANDS_TO_WOODS) as ConnectionDef;
+    const toLands = findConnection(WORLD, worldConfig.CONN_WOODS_TO_LANDS) as ConnectionDef;
+    const facts = { bossAlive: true, bossReady: true, playerLevel: 1 };
+
+    expect(toWoods.from.mapId).toBe(MAP_STARTING_LANDS);
+    expect(toWoods.to).toEqual({ mapId: worldConfig.MAP_WITHERED_WOODS, spawnId: 'default' });
+    expect(zoneAt(STARTING_LANDS, toWoods.from.x, toWoods.from.y)?.id).toBe(ZONE_WILDS_FAR);
+    expect(toLands.from.mapId).toBe(worldConfig.MAP_WITHERED_WOODS);
+    expect(toLands.to.mapId).toBe(MAP_STARTING_LANDS);
+
+    for (const conn of [toWoods, toLands]) {
+      expect(conn.lockRules).toEqual(['always_open']);
+      expect(evaluateConnection(conn, facts)).toBeNull();
+      expect(requestTravel(WORLD, conn.id, facts)).toEqual({ ok: true, to: conn.to });
+    }
+  });
+
+  it('lời nhắc: hai cổng Arena không có prompt; hai cổng Rừng có prompt đúng', () => {
+    expect(VILLAGE_TO_ARENA.visual.prompt).toBeUndefined();
+    expect(ARENA_TO_VILLAGE.visual.prompt).toBeUndefined();
+    expect(findConnection(WORLD, worldConfig.CONN_LANDS_TO_WOODS)?.visual.prompt).toBe('VÀO RỪNG SÂU');
+    expect(findConnection(WORLD, worldConfig.CONN_WOODS_TO_LANDS)?.visual.prompt).toBe('VỀ HOANG ĐỊA');
+  });
+
+  it('WorldScene: lời nhắc mặc định giữ chữ cũ của Arena khi không có prompt (khoá nguồn)', () => {
+    const scene = readFileSync(fileURLToPath(new URL('../scenes/WorldScene.ts', import.meta.url)), 'utf8');
+
+    expect(scene).toMatch(
+      /visual\.prompt\s*\?\?\s*\(portal\.kind === 'enter' \? 'VÀO ĐẤU TRƯỜNG' : 'VỀ LÀNG'\)/,
+    );
+    expect(scene).not.toMatch(/VILLAGE_ZONE\.x \+ VILLAGE_ZONE\.width/);
+  });
+});
+
+describe('P4b: safeZoneCenterAt (tâm đẩy quái khỏi vùng an toàn)', () => {
+  const villageCenter = {
+    x: VILLAGE_ZONE.x + VILLAGE_ZONE.width / 2,
+    y: VILLAGE_ZONE.y + VILLAGE_ZONE.height / 2,
+  };
+
+  it('map chính: điểm trong làng (cả các góc) → đúng tâm VILLAGE_ZONE cũ', () => {
+    const { x, y, width, height } = VILLAGE_ZONE;
+
+    for (const [px, py] of [[x, y], [x + width, y + height], [x + 10, y + height - 10], [MAIN_DEFAULT_SPAWN.x, MAIN_DEFAULT_SPAWN.y]]) {
+      expect(safeZoneCenterAt(STARTING_LANDS, px, py), `(${px},${py})`).toEqual(villageCenter);
+    }
+  });
+
+  it('ngoài làng, Arena và Rừng Sâu → null (không đẩy)', () => {
+    const woods = WORLD.maps.find((map) => map.id === worldConfig.MAP_WITHERED_WOODS) as MapDef;
+
+    expect(safeZoneCenterAt(STARTING_LANDS, VILLAGE_ZONE.x - 1, VILLAGE_ZONE.y)).toBeNull();
+    expect(safeZoneCenterAt(STARTING_LANDS, 100, 100)).toBeNull();
+    expect(safeZoneCenterAt(BOSS_ARENA, 800, 500)).toBeNull();
+    expect(safeZoneCenterAt(woods, villageCenter.x, villageCenter.y)).toBeNull();
+    expect(safeZoneCenterAt(woods, 1280, 1680)).toBeNull();
   });
 });

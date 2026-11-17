@@ -91,7 +91,6 @@ import {
   MAX_DROPS_ALIVE,
   NPC_INTERACT_RADIUS,
   VILLAGE_REPEL_SPEED,
-  VILLAGE_ZONE,
   type NpcRole,
 } from '../config/economyConfig';
 import {
@@ -248,6 +247,7 @@ import {
   evaluateConnection,
   findConnection,
   findMap,
+  safeZoneCenterAt,
   zoneAt,
   type ConnectionDef,
   type ConnectionId,
@@ -3689,7 +3689,10 @@ export class WorldScene extends Phaser.Scene {
       return 'CỔNG KHÓA — HẠ TRÙM ĐỂ MỞ';
     }
 
-    const action = portal.kind === 'enter' ? 'VÀO ĐẤU TRƯỜNG' : 'VỀ LÀNG';
+    // P4b: chữ theo dữ liệu cổng (`visual.prompt`); hai cổng Arena không đặt nên giữ chữ cũ.
+    const action =
+      this.getPortalConnection(portal).visual.prompt ??
+      (portal.kind === 'enter' ? 'VÀO ĐẤU TRƯỜNG' : 'VỀ LÀNG');
 
     return this.touchControls
       ? `CHẠM NÚT ĐÁNH ĐỂ ${action}`
@@ -4077,14 +4080,16 @@ export class WorldScene extends Phaser.Scene {
       );
     }
 
-    const centerX = VILLAGE_ZONE.x + VILLAGE_ZONE.width / 2;
-    const centerY = VILLAGE_ZONE.y + VILLAGE_ZONE.height / 2;
+    // P4b: tâm đẩy = tâm vùng an toàn chứa quái (map chính: vùng làng = VILLAGE_ZONE, y hệt cũ); Map không có vùng an toàn → không đẩy.
+    const map = this.getMapDef();
 
     for (const enemy of this.getEnemies()) {
-      if (enemy.isAlive() && this.isSafeZonePoint(enemy.x, enemy.y)) {
+      const center = enemy.isAlive() ? safeZoneCenterAt(map, enemy.x, enemy.y) : null;
+
+      if (center !== null) {
         const away = new Phaser.Math.Vector2(
-          enemy.x - centerX,
-          enemy.y - centerY,
+          enemy.x - center.x,
+          enemy.y - center.y,
         );
 
         if (away.lengthSq() === 0) {

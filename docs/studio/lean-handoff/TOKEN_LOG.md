@@ -25,6 +25,8 @@ Nguồn các số bên dưới: thông báo hoàn tất của từng subagent (t
 | P4a Một scene map chung | L (Lean, brief dùng chung) | Developer | 134 002 | 84 | 268 s | — |
 | P4a | | QA | 96 123 | 44 | 142 s | — |
 | Sửa kiếm vùng an toàn theo Map | L (Lead tự sửa) | QA | 48 769 | 21 | 64 s | — |
+| P4b Rừng Úa / Rừng Sâu | L/XL (Lean, brief dùng chung) | Developer | 170 821 | 98 | 464 s | — |
+| P4b | | QA | 88 238 | 26 | 109 s | — |
 | P4 khảo sát thiết kế | — | Gameplay Designer | 62 719 | 23 | 116 s | — |
 | P4 khảo sát thiết kế | | Visual Designer | 40 369 | 10 | 55 s | — |
 

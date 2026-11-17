@@ -99,6 +99,11 @@ export interface ConnectionDef {
     readonly color: number;
     readonly label: string;
     readonly labelColor: string;
+    /**
+     * Hành động trong lời nhắc cổng ("NHẤN F ĐỂ <prompt>"), P4b. Không có → WorldScene dùng chữ cũ theo loại cổng
+     * ('VÀO ĐẤU TRƯỜNG' / 'VỀ LÀNG'). Có thì không được rỗng.
+     */
+    readonly prompt?: string;
   };
 }
 
@@ -215,6 +220,23 @@ export function zoneAt(map: MapDef, x: number, y: number): ZoneDef | null {
   }
 
   return best ?? fallback;
+}
+
+/**
+ * Tâm vùng an toàn chứa điểm (P4b, tâm đẩy quái của WorldScene.updateVillage): vùng `zoneAt` là `safe` và có `bounds`
+ * → tâm hình chữ nhật đó; ngược lại null (không đẩy). Map chính: vùng làng có bounds = VILLAGE_ZONE nên tâm y hệt cũ.
+ */
+export function safeZoneCenterAt(map: MapDef, x: number, y: number): Point | null {
+  const zone = zoneAt(map, x, y);
+
+  if (zone === null || !zone.safe || zone.bounds === null) {
+    return null;
+  }
+
+  return {
+    x: zone.bounds.x + zone.bounds.width / 2,
+    y: zone.bounds.y + zone.bounds.height / 2,
+  };
 }
 
 // ── Luật khóa cổng ──────────────────────────────────────────────────────────
@@ -335,6 +357,7 @@ export type WorldErrorCode =
   | 'multiple_fallback_zones'
   | 'no_zones'
   | 'connection_from_out_of_bounds'
+  | 'connection_invalid_prompt'
   | 'missing_target_map'
   | 'missing_target_spawn'
   | 'missing_death_respawn'
@@ -582,6 +605,10 @@ export function validateWorld(
 
       if (!insideMap(map, conn.from.x, conn.from.y)) {
         fail('connection_from_out_of_bounds', `${conn.id} có điểm xuất phát ngoài biên ${map.id}`);
+      }
+
+      if (conn.visual.prompt !== undefined && conn.visual.prompt.trim() === '') {
+        fail('connection_invalid_prompt', `${conn.id}.visual.prompt rỗng (bỏ trường để dùng chữ mặc định)`);
       }
 
       const target = mapsById.get(conn.to.mapId);
