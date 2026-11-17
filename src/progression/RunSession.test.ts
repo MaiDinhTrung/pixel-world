@@ -197,12 +197,43 @@ describe('khóa nguồn WorldScene (bẫy scene.restart giữ data cũ)', () => 
     expect(text).not.toContain('scene.restart()');
   });
 
-  it('startPortalTravel truyền run trong scene.start', () => {
+  it('startPortalTravel truyền ticket + clock trong scene.start, không truyền nguyên run', () => {
     const start = text.indexOf('private startPortalTravel');
     const end = text.indexOf('private updatePortalVisual');
 
     expect(start).toBeGreaterThan(-1);
     expect(end).toBeGreaterThan(start);
-    expect(text.slice(start, end)).toMatch(/scene\.start\([^)]*\brun\b[^)]*\)/);
+
+    const call = /scene\.start\(([^)]*)\)/.exec(text.slice(start, end));
+
+    expect(call).not.toBeNull();
+
+    const args = call?.[1] ?? '';
+
+    expect(args).toMatch(/\bticket\b/);
+    expect(args).toMatch(/\bclock\s*:/);
+    expect(args).not.toMatch(/\brun\s*[:,]/);
+  });
+
+  it('P3d: listener RESUME đăng ký bằng phương thức có tên và gỡ trong SHUTDOWN (không tích luỹ qua restart)', () => {
+    expect(text).toContain('this.events.on(Phaser.Scenes.Events.RESUME, this.handleResume, this)');
+    expect(text).not.toMatch(/events\.on\(Phaser\.Scenes\.Events\.RESUME,\s*\(/);
+
+    const shutdown = text.indexOf('this.events.once(Phaser.Scenes.Events.SHUTDOWN');
+    const shutdownEnd = text.indexOf('\n    });', shutdown);
+
+    expect(shutdown).toBeGreaterThan(-1);
+    expect(text.slice(shutdown, shutdownEnd)).toContain(
+      'this.events.off(Phaser.Scenes.Events.RESUME, this.handleResume, this)',
+    );
+  });
+
+  it('P3d: resetPlayerRuntimeState đặt lại lastAim về (1, 0)', () => {
+    const start = text.indexOf('private resetPlayerRuntimeState');
+    const end = text.indexOf('\n  }', start);
+
+    expect(start).toBeGreaterThan(-1);
+    expect(text.slice(start, end)).toContain('this.lastAim.set(1, 0);');
+    expect(text).toContain('lastAim = new Phaser.Math.Vector2(1, 0)');
   });
 });

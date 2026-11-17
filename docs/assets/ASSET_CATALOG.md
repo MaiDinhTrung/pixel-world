@@ -23,7 +23,7 @@ Không có file ảnh; sinh trong `PreloadScene.create()`. Key khai báo ở `TE
 | Nhóm | Key | Nơi định nghĩa art / sinh |
 |---|---|---|
 | Môi trường | `ground`, `wall`, `rock` | `PreloadScene` (`createGroundTexture/createWallTexture`); `rock` qua `createPixelTexture` |
-| Tường thành | `castle-wall-<n>` (động) | `world/castleWall.ts` + `vfx/brickBox.ts` |
+| Tường thành | `castle-wall-<w>x<h>-r<rise>-<h/v>-l<lean>` (động, key tất định theo hình học, P3d) | `world/castleWall.ts` + `vfx/brickBox.ts` |
 | Đấu Trường Boss | `arena-floor` (64×64, 2×2 ô gạch), `arena-rune` (vòng ma pháp), `arena-block-<n>` (tường/cột), `arena-radial` (đèn/sương), `arena-vignette` | `world/bossArena.ts`; màu/kích thước `config/bossArenaConfig.ts` |
 | Cổng dịch chuyển | `portal-pedestal-<màu>` (bệ 96 px), `portal-vortex-<màu>-<0..7>` (vòng xoáy 8 frame 64 px), `portal-glow` | `world/portal.ts`; số khung/kích thước `PORTAL_*` ở `config/bossArenaConfig.ts`; dùng VFX có sẵn `ring.shock`, `glow.flash`, `burst.sparks` khi kích hoạt |
 | Người chơi | `player-knight`, `player-ranger`, `player-mage`, `player-necromancer` (spritesheet khung 48 px; vẽ lại theo gear đang mặc) | `utils/placeholderPlayer.ts`; key ở `config/characters.ts`. `TEXTURE_KEYS.player` và `PLAYER_TEXTURE_KEY` (`player-hd`) là key/hằng cũ |

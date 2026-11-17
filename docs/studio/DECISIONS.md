@@ -16,6 +16,19 @@ Mẫu mục:
 
 ---
 
+### 2026-11-17 — P4: Scene map chung (P4a) + Region/Map thứ hai (P4b)
+- **Quyết định (người dùng duyệt Cổng 1, 2026-11-17: "Duyệt theo khuyến nghị cả 7 quyết định"):** (1) tách P4a / P4b, P4b chỉ bắt đầu sau khi P4a được chơi thử và nghiệm thu; (2) P4a **giữ tên lớp `WorldScene`**, chỉ tái cấu trúc các map về cơ chế scene chung + registry builder; (3) Map thứ hai theo phương án B; (4) tên: Region **Rừng Úa**, Map **Rừng Sâu**, Zone **Bìa Rừng** / **Lõi Rừng**; (5) ánh sáng Rừng Sâu **cố định kiểu hoàng hôn**; (6) quái khởi điểm **bậc 1 ở Bìa Rừng, bậc 3 ở Lõi Rừng** (giá trị khởi điểm trong `src/config/`); (7) chỉ biển tên vùng, không biển tên Region.
+- **Ràng buộc người dùng bổ sung:** P4a không đổi trải nghiệm, gameplay, combat, progression, save, hành vi chuyển map; không thêm map/nội dung. P4b tái dùng hình ảnh làng, **không tự tạo hoặc thay asset**. Không đụng M4, Visual Overhaul. Không push.
+- **D3 (`WORLD_MAP_DESIGN.md`) sửa thành:** "Khởi Nguyên giữ 3 vùng trên 2 map. P4b thêm đúng một Region thứ hai (Rừng Úa) gồm một Map overworld (Rừng Sâu: 2 vùng, không Boss, không vùng an toàn) để kiểm chứng kiến trúc. Map thứ ba, Boss thứ hai, ambient theo vùng để sau. D5/D6 giữ." — Lead cập nhật tài liệu khi bắt đầu P4b.
+- **Phương án bị loại:** P4b-A (map thứ hai cùng Region, không kiểm chứng Region thứ hai); P4b-C (hầm + luật Elite mới = hệ thống mới); hình ảnh Hầm mỏ/Tàn tích (phải tách tham số `bossArena.ts`/`castleWall.ts`, dễ va Visual Overhaul); đổi tên `WorldScene` → `MapScene` (diff lớn, để gói đổi tên riêng).
+- **Tài liệu:** `docs/studio/lean-handoff/P4_DESIGN_PROPOSAL.md` (đã duyệt), `docs/studio/lean-handoff/P4A_FEATURE_BRIEF.md`.
+- **Trạng thái:** Cổng 1 đã duyệt. P4a: đang triển khai. P4b: chưa bắt đầu (chờ P4a nghiệm thu).
+
+### 2026-11-17 — P3d: dọn nợ kỹ thuật sau P3 (sửa lỗi đã biết, không đổi gameplay)
+- **Quyết định (Lead, theo chế độ tự chủ người dùng giao 2026-11-17, ưu tiên "tồn đọng P3" và "lỗi đã biết"):** sửa L3 (texture tường thành nay có key tất định theo hình học, dựng lại làng dùng lại texture), N1 (listener RESUME gỡ ở SHUTDOWN), N2 (`lastAim` reset mỗi lượt), khoá bất biến dữ liệu `zone_spawn_points_outside_boss` (chỉ map `boss` có điểm sinh riêng; logic chọn quái không đổi), siết test nguồn `RunSession.test.ts` (`ticket` + `clock`, cấm `run`).
+- **Không làm lần này (cần quyết định thiết kế):** L5 (vùng sạch cổng về Arena không chặn đạn/đòn quét), `goldMult` chưa dùng.
+- **Trạng thái:** đã triển khai (Developer: 5 sửa + `castleWall.test.ts` tạo), **QA Đạt** (build, tsc, 734/734 test, HEAD khớp baseline, phạm vi sạch, A1–A5 + Q1–Q5 Đạt; ghi chú không chặn: tường Tây/Đông dài số lẻ có thể sinh thêm vài texture cố định). Lead cập nhật catalog key `castle-wall-*`. **READY FOR PLAYTEST** (`docs/studio/playtests/P3d_tech_debt.md`, kèm 5 mục cũ chưa kiểm của P3a/P3c-1/M2). Chưa commit. Brief + QA Plan: `docs/studio/lean-handoff/P3D_FEATURE_BRIEF.md`.
+
 ### 2026-11-17 — P3: Instance cục bộ, chia 3 gói (P3a DifficultyClock, P3b TravelTicket, P3c InstanceRuntime)
 - **Quyết định (người dùng: "bắt đầu p3", 2026-11-17; kiến trúc đã duyệt ở W-A10, W-A12, Q1(a)):** Lead chia P3 thành 3 gói tuần tự, mỗi gói cấp L có QA và playtest riêng, gói sau chỉ bắt đầu khi gói trước nghiệm thu: **P3a** `DifficultyClock` (gom `runStartedAt`/`nextBossAt`/`bossNumber`/`bossReady`/`bossWarningShown` sau interface, cài đặt `RunSessionClock`, `RunSession.ts` không đổi); **P3b** `TravelTicket` thay kênh Phaser registry + tách `RunSession` (phần mang theo / phần còn lại); **P3c** `InstanceRuntime` + `LocalInstanceAllocator` nối vào game (gom trạng thái quái/drop/hòm/Boss thành một đối tượng tạo mới mỗi lần vào map, thay `resetInstanceRuntimeState`).
 - **Lý do chia:** `WorldScene.ts` lớn, mỗi gói đổi một lớp trách nhiệm; P3a thuần nhất và làm P3b/P3c dễ hơn.

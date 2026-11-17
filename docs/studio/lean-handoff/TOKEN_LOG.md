@@ -20,6 +20,10 @@ Nguồn các số bên dưới: thông báo hoàn tất của từng subagent (t
 | P3c-1 | | QA | 41 499 | 13 | 38 s | — |
 | P3c-2 Instance cục bộ + TravelTicket | L (Lean, brief dùng chung) | Developer | 65 346 | 41 | 120 s | — |
 | P3c-2 | | QA | 48 673 | 21 | 53 s | — |
+| P3d Dọn nợ kỹ thuật sau P3 | L (Lean, brief dùng chung) | Developer | 64 482 | 47 | 142 s | — |
+| P3d | | QA | 50 211 | 19 | 57 s | — |
+| P4 khảo sát thiết kế | — | Gameplay Designer | 62 719 | 23 | 116 s | — |
+| P4 khảo sát thiết kế | | Visual Designer | 40 369 | 10 | 55 s | — |
 
 Ghi chú:
 - P2 là nhiệm vụ đầu tiên chạy theo Lean (một Feature Brief + QA Plan dùng chung, báo cáo ≤ 10 dòng); số liệu chỉ để xem xu hướng, các gói khác kích thước nên không so trực tiếp.

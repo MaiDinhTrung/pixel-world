@@ -328,6 +328,7 @@ export type WorldErrorCode =
   | 'zone_map_mismatch'
   | 'zone_out_of_bounds'
   | 'zone_invalid_tier'
+  | 'zone_spawn_points_outside_boss'
   | 'zone_invalid_display'
   | 'zone_unknown_archetype'
   | 'zone_invalid_elite'
@@ -515,6 +516,11 @@ export function validateWorld(
 
       if (zone.tierFloor > zone.tierCap) {
         fail('zone_invalid_tier', `${zone.id} có tierFloor > tierCap`);
+      }
+
+      // WorldScene.pickSpawnArchetype coi "điểm sinh riêng khác rỗng" là Arena: chỉ map Boss được có.
+      if (zone.spawnTable.points.length > 0 && map.kind !== 'boss') {
+        fail('zone_spawn_points_outside_boss', `${zone.id} có spawnTable.points nhưng ${map.id} không phải map Boss`);
       }
 
       for (const archetypeId of zone.spawnTable.pattern) {

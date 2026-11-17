@@ -50,7 +50,16 @@ interface Block {
 }
 
 const PAD = 4;
-let nextTextureId = 0;
+
+/**
+ * Key texture tất định theo hình học khối (`drawBlock` không ngẫu nhiên): cùng hình → cùng key nên lần dựng làng
+ * sau dùng lại texture có sẵn thay vì tạo mới mãi (rò bộ nhớ GPU). Không phụ thuộc vị trí `x`/`y`.
+ */
+export function castleTextureKey(
+  block: Pick<Block, 'width' | 'height' | 'rise' | 'horizontal' | 'lean'>,
+): string {
+  return `castle-wall-${block.width}x${block.height}-r${block.rise}-${block.horizontal ? 'h' : 'v'}-l${block.lean}`;
+}
 
 function extOf(rise: number, lean: number): { x: number; y: number } {
   return { x: lean * CASTLE_SHEAR * rise, y: -rise };
@@ -125,9 +134,7 @@ function placeBlock(scene: Phaser.Scene, block: Block): Phaser.GameObjects.Image
   const oy = PAD - Math.min(0, totalY);
   const texWidth = Math.ceil(block.width + Math.abs(totalX) + PAD * 2);
   const texHeight = Math.ceil(block.height + Math.abs(totalY) + PAD * 2);
-  const key = `castle-wall-${nextTextureId}`;
-
-  nextTextureId += 1;
+  const key = castleTextureKey(block);
 
   if (!scene.textures.exists(key)) {
     const g = scene.add.graphics();

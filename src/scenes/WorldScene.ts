@@ -593,6 +593,12 @@ export class WorldScene extends Phaser.Scene {
     this.missingHealthMult = 1;
     this.enemyCache = [];
     this.enemyCacheFrame = -1;
+    this.lastAim.set(1, 0);
+  }
+
+  /** Bảng nhân vật đóng (scene được resume): trả điều khiển cho người chơi. */
+  private handleResume(): void {
+    this.panelOpen = false;
   }
 
   /**
@@ -753,6 +759,7 @@ export class WorldScene extends Phaser.Scene {
 
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.events.off(Phaser.Scenes.Events.POST_UPDATE, this.updateWeaponsAfterPhysics, this);
+      this.events.off(Phaser.Scenes.Events.RESUME, this.handleResume, this);
       unsubscribeProgressError?.();
       unsubscribeProgressError = null;
       this.fortress?.end(false);
@@ -889,9 +896,7 @@ export class WorldScene extends Phaser.Scene {
       this.zoneTracker = null;
     }
 
-    this.events.on(Phaser.Scenes.Events.RESUME, () => {
-      this.panelOpen = false;
-    });
+    this.events.on(Phaser.Scenes.Events.RESUME, this.handleResume, this);
 
     // Tab mở menu nhân vật. C/I vẫn mở nhanh tab tương ứng.
     this.input.keyboard?.addCapture(Phaser.Input.Keyboard.KeyCodes.TAB);
@@ -1344,7 +1349,8 @@ export class WorldScene extends Phaser.Scene {
   }
 
   /**
-   * Chọn archetype cho lần sinh này (M2). Vùng có điểm sinh riêng (`spawnTable.points` khác rỗng = Arena): giữ chuỗi
+   * Chọn archetype cho lần sinh này (M2). Vùng có điểm sinh riêng (`spawnTable.points` khác rỗng = Arena;
+   * bất biến được khoá bởi `validateWorld` mã `zone_spawn_points_outside_boss`: chỉ map `kind: 'boss'` có điểm sinh riêng): giữ chuỗi
    * M1 `pattern[spawnIndex % length]`. Vùng ngoài làng: bộ đếm riêng của vùng + dịch pha theo vòng điểm sinh
    * (`pickStaggeredArchetype`) để mỗi điểm sinh gặp nhiều loại quái. Xác định, không ngẫu nhiên.
    */

@@ -421,6 +421,7 @@ describe('validateWorld', () => {
       ['zone_invalid_display', (w) => { w.maps[0].zones[1].display.danger = 1.5; }],
       ['zone_invalid_display', (w) => { w.maps[0].zones[2].display.name = '  '; }],
       ['zone_unknown_archetype', (w) => { w.maps[0].zones[1].spawnTable.pattern = ['grunt', 'khong_co']; }],
+      ['zone_spawn_points_outside_boss', (w) => { w.maps[0].zones[1].spawnTable.points = [{ x: 100, y: 100 }]; }],
       // M3: eliteSlots sai (id không tồn tại / không cận chiến / vùng an toàn / vùng có điểm sinh riêng).
       ['zone_invalid_elite', (w) => { w.maps[0].zones[1].eliteSlots = ['khong_co']; }],
       ['zone_invalid_elite', (w) => { w.maps[0].zones[1].eliteSlots = ['caster']; }],
@@ -464,6 +465,31 @@ describe('validateWorld', () => {
       codes(broken((w) => { w.maps[0].zones[1].eliteSlots = ['khong_co', 'caster']; })),
       'hai slot sai = hai lỗi',
     ).toEqual(['zone_invalid_elite', 'zone_invalid_elite']);
+  });
+
+  it('P3d: điểm sinh riêng chỉ hợp lệ ở map Boss (bất biến của WorldScene.pickSpawnArchetype)', () => {
+    expect(WORLD.maps[0].kind).toBe('overworld');
+    expect(WORLD.maps[1].kind).toBe('boss');
+
+    // Mọi vùng có spawnTable.points khác rỗng trong WORLD hiện có đều nằm ở map Boss.
+    for (const map of WORLD.maps) {
+      for (const zone of map.zones) {
+        if (zone.spawnTable.points.length > 0) {
+          expect(map.kind, zone.id).toBe('boss');
+        }
+      }
+    }
+
+    // Vùng ở map overworld có điểm sinh riêng → đúng một mã lỗi mới (eliteSlots để rỗng để không lẫn mã khác).
+    expect(
+      codes(broken((w) => {
+        w.maps[0].zones[1].eliteSlots = [];
+        w.maps[0].zones[1].spawnTable.points = [{ x: 100, y: 100 }];
+      })),
+    ).toEqual(['zone_spawn_points_outside_boss']);
+
+    // Map Boss vẫn được phép có điểm sinh riêng.
+    expect(codes(broken((w) => { w.maps[1].zones[0].spawnTable.points = [{ x: 10, y: 10 }]; }))).toEqual([]);
   });
 });
 
