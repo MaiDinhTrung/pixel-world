@@ -77,8 +77,6 @@ import {
 import {
   SCENE_KEYS,
   TILE_SIZE,
-  WORLD_HEIGHT,
-  WORLD_WIDTH,
   CAMERA_FOLLOW_LERP_60FPS,
 } from '../config/constants';
 import {
@@ -250,15 +248,19 @@ import {
   zoneAt,
   timeThreatTier,
   type ConnectionDef,
+  type ConnectionId,
   type MapDef,
   type MapId,
   type WorldFacts,
 } from '../world/worldGraph';
 import {
+  clampToMap,
+  getConnectionTravelInfo,
+  nearestPortal,
+  resolveSceneArrival,
+} from '../world/travel';
+import {
   BOSS_ARENA_ENTRY_SPAWN_DELAY_MS,
-  BOSS_ARENA_FADE_TO_ARENA,
-  BOSS_ARENA_FADE_TO_WORLD,
-  BOSS_ARENA_PORTAL_CHARGE_MS,
   BOSS_ARENA_PORTAL_COOLDOWN_MS,
   BOSS_ARENA_PORTAL_EXTRA_INVULNERABLE_MS,
   BOSS_ARENA_PORTAL_FADE_MS,
@@ -429,6 +431,10 @@ export class WorldScene extends Phaser.Scene {
   protected arenaEntryAt: number | null = null;
   private portalCooldownUntil = 0;
   private portalChargeStartedAt: number | null = null;
+  /** Cổng đang sạc (null khi không sạc). */
+  private chargingPortal: ScenePortal | null = null;
+  /** Connection người chơi vừa đi qua để vào scene này (null = vào thẳng/hồi sinh). */
+  private arrivalConnectionId: ConnectionId | null = null;
   private portalTraveling = false;
   /** Đã báo lỗi cầu nối save v8 trong lần vào scene này (reset ở create). */
   private saveBridgeFailureToasted = false;
@@ -515,7 +521,9 @@ export class WorldScene extends Phaser.Scene {
 
   /** Khung thế giới vật lý (trước khi trừ tường biên). */
   protected getWorldBounds(): { x: number; y: number; width: number; height: number } {
-    return { x: 0, y: 0, width: WORLD_WIDTH, height: WORLD_HEIGHT };
+    const { width, height } = this.getMapDef().size;
+
+    return { x: 0, y: 0, width, height };
   }
 
   protected getCameraBounds(): { x: number; y: number; width: number; height: number } {
@@ -616,10 +624,13 @@ export class WorldScene extends Phaser.Scene {
     return isRestorable(session) ? session : null;
   }
 
-  init(data?: { characterId?: string }): void {
+  init(data?: { characterId?: string; arrivalConnectionId?: ConnectionId }): void {
     if (data?.characterId && isCharacterId(data.characterId)) {
       this.characterId = data.characterId;
     }
+
+    // Đặt lại MỖI lần init: scene.restart() tái dùng instance, không đặt lại thì sau khi chết vẫn dùng connection cũ.
+    this.arrivalConnectionId = data?.arrivalConnectionId ?? null;
   }
 
   create(): void {
@@ -667,11 +678,13 @@ export class WorldScene extends Phaser.Scene {
     // khi scene vừa ngủ lâu); dùng đồng hồ tuyệt đối của game loop cho mọi mốc đặt ở đây.
     const startNow = this.game.loop.time;
     const restored = this.takeRunSession();
+    const arrival = resolveSceneArrival(WORLD, this.getMapId(), this.arrivalConnectionId);
 
     this.bossReady = false;
     this.arenaEntryAt = this.inBossArena ? startNow : null;
     this.portalTraveling = false;
     this.portalChargeStartedAt = null;
+    this.chargingPortal = null;
     this.portalCooldownUntil = 0;
     this.lastPortalToastAt = 0;
     this.runStartedAt = startNow;
@@ -691,11 +704,11 @@ export class WorldScene extends Phaser.Scene {
       this.bossWarningShown = carried.bossWarningShown;
       this.portalCooldownUntil = startNow + BOSS_ARENA_PORTAL_COOLDOWN_MS;
 
-      const fade = this.inBossArena
-        ? BOSS_ARENA_FADE_TO_ARENA
-        : BOSS_ARENA_FADE_TO_WORLD;
+      const fade = arrival.fadeColor;
 
-      this.cameras.main.fadeIn(BOSS_ARENA_PORTAL_FADE_MS, fade.r, fade.g, fade.b);
+      if (fade !== null) {
+        this.cameras.main.fadeIn(BOSS_ARENA_PORTAL_FADE_MS, fade.r, fade.g, fade.b);
+      }
     }
 
     this.cameras.main.setBackgroundColor('#0b0b12');
@@ -714,8 +727,8 @@ export class WorldScene extends Phaser.Scene {
 
     this.player = new Player(
       this,
-      this.town.playerSpawn.x,
-      this.town.playerSpawn.y,
+      arrival.point.x,
+      arrival.point.y,
       {
         textureKey: this.character.textureKey,
         animPrefix: this.character.animPrefix,
@@ -1386,16 +1399,11 @@ export class WorldScene extends Phaser.Scene {
       archetypeId === null
         ? this.spawnIndex % 3 === 2
         : ENEMY_ARCHETYPES[archetypeId].kind === 'ranged';
-    const margin = 48;
-    const spawnX = Phaser.Math.Clamp(
+    const { x: spawnX, y: spawnY } = clampToMap(
+      this.getMapDef(),
       point.x + Phaser.Math.Between(-48, 48),
-      margin,
-      WORLD_WIDTH - margin,
-    );
-    const spawnY = Phaser.Math.Clamp(
       point.y + Phaser.Math.Between(-48, 48),
-      margin,
-      WORLD_HEIGHT - margin,
+      48,
     );
 
     this.spawnIndex += 1;
@@ -1532,9 +1540,7 @@ export class WorldScene extends Phaser.Scene {
     const affix = ELITE_AFFIXES[affixId];
     const profile = eliteArchetype(baseId, affixId);
     const tier = effectiveThreatTier(this.time.now - this.runStartedAt, zone);
-    const margin = 48;
-    const x = Phaser.Math.Clamp(point.x, margin, WORLD_WIDTH - margin);
-    const y = Phaser.Math.Clamp(point.y, margin, WORLD_HEIGHT - margin);
+    const { x, y } = clampToMap(this.getMapDef(), point.x, point.y, 48);
 
     this.elitesSpawned += 1;
     this.lastEliteAt = this.time.now;
@@ -1570,11 +1576,11 @@ export class WorldScene extends Phaser.Scene {
 
   /** Quái hộ tống của Elite `escorted`: sinh như quái thường (loot/EXP thường) nhưng không đếm vào bộ đếm Elite. */
   private spawnEliteEscort(x: number, y: number, tier: number): void {
-    const margin = 48;
+    const clamped = clampToMap(this.getMapDef(), x, y, 48);
     const escort = new Enemy(
       this,
-      Phaser.Math.Clamp(x, margin, WORLD_WIDTH - margin),
-      Phaser.Math.Clamp(y, margin, WORLD_HEIGHT - margin),
+      clamped.x,
+      clamped.y,
       tier,
       ELITE_ESCORT_ARCHETYPE,
     );
@@ -1804,7 +1810,7 @@ export class WorldScene extends Phaser.Scene {
       (first, second) => second.distance - first.distance,
     )[0];
 
-    return preferred ?? fallback ?? { ...this.town.playerSpawn };
+    return preferred ?? fallback ?? { ...resolveSceneArrival(WORLD, this.getMapId(), null).point };
   }
 
   private handleBossSlam(slam: BossSlam): void {
@@ -3509,21 +3515,19 @@ export class WorldScene extends Phaser.Scene {
     }
 
     const nearNpc = this.getNearbyNpc();
-    const portal = this.town.portal ?? null;
-    const nearPortal =
-      portal !== null &&
-      Phaser.Math.Distance.Between(
-        this.player.x,
-        this.player.y,
-        portal.x,
-        portal.y,
-      ) <= BOSS_ARENA_PORTAL_INTERACT_RADIUS;
+    const portal = nearestPortal(
+      this.town.portals,
+      this.player.x,
+      this.player.y,
+      BOSS_ARENA_PORTAL_INTERACT_RADIUS,
+    );
+    const nearPortal = portal !== null;
     const now = this.time.now;
 
     this.inputController.setPickupAvailable(
       nearestOpened !== null || nearNpc !== null || nearPortal,
     );
-    this.updatePortalCharge(now, nearPortal);
+    this.updatePortalCharge(now, portal);
 
     if (nearestOpened) {
       this.hud.setInteractPrompt(
@@ -3620,6 +3624,7 @@ export class WorldScene extends Phaser.Scene {
     }
 
     this.portalChargeStartedAt = time;
+    this.chargingPortal = portal;
 
     // Rời đi khi còn vật phẩm trên sàn: chỉ cảnh báo, không chặn.
     if (this.drops.length > 0 || this.chests.some((chest) => chest.active)) {
@@ -3628,15 +3633,16 @@ export class WorldScene extends Phaser.Scene {
   }
 
   /** Cập nhật vòng sạc: hủy nếu rời cổng/bị từ chối, đủ thời gian thì chuyển scene. */
-  private updatePortalCharge(time: number, nearPortal: boolean): void {
-    const portal = this.town.portal;
+  private updatePortalCharge(time: number, nearPortal: ScenePortal | null): void {
+    const portal = this.chargingPortal;
 
     if (this.portalChargeStartedAt === null || !portal) {
       return;
     }
 
-    if (!nearPortal || this.getPortalDeny(portal, time) !== null) {
+    if (nearPortal !== portal || this.getPortalDeny(portal, time) !== null) {
       this.portalChargeStartedAt = null;
+      this.chargingPortal = null;
       portal.visual.setCharge(0);
       return;
     }
@@ -3644,7 +3650,7 @@ export class WorldScene extends Phaser.Scene {
     const progress = getPortalChargeProgress(
       time,
       this.portalChargeStartedAt,
-      BOSS_ARENA_PORTAL_CHARGE_MS,
+      getConnectionTravelInfo(WORLD, portal.connectionId).chargeMs,
     );
 
     portal.visual.setCharge(progress);
@@ -3656,18 +3662,11 @@ export class WorldScene extends Phaser.Scene {
 
   /** Lưu tiến trình, chụp RunSession rồi mờ màn hình và stop→start sang scene đích. */
   private startPortalTravel(portal: ScenePortal, time: number): void {
-    const connection = this.getPortalConnection(portal);
-    const targetMap = findMap(WORLD, connection.to.mapId);
-
-    if (targetMap === null) {
-      throw new Error(`Không tìm thấy map đích trong WORLD: ${connection.to.mapId}`);
-    }
-
-    const fade =
-      connection.direction === 'enter' ? BOSS_ARENA_FADE_TO_ARENA : BOSS_ARENA_FADE_TO_WORLD;
+    const { connection, sceneKey, fadeColor } = getConnectionTravelInfo(WORLD, portal.connectionId);
 
     this.portalTraveling = true;
     this.portalChargeStartedAt = null;
+    this.chargingPortal = null;
     this.endSkillStatesForTravel();
     portal.visual.setCharge(0);
     portal.visual.playActivate();
@@ -3693,24 +3692,21 @@ export class WorldScene extends Phaser.Scene {
       }),
     );
 
-    const targetKey = targetMap.sceneKey;
+    const targetKey = sceneKey;
+    const arrivalConnectionId = connection.id;
     const camera = this.cameras.main;
 
     camera.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => {
-      this.scene.start(targetKey, { characterId: this.characterId });
+      this.scene.start(targetKey, { characterId: this.characterId, arrivalConnectionId });
     });
-    camera.fadeOut(BOSS_ARENA_PORTAL_FADE_MS, fade.r, fade.g, fade.b);
+    camera.fadeOut(BOSS_ARENA_PORTAL_FADE_MS, fadeColor.r, fadeColor.g, fadeColor.b);
   }
 
   private updatePortalVisual(time: number): void {
-    const portal = this.town.portal;
-
-    if (!portal) {
-      return;
+    for (const portal of this.town.portals) {
+      portal.visual.setLocked(this.isPortalLockedByBoss(portal));
+      portal.visual.update(time);
     }
-
-    portal.visual.setLocked(this.isPortalLockedByBoss(portal));
-    portal.visual.update(time);
   }
 
   // ---- Làng, vàng, ngọc ----
@@ -4035,13 +4031,8 @@ export class WorldScene extends Phaser.Scene {
     y: number,
     legendary: boolean,
   ): void {
-    const margin = WALL_THICKNESS + 24;
-    const chest = new WeaponChest(
-      this,
-      Phaser.Math.Clamp(x, margin, WORLD_WIDTH - margin),
-      Phaser.Math.Clamp(y, margin, WORLD_HEIGHT - margin),
-      legendary,
-    );
+    const clamped = clampToMap(this.getMapDef(), x, y, WALL_THICKNESS + 24);
+    const chest = new WeaponChest(this, clamped.x, clamped.y, legendary);
 
     this.chests.push(chest);
 

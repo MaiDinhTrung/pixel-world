@@ -16,6 +16,15 @@ Mẫu mục:
 
 ---
 
+### 2026-11-17 — P2: chuyển Map theo dữ liệu (cấp L, hướng (b))
+- **Quyết định (người dùng, 2026-11-17: "chọn b triển khai"):** nối `resolveArrival` (P1) vào scene; màu fade và thời gian sạc cổng lấy từ `ConnectionDef` (`fadeColor`, `chargeMs`); một Map có thể có nhiều cổng (`TownInfo.portals`); vị trí sinh quái/Elite/hộ tống/hòm kẹp theo `MapDef.size` (hướng (b), không giữ y hệt kẹp theo kích thước Map chính). Với dữ liệu hiện có không đổi gì người chơi thấy (điểm sinh Arena ± 48 nằm trong biên Arena).
+- **Lý do:** G2, G3, G5 trong `WORLD_ARCHITECTURE.md` §3.3; mở đường cho Map/cổng mới (P4).
+- **Phương án bị loại:** (a) giữ nguyên kẹp theo kích thước Map chính (giữ lỗi tiềm ẩn quái Arena có thể ra ngoài tường khi vị trí lệch biên).
+- **Ảnh hưởng:** `scenes/{WorldScene,BossArenaScene}.ts`, `world/{town,bossArena}.ts`, `world/travel.ts` (mới) + test, một dòng khoá `playerSpawn` ở `world/worldGraph.test.ts` (đổi có chủ đích, chặt hơn); `TownInfo.portal` → `portals`, `TownInfo.playerSpawn` bỏ; `BossArenaScene` bỏ ghi đè `getWorldBounds`. Brief + QA Plan: `docs/studio/lean-handoff/P2_FEATURE_BRIEF.md`. Không đụng `config/`, save, `RunSession`.
+- **Trạng thái:** đã triển khai (Developer: 5 file sửa + 2 tạo), **QA Đạt** (build, tsc, 677/677 test, phạm vi sạch, Q1–Q6 Đạt; lệch chữ tên test `worldGraph.test.ts:239` do Lead sửa sau QA, chạy lại 677/677). **Playtest P2: 13/13 Đạt, 0 Không đạt (2026-11-17; lần đầu 12/13 vì PT-05 chưa kiểm, người dùng thử lại và báo Đạt); người dùng nghiệm thu → ACCEPTED** (`docs/studio/playtests/P2_map_travel.md`). Chờ người dùng xác nhận commit (chưa commit). Chưa kiểm bằng chơi thật: fade, sạc 800 ms, điểm xuất hiện, chết ở hai map, Console. Chưa kiểm cổng thứ hai (dữ liệu chỉ có 1 cổng mỗi map).
+- **Số liệu token (subagent, thật):** Developer 97 832 tokens / 62 tool uses / 131 s; QA 53 141 / 19 / 49 s (ghi vào `lean-handoff/TOKEN_LOG.md`).
+- **Tài liệu liên quan:** `docs/studio/lean-handoff/P2_FEATURE_BRIEF.md`, `docs/WORLD_ARCHITECTURE.md` §3.3, §6
+
 ### 2026-11-17 — Lean AI Workflow: phân cấp S/M/L/XL, tiết kiệm token
 - **Quyết định (người dùng đồng ý nguyên tắc và **duyệt văn bản §12, 2026-11-17**):** (1) phân cấp S (Developer tự làm/tự kiểm), M (Developer + QA kiểm mục tiêu khi cần), L (Developer + QA độc lập), XL (Lead điều phối + Designer khi cần + Developer + QA độc lập); (2) vai trò: Lead điều phối/phạm vi/tổng hợp, Developer chịu trách nhiệm triển khai, QA kiểm độc lập trong phạm vi thay đổi, Designer chỉ gọi khi cần chuyên môn; (3) tối ưu token: không đọc lại toàn dự án, dùng chung Feature Brief + QA Plan, tuần tự khi được, không phân tích lặp, báo cáo agent ≤ 10 dòng, tối đa 2 vòng tự sửa; (4) QA dựa trên Feature Brief, tiêu chí, `git diff`, QA Plan; vẫn độc lập với nhiệm vụ lớn/rủi ro cao, không bỏ hồi quy liên quan; (5) giữ nguyên playtest-handover (§9a–9b); (6) giữ nguyên quyền hạn; (7) đo lường chỉ bằng số liệu thật, không suy đoán.
 - **Lý do:** giảm token và tránh agent đọc/phân tích lặp mà không bỏ cổng duyệt, baseline Git, kiểm phạm vi và playtest.

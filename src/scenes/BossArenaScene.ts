@@ -42,10 +42,6 @@ export class BossArenaScene extends WorldScene {
     return buildBossArena(this, this.obstacles);
   }
 
-  protected getWorldBounds(): { x: number; y: number; width: number; height: number } {
-    return { x: 0, y: 0, width: BOSS_ARENA_WIDTH, height: BOSS_ARENA_HEIGHT };
-  }
-
   /** Chừa thêm phía trên để thấy đỉnh tường Bắc (tường vẽ nhô lên). */
   protected getCameraBounds(): { x: number; y: number; width: number; height: number } {
     return {
@@ -112,34 +108,30 @@ export class BossArenaScene extends WorldScene {
 
   /** Vùng sạch quanh cổng về: quái/Boss bị đẩy ra ngoài, không bao giờ nán lại trong đó. */
   private keepEnemiesOutOfPortalZone(): void {
-    const portal = this.town.portal;
+    for (const portal of this.town.portals) {
+      for (const enemy of this.getEnemies()) {
+        if (
+          !enemy.isAlive() ||
+          !isInsidePortalSafeZone(
+            enemy.x,
+            enemy.y,
+            portal.x,
+            portal.y,
+            BOSS_ARENA_PORTAL_SAFE_RADIUS,
+          )
+        ) {
+          continue;
+        }
 
-    if (!portal) {
-      return;
-    }
+        const away = new Phaser.Math.Vector2(enemy.x - portal.x, enemy.y - portal.y);
 
-    for (const enemy of this.getEnemies()) {
-      if (
-        !enemy.isAlive() ||
-        !isInsidePortalSafeZone(
-          enemy.x,
-          enemy.y,
-          portal.x,
-          portal.y,
-          BOSS_ARENA_PORTAL_SAFE_RADIUS,
-        )
-      ) {
-        continue;
+        if (away.lengthSq() === 0) {
+          away.set(0, -1);
+        }
+
+        away.normalize().scale(BOSS_ARENA_PORTAL_REPEL_SPEED);
+        enemy.setVelocity(away.x, away.y);
       }
-
-      const away = new Phaser.Math.Vector2(enemy.x - portal.x, enemy.y - portal.y);
-
-      if (away.lengthSq() === 0) {
-        away.set(0, -1);
-      }
-
-      away.normalize().scale(BOSS_ARENA_PORTAL_REPEL_SPEED);
-      enemy.setVelocity(away.x, away.y);
     }
   }
 }

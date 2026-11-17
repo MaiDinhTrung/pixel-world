@@ -10,8 +10,11 @@ Nguồn các số bên dưới: thông báo hoàn tất của từng subagent (t
 | P0b | | QA | 69 911 | 18 | 51 s | — |
 | P1 module Region/Instance | (trước Lean; tương đương L) | Developer | 81 360 | 39 | 171 s | — |
 | P1 | | QA | 54 846 | 20 | 71 s | — |
+| P2 chuyển Map theo dữ liệu | L (Lean, brief dùng chung) | Developer | 97 832 | 62 | 131 s | — |
+| P2 | | QA | 53 141 | 19 | 49 s | — |
 
 Ghi chú:
+- P2 là nhiệm vụ đầu tiên chạy theo Lean (một Feature Brief + QA Plan dùng chung, báo cáo ≤ 10 dòng); số liệu chỉ để xem xu hướng, các gói khác kích thước nên không so trực tiếp.
 - P0b và P1 chạy theo quy trình cũ (trước §12), nên là mốc so sánh; hai gói khác kích thước nên không so trực tiếp.
 - Số của session chính (Lead) chưa có: cần người dùng cung cấp (ví dụ `/cost`) nếu muốn ghi.
 - Các lượt nghiên cứu/viết tài liệu kiến trúc (không dùng subagent) không có số liệu.

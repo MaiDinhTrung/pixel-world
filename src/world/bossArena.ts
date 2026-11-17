@@ -24,7 +24,6 @@ import {
   BOSS_ARENA_PILLAR_DIAGONAL_DISTANCE,
   BOSS_ARENA_PILLAR_RISE,
   BOSS_ARENA_PILLAR_SIZE,
-  BOSS_ARENA_PLAYER_SPAWN,
   BOSS_ARENA_RETURN_COLOR,
   BOSS_ARENA_RETURN_COLOR_CSS,
   BOSS_ARENA_RETURN_LABEL,
@@ -568,9 +567,8 @@ export function buildBossArena(
   });
 
   return {
-    playerSpawn: { ...BOSS_ARENA_PLAYER_SPAWN },
     enemySpawns: BOSS_ARENA_MINION_SPAWNS.map((point) => ({ ...point })),
     npcs: [],
-    portal,
+    portals: [portal],
   };
 }

@@ -236,12 +236,17 @@ describe('dữ liệu worldConfig', () => {
     expect(BOSS_ARENA.lighting).toBe('fixed');
   });
 
-  it('spawn mặc định của map chính là {1920, 1440} và world/town.ts đọc đúng nguồn này (chống lệch)', () => {
+  it('spawn mặc định của map chính là {1920, 1440} và town.ts/bossArena.ts không còn định nghĩa điểm xuất hiện riêng (một nguồn: MapDef.playerSpawns)', () => {
     const text = readFileSync(fileURLToPath(new URL('./town.ts', import.meta.url)), 'utf8');
 
     expect(MAIN_DEFAULT_SPAWN).toEqual({ x: 1920, y: 1440 });
     expect(STARTING_LANDS.playerSpawns.default).toEqual({ x: 1920, y: 1440 });
-    expect(/playerSpawn:\s*\{\s*\.\.\.MAIN_DEFAULT_SPAWN\s*\}/.test(text)).toBe(true);
+    expect(/playerSpawn/.test(text)).toBe(false);
+    expect(
+      /playerSpawn/.test(
+        readFileSync(fileURLToPath(new URL('./bossArena.ts', import.meta.url)), 'utf8'),
+      ),
+    ).toBe(false);
   });
 });
 

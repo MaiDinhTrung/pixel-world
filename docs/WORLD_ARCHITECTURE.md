@@ -84,10 +84,10 @@ Hiện có 2 map (`map.starting_lands`, `map.boss_arena_1`), 4 vùng (`region.vi
 | # | Phát hiện | Ghi chú |
 |---|---|---|
 | G1 | **Trùng tên "Region"**: `RegionDef` hiện là vùng chữ nhật trong map, còn Region mới là nhóm Map. | P0b giải quyết bằng đổi tên Zone |
-| G2 | **`spawnId` của connection không được dùng lúc chạy**: `create()` luôn đặt người chơi ở `town.playerSpawn`; `spawnId` chỉ được `validateWorld` kiểm. | P2 |
-| G3 | **Một cổng mỗi scene**; fade và hướng cổng đọc hằng số Arena (`BOSS_ARENA_FADE_*`), dù `ConnectionDef.fadeColor`/`chargeMs` đã có (bản sao của hằng số). | P2 |
+| G2 | **`spawnId` của connection không được dùng lúc chạy**: `create()` luôn đặt người chơi ở `town.playerSpawn`; `spawnId` chỉ được `validateWorld` kiểm. | **P2: đã triển khai, QA Đạt, chờ chơi thử** |
+| G3 | **Một cổng mỗi scene**; fade và hướng cổng đọc hằng số Arena (`BOSS_ARENA_FADE_*`), dù `ConnectionDef.fadeColor`/`chargeMs` đã có (bản sao của hằng số). | **P2: đã triển khai, QA Đạt, chờ chơi thử** |
 | G4 | **Mỗi map cần một lớp Scene** (`MapDef.sceneKey` 1:1, `getMapId()` ghi đè). | P4 |
-| G5 | **Kích thước map bị hard-code**: nhiều chỗ clamp theo `WORLD_WIDTH/HEIGHT` thay vì `MapDef.size`; chỉ Arena nhỏ hơn nên chưa lộ lỗi. | P2 |
+| G5 | **Kích thước map bị hard-code**: nhiều chỗ clamp theo `WORLD_WIDTH/HEIGHT` thay vì `MapDef.size`; chỉ Arena nhỏ hơn nên chưa lộ lỗi. | **P2: đã triển khai, QA Đạt, chờ chơi thử** |
 | G6 | **Trạng thái "Instance" nằm lẫn trong `WorldScene`** (quái, xác, drop, hòm, Boss, `spawnIndex`, bộ đếm sinh/kill theo vùng). `resetInstanceRuntimeState()` đặt lại từng trường bằng tay vì Phaser tái dùng instance scene. | P3 |
 | G7 | **`bossReady` là cờ toàn cục**, chưa gắn với `MapId`. | P3 (rủi ro đã ghi ở W0 §6) |
 | G8 | **Chưa có khái niệm Region (nhóm Map) và Instance** trong dữ liệu. | P1, P3 |
@@ -308,7 +308,7 @@ Mỗi gói đi theo `docs/studio/WORKFLOW.md`: baseline Git → Developer → QA
 | **P0a** | **Tài liệu** (`WORLD_ARCHITECTURE.md`, `DECISIONS.md`). **Đã duyệt, đã commit (aebd6bc).** | Không |
 | **P0b** (đã triển khai, QA Đạt, người dùng chơi thử 15/15 Đạt, đã commit 61335dd) | Đổi tên thuần Region → Zone trong code (type, function, biến, hằng, id chuỗi, mã lỗi, chú thích). **Không đổi tên file.** | Không |
 | **P1** (đã triển khai, QA Đạt, người dùng chơi thử 7/7 PASS, **ACCEPTED** 2026-11-17; chờ xác nhận commit) | Mô hình tĩnh Region/Instance + module thuần (`instance.ts`, `localInstanceAllocator.ts`, `arrival.ts`), chưa nối vào game | Không |
-| **P2** | Đường chuyển Map đúng nghĩa: `spawnId` thật, nhiều cổng/map, fade/chargeMs đọc từ connection, kẹp theo `MapDef.size` | Y hệt |
+| **P2** (đã triển khai, QA Đạt, playtest 13/13 Đạt, **ACCEPTED** 2026-11-17; chờ xác nhận commit) | Đường chuyển Map đúng nghĩa: `spawnId` thật, nhiều cổng/map, fade/chargeMs đọc từ connection, kẹp theo `MapDef.size` | Y hệt |
 | **P3** | `InstanceRuntime` + `LocalInstanceAllocator` nối vào game; tách `RunSession` theo lớp; `TravelTicket` thay kênh registry; **`DifficultyClock` với cài đặt `RunSessionClock`** (đồng hồ ở lại `RunSession`, Q1 = a) + test bảo toàn công thức (§5.4) | Y hệt |
 | **P4** | `MapScene` chung + registry builder; thêm Map/Region thứ hai để kiểm chứng | **Có nội dung mới** (cần thiết kế riêng; D3 hiện nói chưa thêm bản đồ mới) |
 | **P5** | Chuẩn bị MMO: RNG/Clock tiêm được, lớp lệnh, mô phỏng headless (theo `DATA_ARCHITECTURE.md` §5) | — |

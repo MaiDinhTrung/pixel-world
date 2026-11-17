@@ -11,7 +11,7 @@ import {
 import { VILLAGE_MARKER } from '../config/atmosphereConfig';
 import { TEXTURE_KEYS, WORLD_HEIGHT, WORLD_WIDTH } from '../config/constants';
 import { VILLAGE_NPCS, VILLAGE_ZONE } from '../config/economyConfig';
-import { CONN_VILLAGE_TO_ARENA, MAIN_DEFAULT_SPAWN } from '../config/worldConfig';
+import { CONN_VILLAGE_TO_ARENA } from '../config/worldConfig';
 import { VILLAGE_VILLAGERS } from '../config/villageConfig';
 import { Npc } from '../entities/Npc';
 import { Villager } from '../entities/Villager';
@@ -54,12 +54,11 @@ interface DecorSpec {
 }
 
 export interface TownInfo {
-  playerSpawn: { x: number; y: number };
   enemySpawns: { x: number; y: number }[];
   /** NPC tương tác trong làng (thương nhân, thợ rèn, trưởng làng). */
   npcs: Npc[];
-  /** Cổng dịch chuyển trong map (cổng vào Đấu Trường ở map chính; cổng về ở Arena). */
-  portal?: ScenePortal;
+  /** Các cổng dịch chuyển trong map (map chính: cổng vào Đấu Trường; Arena: cổng về). */
+  portals: ScenePortal[];
 }
 
 const BUILDINGS: readonly BuildingSpec[] = [
@@ -526,9 +525,8 @@ export function buildTown(
   });
 
   return {
-    playerSpawn: { ...MAIN_DEFAULT_SPAWN },
     enemySpawns: ENEMY_SPAWNS.map((point) => ({ ...point })),
     npcs,
-    portal,
+    portals: [portal],
   };
 }
