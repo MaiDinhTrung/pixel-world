@@ -121,7 +121,7 @@ export class CharacterPanelScene extends Phaser.Scene {
     super(SCENE_KEYS.characterPanel);
   }
 
-  /** Key scene thế giới đã mở panel (WorldScene hoặc BossArenaScene). */
+  /** Key scene thế giới đã mở panel (WorldScene, scene map duy nhất). */
   private worldKey: string = SCENE_KEYS.world;
 
   init(data?: { tab?: PanelTab; worldKey?: string }): void {

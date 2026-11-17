@@ -22,6 +22,9 @@ Nguồn các số bên dưới: thông báo hoàn tất của từng subagent (t
 | P3c-2 | | QA | 48 673 | 21 | 53 s | — |
 | P3d Dọn nợ kỹ thuật sau P3 | L (Lean, brief dùng chung) | Developer | 64 482 | 47 | 142 s | — |
 | P3d | | QA | 50 211 | 19 | 57 s | — |
+| P4a Một scene map chung | L (Lean, brief dùng chung) | Developer | 134 002 | 84 | 268 s | — |
+| P4a | | QA | 96 123 | 44 | 142 s | — |
+| Sửa kiếm vùng an toàn theo Map | L (Lead tự sửa) | QA | 48 769 | 21 | 64 s | — |
 | P4 khảo sát thiết kế | — | Gameplay Designer | 62 719 | 23 | 116 s | — |
 | P4 khảo sát thiết kế | | Visual Designer | 40 369 | 10 | 55 s | — |
 

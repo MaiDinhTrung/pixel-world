@@ -2,7 +2,7 @@ import { NPC_INTERACT_RADIUS } from './economyConfig';
 import { NEON } from './palette';
 
 /**
- * Đấu Trường Boss (`scenes/BossArenaScene.ts`): cổng dịch chuyển, kích thước, bố cục, ánh sáng,
+ * Đấu Trường Boss (Map `map.boss_arena_1`, dựng bởi `world/bossArena.ts`, chạy trong `WorldScene`): cổng dịch chuyển, kích thước, bố cục, ánh sáng,
  * quái con. Số liệu của chính Boss (`BOSS_*`) vẫn ở `combatConfig.ts`, không lặp ở đây.
  * Tất cả là giá trị khởi điểm, chỉnh sau khi chơi thử.
  */

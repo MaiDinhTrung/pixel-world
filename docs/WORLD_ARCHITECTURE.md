@@ -43,7 +43,7 @@ Văn bản hiển thị cho người chơi (ví dụ "Đồng Hoang Úa", chữ 
 | W-A6 | Single-player dùng `LocalInstanceAllocator` qua cùng interface với allocator MMO sau này. | Đã chốt |
 | W-A7 | Region hiện tại đổi thành **Zone** (chọn Zone, không chọn Area). | Đã chốt |
 | W-A8 | Giữ D5: không lưu map hiện tại vào save. | Giữ (D5, `WORLD_MAP_DESIGN.md`) |
-| W-A9 | Một `MapScene` chung + `builderId` thay cho "mỗi map một lớp Scene" (làm ở P4). | Đề xuất, chưa duyệt riêng |
+| W-A9 | Một `MapScene` chung + `builderId` thay cho "mỗi map một lớp Scene" (làm ở P4). | **Đã duyệt (2026-11-17), triển khai ở P4a** giữ tên lớp `WorldScene` (một scene chung, registry `world/mapBuilders.ts`) |
 | W-A10 | Phân tầng trạng thái Character / RunSession / Instance (mục 5). | Người dùng đã đồng ý; vài điểm còn [?] |
 | W-A11 | P0 chỉ đổi **tên type, function, biến, hằng và tham chiếu** Region → Zone; **không đổi tên file** (ba file `regionTracker.ts`, `regionTracker.test.ts`, `ui/RegionBanner.ts` giữ tên cũ trong P0). Việc đổi tên file sẽ xem xét trong **gói riêng, do Lead thực hiện và kiểm tra Git** (Q7). | Người dùng đã chốt (phương án b; Q7) |
 | W-A12 | **Đồng hồ lượt chơi ở lại `RunSession`** ở giai đoạn hiện tại (`runStartedAt`, `nextBossAt`, `bossNumber`, `bossReady`, và `bossWarningShown` đi cùng). Thiết kế interface **`DifficultyClock`** để tách *logic dùng đồng hồ* khỏi *nơi lưu*. **Chưa chuyển sang Instance.** Ghi nhận khả năng chuyển sang Instance trong kiến trúc Multiplayer tương lai. Phải bảo toàn hành vi và công thức hiện tại (§5.4). | Người dùng đã chốt (Q1 = a) |
@@ -86,7 +86,7 @@ Hiện có 2 map (`map.starting_lands`, `map.boss_arena_1`), 4 vùng (`region.vi
 | G1 | **Trùng tên "Region"**: `RegionDef` hiện là vùng chữ nhật trong map, còn Region mới là nhóm Map. | P0b giải quyết bằng đổi tên Zone |
 | G2 | **`spawnId` của connection không được dùng lúc chạy**: `create()` luôn đặt người chơi ở `town.playerSpawn`; `spawnId` chỉ được `validateWorld` kiểm. | **P2: đã triển khai, QA Đạt, chờ chơi thử** |
 | G3 | **Một cổng mỗi scene**; fade và hướng cổng đọc hằng số Arena (`BOSS_ARENA_FADE_*`), dù `ConnectionDef.fadeColor`/`chargeMs` đã có (bản sao của hằng số). | **P2: đã triển khai, QA Đạt, chờ chơi thử** |
-| G4 | **Mỗi map cần một lớp Scene** (`MapDef.sceneKey` 1:1, `getMapId()` ghi đè). | P4 |
+| G4 | **Mỗi map cần một lớp Scene** (`MapDef.sceneKey` 1:1, `getMapId()` ghi đè). | **Đã giải quyết ở P4a** (một scene, `mapId` qua `init`) |
 | G5 | **Kích thước map bị hard-code**: nhiều chỗ clamp theo `WORLD_WIDTH/HEIGHT` thay vì `MapDef.size`; chỉ Arena nhỏ hơn nên chưa lộ lỗi. | **P2: đã triển khai, QA Đạt, chờ chơi thử** |
 | G6 | **Trạng thái "Instance" nằm lẫn trong `WorldScene`** (quái, xác, drop, hòm, Boss, `spawnIndex`, bộ đếm sinh/kill theo vùng). `resetInstanceRuntimeState()` đặt lại từng trường bằng tay vì Phaser tái dùng instance scene. | P3 |
 | G7 | **`bossReady` là cờ toàn cục**, chưa gắn với `MapId`. | P3 (rủi ro đã ghi ở W0 §6) |

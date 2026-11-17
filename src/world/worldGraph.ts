@@ -2,7 +2,7 @@
  * Mô hình World/Map/Zone (Region nhóm Map sẽ thêm ở gói sau; xem docs/WORLD_ARCHITECTURE.md) THUẦN (Gói W1, docs/WORLD_MAP_DESIGN.md §3): kiểu dữ liệu, tra cứu vùng,
  * luật khóa cổng, thời gian → bậc độ khó theo vùng, kiểm tra dữ liệu.
  *
- * ĐÃ NỐI (W2): WorldScene/BossArenaScene đọc cổng, đích, khóa cổng và bậc thời gian từ đây. W3: bậc theo vùng của
+ * ĐÃ NỐI (W2): WorldScene (P4a: một scene cho mọi Map) đọc cổng, đích, khóa cổng và bậc thời gian từ đây. W3: bậc theo vùng của
  * điểm sinh (`zoneAt` + `effectiveThreatTier`) và biển tên vùng (`ZoneDef.display`). Không phụ thuộc Phaser,
  * không ngẫu nhiên, không đọc thời gian hệ thống. Dữ liệu cụ thể ở `config/worldConfig.ts`.
  */

@@ -1,6 +1,6 @@
 /**
  * Dữ liệu World/Map/Zone (Region nhóm Map sẽ thêm ở gói sau; xem docs/WORLD_ARCHITECTURE.md) (Gói W1, docs/WORLD_MAP_DESIGN.md): mô tả ĐÚNG hai bản đồ hiện có.
- * ĐÃ NỐI (W2): WorldScene/BossArenaScene/town/bossArena đọc id, đích và luật cổng từ đây. Chỉ THAM CHIẾU
+ * ĐÃ NỐI (W2; P4a: một scene WorldScene cho mọi Map): WorldScene/town/bossArena đọc id, đích và luật cổng từ đây. Chỉ THAM CHIẾU
  * hằng số có sẵn, không sao chép số (MAIN_DEFAULT_SPAWN là nguồn thật, xem chú thích bên dưới).
  */
 import type {
@@ -215,7 +215,7 @@ const BOSS_ARENA_1: MapDef = {
   id: MAP_BOSS_ARENA_1,
   regionId: REGION_STARTING,
   builderId: 'boss_arena',
-  sceneKey: SCENE_KEYS.bossArena,
+  sceneKey: SCENE_KEYS.world,
   size: { width: BOSS_ARENA_WIDTH, height: BOSS_ARENA_HEIGHT },
   kind: 'boss',
   lighting: 'fixed',
@@ -260,7 +260,7 @@ const BOSS_ARENA_1: MapDef = {
       },
     },
   ],
-  // Chết ở Arena: BossArenaScene.restartRun → về WorldScene (làng), D6.
+  // Chết ở Arena: WorldScene.restartRun → lượt mới ở map chính (làng), D6.
   deathRespawn: { mapId: MAP_STARTING_LANDS, spawnId: 'default' },
 };
 

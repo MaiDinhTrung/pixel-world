@@ -1,7 +1,6 @@
 import Phaser from 'phaser';
 
 import { SWORD_DAMAGE } from '../config/combatConfig';
-import { isInsideVillage } from '../config/economyConfig';
 import {
   SWORD_CHAIN_CORRIDOR_HALF_WIDTH_PX,
   SWORD_CHAIN_DASH_MS,
@@ -66,6 +65,8 @@ export class SwordWeapon implements Weapon {
   private readonly scene: Phaser.Scene;
   private readonly player: Player;
   private readonly getEnemies: () => EnemyBase[];
+  /** Điểm có thuộc vùng an toàn của Map hiện tại không (scene cung cấp; không dùng toạ độ làng cứng). */
+  private readonly isSafePoint: (x: number, y: number) => boolean;
   private readonly sprite: Phaser.GameObjects.Image;
   private readonly arcs: Phaser.GameObjects.Graphics[] = [];
   private readonly arcTweens: (Phaser.Tweens.Tween | null)[] = [];
@@ -80,10 +81,16 @@ export class SwordWeapon implements Weapon {
   private chainAngle = 0;
   private readonly blockers: Point[] = [];
 
-  constructor(scene: Phaser.Scene, player: Player, getEnemies: () => EnemyBase[]) {
+  constructor(
+    scene: Phaser.Scene,
+    player: Player,
+    getEnemies: () => EnemyBase[],
+    isSafePoint: (x: number, y: number) => boolean,
+  ) {
     this.scene = scene;
     this.player = player;
     this.getEnemies = getEnemies;
+    this.isSafePoint = isSafePoint;
 
     this.sprite = createWeaponImage(scene, 'sword', player.x, player.y);
 
@@ -127,7 +134,7 @@ export class SwordWeapon implements Weapon {
       (this.queue.length > 0 || this.chainActive) &&
       (this.player.isDead() ||
         this.player.isLeaping() ||
-        isInsideVillage(this.player.x, this.player.y))
+        this.isSafePoint(this.player.x, this.player.y))
     ) {
       this.cancelAll();
       return;

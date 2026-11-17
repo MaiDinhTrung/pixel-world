@@ -28,7 +28,7 @@ describe('getConnectionTravelInfo', () => {
   it('vào Arena: scene, màu fade, thời gian sạc lấy từ dữ liệu', () => {
     const info = getConnectionTravelInfo(WORLD, CONN_VILLAGE_TO_ARENA);
 
-    expect(info.sceneKey).toBe(SCENE_KEYS.bossArena);
+    expect(info.sceneKey).toBe(SCENE_KEYS.world);
     expect(info.targetMap.id).toBe(MAP_BOSS_ARENA_1);
     expect(info.fadeColor).toEqual(BOSS_ARENA_FADE_TO_ARENA);
     expect(info.chargeMs).toBe(BOSS_ARENA_PORTAL_CHARGE_MS);

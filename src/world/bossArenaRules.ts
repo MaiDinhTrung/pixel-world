@@ -8,7 +8,7 @@
 export type BossTickAction = 'none' | 'warn' | 'mark_ready' | 'spawn';
 
 export interface BossTickInput {
-  /** true = đang ở BossArenaScene. Chỉ khi true mới được 'spawn'. */
+  /** true = đang ở Map loại 'boss' (Đấu Trường). Chỉ khi true mới được 'spawn'. */
   inArena: boolean;
   now: number;
   nextBossAt: number;

@@ -23,8 +23,7 @@ export const SCENE_KEYS = {
   preload: 'PreloadScene', // nạp tài nguyên + hiện thanh tải
   menu: 'MainMenuScene', // menu chính
   characterSelect: 'CharacterSelectScene', // chọn nhân vật
-  world: 'WorldScene', // màn chơi chính
-  bossArena: 'BossArenaScene', // đấu trường Boss (scene riêng, kế thừa WorldScene)
+  world: 'WorldScene', // scene map duy nhất: mọi Map (làng, Đấu Trường Boss) chạy ở đây theo dữ liệu
   characterPanel: 'CharacterPanelScene', // bảng nhân vật (chỉ số, túi đồ, cây kỹ năng...)
   levelUp: 'LevelUpScene', // chọn buff khi lên cấp
   villageShop: 'VillageShopScene', // cửa hàng làng (thương nhân / thợ rèn)

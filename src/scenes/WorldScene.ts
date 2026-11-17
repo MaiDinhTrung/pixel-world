@@ -92,7 +92,6 @@ import {
   NPC_INTERACT_RADIUS,
   VILLAGE_REPEL_SPEED,
   VILLAGE_ZONE,
-  isInsideVillage,
   type NpcRole,
 } from '../config/economyConfig';
 import {
@@ -202,12 +201,15 @@ import { isTouchDevice } from '../utils/device';
 import { isPerfOverlayEnabled, PerfOverlay } from '../utils/perfOverlay';
 import { createDayNightToggle } from '../ui/DayNightToggle';
 import { createAtmosphere } from '../vfx/atmosphere';
-import { buildTown, type TownInfo } from '../world/town';
+import type { TownInfo } from '../world/town';
+import { getMapBuilder, type MapBuilder } from '../world/mapBuilders';
 import type { ScenePortal } from '../world/portal';
 import {
   decideBossAction,
   getPortalChargeProgress,
+  isInsidePortalSafeZone,
   isPortalDenyToastWorthy,
+  shouldSpawnArenaMinions,
   type PortalDenyReason,
 } from '../world/bossArenaRules';
 import {
@@ -265,6 +267,8 @@ import {
   BOSS_ARENA_PORTAL_EXTRA_INVULNERABLE_MS,
   BOSS_ARENA_PORTAL_FADE_MS,
   BOSS_ARENA_PORTAL_INTERACT_RADIUS,
+  BOSS_ARENA_PORTAL_REPEL_SPEED,
+  BOSS_ARENA_PORTAL_SAFE_RADIUS,
   BOSS_ARENA_PORTAL_TOAST_COOLDOWN_MS,
 } from '../config/bossArenaConfig';
 import {
@@ -412,7 +416,8 @@ export class WorldScene extends Phaser.Scene {
   private drops: LootDrop[] = [];
   private gemBonuses: GemBonuses = createEmptyGemBonuses();
   private lifestealCarry = 0;
-  private readonly darkLeech = new LeechLimiter();
+  /** Tạo mới ở mỗi create() (P4a: một scene phục vụ mọi Map, không mang phần dư hút máu sang Map khác). */
+  private darkLeech = new LeechLimiter();
   private nextGemEnergyAt = 0;
   private insideVillage = false;
   /** Biển tên vùng (W3): chỉ có ở map overworld; null ở Arena. */
@@ -477,24 +482,27 @@ export class WorldScene extends Phaser.Scene {
   private readonly fearReadyAt = new WeakMap<EnemyBase, number>();
   private nextMomentumAt = 0;
 
-  constructor(key: string = SCENE_KEYS.world) {
-    super(key);
+  /** Map đang hiển thị (P4a): một scene phục vụ mọi Map; đặt lại MỖI lần init từ `data.mapId`. */
+  private mapId: MapId = MAP_STARTING_LANDS;
+
+  constructor() {
+    super(SCENE_KEYS.world);
   }
 
-  // ---- Điểm ghi đè cho BossArenaScene (mặc định = map chính) ----
+  // ---- Khác biệt theo Map: đọc từ dữ liệu MapDef + hồ sơ builder (P4a) ----
 
-  /** true ở BossArenaScene: chỉ ở đó Boss mới được sinh. */
-  protected get inBossArena(): boolean {
-    return false;
+  /** true ở Map loại 'boss' (Đấu Trường): chỉ ở đó Boss mới được sinh. */
+  private get inBossArena(): boolean {
+    return this.getMapDef().kind === 'boss';
   }
 
-  /** Id map (dữ liệu `config/worldConfig.ts`) mà scene này hiển thị; scene con ghi đè. */
-  protected getMapId(): MapId {
-    return MAP_STARTING_LANDS;
+  /** Id map (dữ liệu `config/worldConfig.ts`) mà scene đang hiển thị. */
+  private getMapId(): MapId {
+    return this.mapId;
   }
 
   /** MapDef của scene hiện tại (dữ liệu hợp lệ đã được test khóa; thiếu = lỗi lập trình). */
-  protected getMapDef(): MapDef {
+  private getMapDef(): MapDef {
     const map = findMap(WORLD, this.getMapId());
 
     if (map === null) {
@@ -514,55 +522,91 @@ export class WorldScene extends Phaser.Scene {
     return connection;
   }
 
+  /** Hồ sơ builder của Map hiện tại (`MapDef.builderId` → `world/mapBuilders.ts`). */
+  private getMapBuilderProfile(): MapBuilder {
+    return getMapBuilder(this.getMapDef().builderId);
+  }
+
   /** Dựng bản đồ và trả thông tin điểm sinh/NPC/cổng. */
-  protected buildMap(): TownInfo {
-    return buildTown(this, this.obstacles);
+  private buildMap(): TownInfo {
+    return this.getMapBuilderProfile().build(this, this.obstacles);
   }
 
   /** Khung thế giới vật lý (trước khi trừ tường biên). */
-  protected getWorldBounds(): { x: number; y: number; width: number; height: number } {
+  private getWorldBounds(): { x: number; y: number; width: number; height: number } {
     const { width, height } = this.getMapDef().size;
 
     return { x: 0, y: 0, width, height };
   }
 
-  protected getCameraBounds(): { x: number; y: number; width: number; height: number } {
-    return this.getWorldBounds();
+  /** Khung camera: hồ sơ builder (Arena chừa đỉnh tường Bắc), không có = khung thế giới. */
+  private getCameraBounds(): { x: number; y: number; width: number; height: number } {
+    return this.getMapBuilderProfile().cameraBounds ?? this.getWorldBounds();
   }
 
-  /** Ánh sáng/không khí của map (map chính: chu kỳ ngày/đêm). */
-  protected createLighting(): void {
-    createAtmosphere(this, this.player);
+  /** Ánh sáng/không khí: 'day_night' = chu kỳ ngày/đêm; 'fixed' = ánh sáng cố định đã dựng trong builder. */
+  private createLighting(): void {
+    if (this.getMapDef().lighting === 'day_night') {
+      createAtmosphere(this, this.player);
+    }
   }
 
-  /** Nút/phím đổi ngày-đêm (Arena không có). */
-  protected createDayNightControl(): void {
-    createDayNightToggle(this);
+  /** Nút/phím đổi ngày-đêm: chỉ ở Map có chu kỳ ngày/đêm (Arena không có). */
+  private createDayNightControl(): void {
+    if (this.getMapDef().lighting === 'day_night') {
+      createDayNightToggle(this);
+    }
   }
 
-  /** Điểm có thuộc khu an toàn (làng) không. Arena luôn false. */
-  protected isSafeZonePoint(x: number, y: number): boolean {
-    return isInsideVillage(x, y);
+  /** Điểm có thuộc vùng an toàn (`zones[].safe`, biên tính cả cạnh) không. Arena không có vùng safe. */
+  private isSafeZonePoint(x: number, y: number): boolean {
+    return zoneAt(this.getMapDef(), x, y)?.safe === true;
   }
 
-  /** Số quái sinh sẵn lúc vào scene. */
-  protected getInitialEnemyCount(): number {
-    return ENEMY_MAX_ALIVE;
+  /** Số quái sinh sẵn lúc vào scene (Arena trống lúc vào; quái con chỉ sinh theo `canSpawnEnemies`). */
+  private getInitialEnemyCount(): number {
+    return this.inBossArena ? 0 : ENEMY_MAX_ALIVE;
   }
 
   /** Luật cho phép sinh quái ở frame này. */
-  protected canSpawnEnemies(_time: number): boolean {
+  private canSpawnEnemies(time: number): boolean {
+    if (this.inBossArena) {
+      return shouldSpawnArenaMinions({
+        inArena: true,
+        bossNumber: this.clock.bossNumber,
+        bossAlive: this.boss !== null,
+        bossReady: this.clock.bossReady,
+        now: time,
+        nextBossAt: this.clock.nextBossAt,
+      });
+    }
+
     return this.boss === null;
   }
 
-  protected getMaxAliveEnemies(tier: number): number {
-    return Math.min(MAX_ALIVE_CAP, ENEMY_MAX_ALIVE + tier * THREAT_ALIVE_BONUS);
+  /** Trần quái sống theo bậc, rồi kẹp theo mọi `zones[].maxAliveCap` khác null của Map. */
+  private getMaxAliveEnemies(tier: number): number {
+    let max = Math.min(MAX_ALIVE_CAP, ENEMY_MAX_ALIVE + tier * THREAT_ALIVE_BONUS);
+
+    for (const zone of this.getMapDef().zones) {
+      if (zone.maxAliveCap !== null) {
+        max = Math.min(max, zone.maxAliveCap);
+      }
+    }
+
+    return max;
   }
 
-  /** Chơi lại sau khi chết. */
-  protected restartRun(): void {
-    // Data tường minh: Phaser giữ data của lần start trước nếu không truyền, nên không có `run`/`arrivalConnectionId` = lượt mới.
-    this.scene.restart({ characterId: this.characterId });
+  /** Chơi lại sau khi chết: lượt mới ở Map `deathRespawn` (map chính: chính nó; Arena: về map chính). */
+  private restartRun(): void {
+    const respawnMap = findMap(WORLD, this.getMapDef().deathRespawn.mapId);
+
+    if (respawnMap === null) {
+      throw new Error(`deathRespawn của map ${this.getMapId()} trỏ tới map không tồn tại`);
+    }
+
+    // Data tường minh: Phaser giữ data của lần start trước nếu không truyền, nên không có ticket/clock/arrival = lượt mới.
+    this.scene.restart({ characterId: this.characterId, mapId: respawnMap.id });
   }
 
   /**
@@ -620,10 +664,17 @@ export class WorldScene extends Phaser.Scene {
     arrivalConnectionId?: ConnectionId;
     ticket?: unknown;
     clock?: unknown;
+    mapId?: unknown;
   }): void {
     if (data?.characterId && isCharacterId(data.characterId)) {
       this.characterId = data.characterId;
     }
+
+    // P4a: Map do dữ liệu quyết định, đặt lại MỖI lần init; thiếu/không hợp lệ → map chính.
+    const requestedMap =
+      typeof data?.mapId === 'string' ? findMap(WORLD, data.mapId as MapId) : null;
+
+    this.mapId = requestedMap !== null ? requestedMap.id : MAP_STARTING_LANDS;
 
     // Đặt lại MỖI lần init: scene được tái dùng instance, và restart không truyền data sẽ giữ data cũ của
     // lần start trước (Phaser không ghi đè), nên restartRun() truyền data tường minh để thiếu ticket/arrival = lượt mới.
@@ -642,6 +693,7 @@ export class WorldScene extends Phaser.Scene {
     this.chests = [];
     this.drops = [];
     this.lifestealCarry = 0;
+    this.darkLeech = new LeechLimiter();
     this.insideVillage = false;
     this.lootDirty = false;
     this.resetPlayerRuntimeState();
@@ -1197,6 +1249,39 @@ export class WorldScene extends Phaser.Scene {
       this.getThreatTier(time),
       this.getBossHudText(time),
     );
+
+    if (this.getMapDef().kind === 'boss') {
+      this.keepEnemiesOutOfPortalZone();
+    }
+  }
+
+  /** Arena: vùng sạch quanh cổng về; quái/Boss bị đẩy ra ngoài, không bao giờ nán lại trong đó. */
+  private keepEnemiesOutOfPortalZone(): void {
+    for (const portal of this.town.portals) {
+      for (const enemy of this.getEnemies()) {
+        if (
+          !enemy.isAlive() ||
+          !isInsidePortalSafeZone(
+            enemy.x,
+            enemy.y,
+            portal.x,
+            portal.y,
+            BOSS_ARENA_PORTAL_SAFE_RADIUS,
+          )
+        ) {
+          continue;
+        }
+
+        const away = new Phaser.Math.Vector2(enemy.x - portal.x, enemy.y - portal.y);
+
+        if (away.lengthSq() === 0) {
+          away.set(0, -1);
+        }
+
+        away.normalize().scale(BOSS_ARENA_PORTAL_REPEL_SPEED);
+        enemy.setVelocity(away.x, away.y);
+      }
+    }
   }
 
   private createCombat(): void {
@@ -1702,7 +1787,7 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private spawnBoss(): void {
-    // Chốt chặn cuối: Boss chỉ tồn tại trong BossArenaScene.
+    // Chốt chặn cuối: Boss chỉ tồn tại ở Map loại 'boss' (Đấu Trường).
     if (!this.inBossArena || this.boss) {
       return;
     }
@@ -1788,7 +1873,14 @@ export class WorldScene extends Phaser.Scene {
     }
   }
 
-  protected getBossSpawnPoint(): { x: number; y: number } {
+  /** Điểm sinh Boss: điểm cố định của hồ sơ builder (bản sao) nếu có, ngược lại chọn trong điểm sinh quái. */
+  private getBossSpawnPoint(): { x: number; y: number } {
+    const fixed = this.getMapBuilderProfile().bossSpawnPoint;
+
+    if (fixed) {
+      return { ...fixed };
+    }
+
     const options = this.town.enemySpawns.map((point) => ({
       ...point,
       distance: Phaser.Math.Distance.Between(
@@ -3692,6 +3784,7 @@ export class WorldScene extends Phaser.Scene {
       },
       carry: run.carry,
     });
+    // Mọi Map dùng chung scene `WorldScene` (sceneKey từ dữ liệu); Map đích truyền qua `mapId`.
     const targetKey = sceneKey;
     const arrivalConnectionId = connection.id;
     const camera = this.cameras.main;
@@ -3699,6 +3792,7 @@ export class WorldScene extends Phaser.Scene {
     camera.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => {
       this.scene.start(targetKey, {
         characterId: this.characterId,
+        mapId: targetMap.id,
         arrivalConnectionId,
         ticket,
         clock: run.clock,
@@ -4134,7 +4228,12 @@ export class WorldScene extends Phaser.Scene {
   private createWeaponById(id: WeaponId): Weapon {
     switch (id) {
       case 'sword':
-        return new SwordWeapon(this, this.player, () => this.getEnemies());
+        return new SwordWeapon(
+          this,
+          this.player,
+          () => this.getEnemies(),
+          (x, y) => this.isSafeZonePoint(x, y),
+        );
       case 'shield':
         return new ShieldWeapon(this, this.player, () => this.getEnemies());
       case 'blaster':
