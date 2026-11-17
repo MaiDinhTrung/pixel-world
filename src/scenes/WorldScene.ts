@@ -272,6 +272,13 @@ import {
   newRunClockState,
   type DifficultyClock,
 } from '../progression/difficultyClock';
+import { getGameInstances } from '../systems/gameInstances';
+import {
+  createTravelTicket,
+  isTravelTicket,
+  type InstanceRef,
+  type TravelTicket,
+} from '../world/instance';
 import {
   applyRunSessionToPlayer,
   captureRunSession,
@@ -427,6 +434,10 @@ export class WorldScene extends Phaser.Scene {
   /** Connection người chơi vừa đi qua để vào scene này (null = vào thẳng/hồi sinh). */
   private arrivalConnectionId: ConnectionId | null = null;
   private incomingRun: RunSession | null = null;
+  /** Vé đi cổng đưa người chơi vào scene này (null = lượt mới). */
+  private incomingTicket: TravelTicket | null = null;
+  /** Instance người chơi đang giữ trong scene này (cấp ở create, trả ở SHUTDOWN). */
+  private instanceRef: InstanceRef | null = null;
   private portalTraveling = false;
   /** Đã báo lỗi cầu nối save v8 trong lần vào scene này (reset ở create). */
   private saveBridgeFailureToasted = false;
@@ -598,15 +609,24 @@ export class WorldScene extends Phaser.Scene {
     this.player.setImmobilized(false);
   }
 
-  init(data?: { characterId?: string; arrivalConnectionId?: ConnectionId; run?: unknown }): void {
+  init(data?: {
+    characterId?: string;
+    arrivalConnectionId?: ConnectionId;
+    ticket?: unknown;
+    clock?: unknown;
+  }): void {
     if (data?.characterId && isCharacterId(data.characterId)) {
       this.characterId = data.characterId;
     }
 
     // Đặt lại MỖI lần init: scene được tái dùng instance, và restart không truyền data sẽ giữ data cũ của
-    // lần start trước (Phaser không ghi đè), nên restartRun() truyền data tường minh để thiếu run/arrival = lượt mới.
+    // lần start trước (Phaser không ghi đè), nên restartRun() truyền data tường minh để thiếu ticket/arrival = lượt mới.
     this.arrivalConnectionId = data?.arrivalConnectionId ?? null;
-    this.incomingRun = isRunSession(data?.run) ? data.run : null;
+    this.incomingTicket = isTravelTicket(data?.ticket) ? data.ticket : null;
+
+    const run = this.incomingTicket ? { carry: this.incomingTicket.carry, clock: data?.clock } : null;
+
+    this.incomingRun = isRunSession(run) ? run : null;
   }
 
   create(): void {
@@ -649,6 +669,11 @@ export class WorldScene extends Phaser.Scene {
     const restored = this.incomingRun;
     const arrival = resolveSceneArrival(WORLD, this.getMapId(), this.arrivalConnectionId);
 
+    this.instanceRef = getGameInstances(this.game).resolve(
+      this.getMapId(),
+      this.characterId,
+      this.incomingTicket?.to.instance ?? null,
+    );
     this.arenaEntryAt = this.inBossArena ? startNow : null;
     this.portalTraveling = false;
     this.portalChargeStartedAt = null;
@@ -738,6 +763,11 @@ export class WorldScene extends Phaser.Scene {
       this.zoneBanner?.destroy();
       this.zoneBanner = null;
       this.zoneTracker = null;
+
+      if (this.instanceRef) {
+        getGameInstances(this.game).leave(this.instanceRef, this.characterId);
+        this.instanceRef = null;
+      }
     });
 
     // Một nguồn lưu (C4): đọc thẳng save v8; PlayerState nạp kho đồ (lọc vũ khí ngoài lớp,
@@ -3623,7 +3653,7 @@ export class WorldScene extends Phaser.Scene {
 
   /** Lưu tiến trình, chụp RunSession rồi mờ màn hình và stop→start sang scene đích. */
   private startPortalTravel(portal: ScenePortal, time: number): void {
-    const { connection, sceneKey, fadeColor } = getConnectionTravelInfo(WORLD, portal.connectionId);
+    const { connection, targetMap, sceneKey, fadeColor } = getConnectionTravelInfo(WORLD, portal.connectionId);
 
     this.portalTraveling = true;
     this.portalChargeStartedAt = null;
@@ -3646,12 +3676,27 @@ export class WorldScene extends Phaser.Scene {
       clock: this.clock.snapshot(),
     });
 
+    const move = getGameInstances(this.game).moveTo(targetMap.id, this.characterId);
+    const ticket = createTravelTicket({
+      characterUid: this.characterId,
+      from: move.from,
+      to: {
+        instance: move.to,
+        spawnPoint: resolveSceneArrival(WORLD, targetMap.id, connection.id).point,
+      },
+      carry: run.carry,
+    });
     const targetKey = sceneKey;
     const arrivalConnectionId = connection.id;
     const camera = this.cameras.main;
 
     camera.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => {
-      this.scene.start(targetKey, { characterId: this.characterId, arrivalConnectionId, run });
+      this.scene.start(targetKey, {
+        characterId: this.characterId,
+        arrivalConnectionId,
+        ticket,
+        clock: run.clock,
+      });
     });
     camera.fadeOut(BOSS_ARENA_PORTAL_FADE_MS, fadeColor.r, fadeColor.g, fadeColor.b);
   }

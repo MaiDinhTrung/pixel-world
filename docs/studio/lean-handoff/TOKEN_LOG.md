@@ -18,6 +18,8 @@ Nguồn các số bên dưới: thông báo hoàn tất của từng subagent (t
 | P3b | | QA | 48 043 | 15 | 39 s | — |
 | P3c-1 InstanceGameplayState | L (Lean, brief dùng chung) | Developer | 47 575 | 44 | 103 s | — |
 | P3c-1 | | QA | 41 499 | 13 | 38 s | — |
+| P3c-2 Instance cục bộ + TravelTicket | L (Lean, brief dùng chung) | Developer | 65 346 | 41 | 120 s | — |
+| P3c-2 | | QA | 48 673 | 21 | 53 s | — |
 
 Ghi chú:
 - P2 là nhiệm vụ đầu tiên chạy theo Lean (một Feature Brief + QA Plan dùng chung, báo cáo ≤ 10 dòng); số liệu chỉ để xem xu hướng, các gói khác kích thước nên không so trực tiếp.

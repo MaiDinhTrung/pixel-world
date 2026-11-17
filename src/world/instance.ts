@@ -1,6 +1,6 @@
 /**
  * Kiểu và logic THUẦN cho Instance/TravelTicket (P1, docs/WORLD_ARCHITECTURE.md §4.3, §5.2–5.4).
- * CHƯA NỐI vào game (WorldScene/BossArenaScene/RunSession không import module này). Không phụ thuộc Phaser,
+ * ĐÃ NỐI vào game từ P3c-2: `WorldScene` dùng `createTravelTicket`/`isTravelTicket` qua `systems/gameInstances.ts`. Không phụ thuộc Phaser,
  * không ngẫu nhiên, không đọc đồng hồ: id và thời gian do bên gọi TIÊM VÀO.
  */
 import { DEFAULT_INSTANCE_POLICY } from '../config/worldConfig';
@@ -69,6 +69,73 @@ export interface CreateTravelTicketInput {
   from: InstanceRef | null;
   to: { instance: InstanceRef; spawnPoint: Point };
   carry: CharacterCarry;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+function isInstanceRef(value: unknown): value is InstanceRef {
+  return (
+    isRecord(value) &&
+    typeof value.instanceId === 'string' &&
+    value.instanceId.startsWith('inst.') &&
+    typeof value.mapId === 'string' &&
+    value.mapId.startsWith('map.')
+  );
+}
+
+function isCharacterCarry(value: unknown): value is CharacterCarry {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  const { vitals, skillCooldownUntil, dashChargeReadyAt, dashReadyAt } = value;
+
+  if (
+    vitals !== null &&
+    !(
+      isRecord(vitals) &&
+      isFiniteNumber(vitals.health) &&
+      isFiniteNumber(vitals.armor) &&
+      isFiniteNumber(vitals.energy)
+    )
+  ) {
+    return false;
+  }
+
+  return (
+    isRecord(skillCooldownUntil) &&
+    Object.values(skillCooldownUntil).every(isFiniteNumber) &&
+    Array.isArray(dashChargeReadyAt) &&
+    dashChargeReadyAt.every(isFiniteNumber) &&
+    isFiniteNumber(dashReadyAt)
+  );
+}
+
+/** Kiểm cấu trúc và kiểu mọi trường của vé (dữ liệu `scene.start` là `unknown`). */
+export function isTravelTicket(value: unknown): value is TravelTicket {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  const { characterUid, from, to, carry } = value;
+
+  return (
+    typeof characterUid === 'string' &&
+    characterUid.length > 0 &&
+    (from === null || isInstanceRef(from)) &&
+    isRecord(to) &&
+    isInstanceRef(to.instance) &&
+    isRecord(to.spawnPoint) &&
+    isFiniteNumber(to.spawnPoint.x) &&
+    isFiniteNumber(to.spawnPoint.y) &&
+    isCharacterCarry(carry)
+  );
 }
 
 /** Tạo vé; `carry`, `Point` và ref được sao chép sâu nên đổi đối tượng gốc sau đó không ảnh hưởng vé. */
