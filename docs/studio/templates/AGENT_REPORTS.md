@@ -16,7 +16,7 @@ Vai: <Developer|QA|Gameplay|Visual> · Gói: <ID> · Brief: <đường dẫn> ·
 2. LỆNH: build <đạt/lỗi> · tsc <đạt/lỗi> · test <đạt>/<tổng>/<số file>
 3. TIÊU CHÍ: <ID A>: Đạt/Không/Chưa kiểm — bằng chứng 1 dòng
 4. CẤU TRÚC ĐỔI: <không | file thêm/xoá/đổi tên/đổi trách nhiệm → codemap <file>.md>
-5. LỆCH SO VỚI BRIEF: <rỗng | từng mục>
+5. LỆCH SO VỚI BRIEF: <rỗng | từng mục; gồm chỗ bảng Reuse ghi REUSE/MODIFY mà thực tế phải tạo mới (hoặc ngược lại)>
 6. CHƯA KIỂM ĐƯỢC: <mục chỉ chơi thật>
 7. CẦN LEAD: <quyết định, file ngoài danh sách, tài liệu>
 ```
@@ -31,7 +31,7 @@ QA tự lấy phạm vi từ git (WORKFLOW §6a), **không** dùng danh sách fi
 4. TIÊU CHÍ Q: <ID>: Đạt/Không/Rủi ro — file:dòng
 5. HỒI QUY: <mục C>: Đạt/Rủi ro
 6. LỖI: mỗi lỗi 1 dòng — Mức (Chặn/Không chặn) · bước tái hiện · thực tế · mong đợi · file:dòng
-7. CẤU TRÚC: diff có A/D/R? → codemap cần cập nhật: <file | không>
+7. CẤU TRÚC: diff có A/D/R? → codemap cần cập nhật: <file | không>; file mới/asset mới có khớp dòng CREATE của bảng Reuse? (trùng thành phần đã có = Không chặn, ghi lại)
 8. FINDINGS NGOÀI CHECKLIST + CHƯA KIỂM ĐƯỢC (P): …
 9. KẾT LUẬN ĐỘC LẬP: PASS (không lỗi Chặn) / BLOCKED
 ```

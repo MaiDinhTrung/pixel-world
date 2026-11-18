@@ -335,6 +335,7 @@ stateDiagram-v2
 7. **Một bước smoke test runtime** tùy chọn (mở `npm run dev` + công cụ trình duyệt, chụp màn hình, đọc console) để bắt lỗi đỏ trước khi giao playtest — giảm tải PT "Console sạch".
 8. ✅ **Đã làm ở ST-01** (`templates/FEATURE_BRIEF.md`). Gộp mẫu Brief + QA Plan thành **một mẫu** khớp thực tế (T6), bỏ chữ "thử nghiệm" (T5).
 9. Thêm script `npm run guard:test` (= self-test hook) để chạy cùng QA khi đụng `.claude/`.
+10. ✅ **Đã làm ở ST-03.** Reuse Analysis (WORKFLOW §13.4: nhãn NEW/REUSE/EXTEND/REFACTOR/HYBRID + bảng quyết định trong Task Map, từ cấp M), Knowledge Maintenance (§13.5), làm mới `ASSET_CATALOG.md` (thêm mục Rừng Úa, "Tái dùng nhanh", sửa trạng thái wood/fence/hedge). Quyền agent/hook/permissions không đổi. Luồng §4 ở trên chưa vẽ lại bước Reuse: đọc §13.4 để biết bước này nằm sau "tra PROJECT_MAP → codemap" và trước khi gọi Designer.
 
 ---
 

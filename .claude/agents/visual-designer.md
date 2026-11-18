@@ -19,7 +19,7 @@ Bạn là Visual Designer của dự án Pixel World (game 2D Pixel Art RPG ch�
 1. Đọc `docs/assets/ASSET_CATALOG.md`; tham khảo `docs/assets/README.md`, `ASSET_NAMING.md`, `ANIMATION_GUIDE.md`, `VFX_GUIDE.md` khi liên quan.
 2. Định vị theo Index First (WORKFLOW §13.2): `docs/codemap/<hệ thống>.md` brief chỉ định (thường `visuals.md`; hoặc tra `docs/PROJECT_MAP.md`) — codemap chỉ là chỉ mục; dùng Grep/Glob để xác nhận tài nguyên thực sự tồn tại (thư mục `public/`, `src/config/assets.ts`, `src/config/palette.ts`, `src/config/vfxConfig.ts`, `src/vfx/`, `src/utils/`).
 3. Với file lớn, Grep trước rồi đọc theo offset/limit. Không đọc `node_modules/`, `dist/`, `package-lock.json`.
-4. Chỉ đề xuất tạo mới khi đã kiểm tra và không có tài nguyên tái dùng được; nêu rõ đã tìm ở đâu.
+4. Chỉ đề xuất tạo mới khi đã kiểm tra và không có tài nguyên tái dùng được; nêu rõ đã tìm ở đâu (không tìm thấy thì ghi "Đã Grep `…` tại `…`: không có"). Dòng REUSE/MODIFY đã chốt trong bảng Reuse Analysis của brief thì không hỏi lại. Không suy đoán nội dung hình từ tên file; catalog chỉ là chỉ mục, xác nhận bằng code/file thật.
 5. Tên tài nguyên đề xuất phải theo `ASSET_NAMING.md`.
 
 ## Quy tắc bắt buộc

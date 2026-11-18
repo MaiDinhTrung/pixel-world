@@ -16,5 +16,7 @@ Mỗi Agent chỉ **điền** đúng mẫu của mình, không tự thiết kế
 | **QA Tester** | `AGENT_REPORTS.md` → QA | Sau Developer (L/XL luôn; M khi cần) | Feature Brief (BASELINE + 2 danh sách) | Báo cáo ≤ 10 dòng: PASS/BLOCKED, phạm vi từ git, lỗi theo mẫu, codemap cần cập nhật | Lead |
 | **Playtest / Handover** | `PLAYTEST.md` | Như trên | Như trên | Checklist PT-xx; người dùng trả PASS/FAIL/NOT TESTED | Người dùng → Lead (Feedback Loop §9b) |
 
+Reuse Analysis (ST-03) không có mẫu riêng: bảng nằm trong `TASK_MAP.md` mục "Reuse Analysis", luật ở WORKFLOW §13.4; Designer/Developer/QA đọc bảng qua brief.
+
 Mẫu khác giữ ở chỗ cũ (không nhân bản): mục quyết định — đầu `docs/studio/DECISIONS.md`; số token — `docs/studio/lean-handoff/TOKEN_LOG.md`; khung một file codemap — `docs/PROJECT_MAP.md` mục "Bảo trì".
 Mẫu cũ `lean-handoff/QA_PLAN_TEMPLATE.md`, `lean-handoff/REPORT_TEMPLATE.md` đã thay bằng `FEATURE_BRIEF.md` §5 và `AGENT_REPORTS.md` (giữ file để không gãy tham chiếu trong brief cũ).

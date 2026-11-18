@@ -1,6 +1,8 @@
 # ASSET_CATALOG
 
-Nhãn: **[CÓ]** = đã kiểm chứng tồn tại trong repo. Cột "Dùng" = có tham chiếu trong `src` (kiểm bằng Grep ngày 2026-11-14). Khi thêm/xóa asset, cập nhật file này.
+Nhãn: **[CÓ]** = đã kiểm chứng tồn tại trong repo. Cột "Dùng" = có tham chiếu trong `src` (kiểm bằng Grep, làm mới 2026-11-18, ST-03). Khi thêm/xóa asset, cập nhật file này. **Catalog chỉ là chỉ mục điều hướng**: code thật (`src/config/assets.ts`, `TEXTURE_KEYS` ở `src/config/constants.ts`, builder trong `src/world/`) là nguồn sự thật; mục "Dùng" có thể cũ — Grep lại trước khi quyết định tái dùng. Catalog không mô tả hình ảnh từ tên file; muốn biết hình trông ra sao thì xem file/ảnh thật.
+
+**Tái dùng nhanh (bắt đầu ở đây):** map/khu mới → mục 1 (tileset/building/prop làng) + mục 5 (mẫu Rừng Úa dựng map không asset mới); quái mới → mục 2 dòng "Quái"/"Quái M2" (chung layout sheet, đổi bảng màu/scale); vũ khí/VFX → mục 2 và 3; cổng → mục 2 dòng "Cổng dịch chuyển" (đổi `color` là đủ). Tìm theo chủ đề: Grep key ở `src/config/assets.ts`.
 
 ## 1. File ảnh — `public/assets/village/` [CÓ]
 Pack CC0 "Free Medieval Village Tileset" (xem `LICENSE.txt`, `README.md` cùng thư mục; README nhắc `manifest.json`/`preview.webp` nhưng hai file này **không có** trong repo). Khai báo ở `src/config/assets.ts` (`VILLAGE`, `VILLAGE_ASSETS`), load bằng một vòng `load.image` ở `PreloadScene.preload()`; dùng ở `src/world/town.ts`.
@@ -8,10 +10,11 @@ Pack CC0 "Free Medieval Village Tileset" (xem `LICENSE.txt`, `README.md` cùng t
 | Nhóm (thư mục) | Key `VILLAGE.<tên>` (texture key `village-…`) | File | Dùng |
 |---|---|---|---|
 | tilesets 32×32 | grass, dirt, cobble, farmland, water | `tilesets/village-{grass-tile,dirt-path,cobblestone,farmland,water-tile}-32.png` | có |
-| tilesets | wood | `tilesets/village-wood-floor-32.png` | **chưa dùng** |
+| tilesets | wood | `tilesets/village-wood-floor-32.png` | có (`world/town.ts` `addGround(VILLAGE.wood…)`) |
 | buildings | cottageA, cottageB, tavern, blacksmith, shop, church, windmill, stable, well, market | `buildings/village-*.png` (well: `village-well-32.png`, market: `village-market-stall.png`) | có |
 | environment | bush, campfire, crop, flower, haystack, lamppost, oak, scarecrow, stoneWall | `environment/village-*.png` | có |
-| environment | bridge, fence, hedge | `environment/village-{bridge,fence-section,hedge-tile}.png` | **chưa dùng** |
+| environment | fence, hedge | `environment/village-{fence-section,hedge-tile}.png` | có (`DECOR` ở `world/town.ts`; hedge cả `WOODS_DECOR`) |
+| environment | bridge | `environment/village-bridge.png` | **chưa dùng** (Grep `VILLAGE.bridge`/`'bridge'` trong `src`: không có tham chiếu) |
 | items | barrel, bucket, cart, crate, flag, sign | `items/village-*.png` | có |
 | furniture | bench | `furniture/village-bench.png` | có |
 
@@ -48,7 +51,15 @@ Cách dùng: xem `VFX_GUIDE.md`.
 ## 4. Giao diện [CÓ]
 Không có asset ảnh. Dựng bằng `Graphics`/`Text`/`BitmapText` (`ui/Hud.ts`, `ui/PlayerBars.ts`, `ui/combat/*`, `scenes/*Scene.ts`).
 
-## 5. Chưa có [đã kiểm: không thấy trong repo]
+## 5. Mẫu dựng Map không cần asset mới — Rừng Sâu / Region Rừng Úa [CÓ]
+Builder `buildWitheredWoods` (`src/world/witheredWoods.ts`, số liệu `src/config/witheredWoodsConfig.ts`) chỉ dùng thứ đã có, không sinh texture mới:
+- Nền/lối/hồ/tàn tích: `VILLAGE.grass` (tô `WOODS_GRASS_TINT`), `VILLAGE.dirt`, `VILLAGE.water`, `VILLAGE.stoneWall` qua `addGround` (tileSprite, `world/town.ts`); cây `VILLAGE.oak` qua `addTree` (có va chạm); trang trí `bush`, `hedge` qua `addDecor` (`WOODS_DECOR`).
+- Ánh sáng: hình chữ nhật MULTIPLY (`WOODS_AMBIENT_*`) + texture `atmosphere-vignette` (`VIGNETTE_TEXTURE_KEY`, `config/atmosphereConfig.ts`) nếu đã tồn tại; không dùng chu kỳ ngày/đêm. Cùng file khai báo thêm key `atmosphere-light`, `atmosphere-fog` (texture tạo ở `vfx/atmosphere.ts`; Rừng Sâu không tham chiếu hai key này).
+- Cổng: `createPortal` (`world/portal.ts`) với `WOODS_PORTAL_COLOR` = `BOSS_ARENA_RETURN_COLOR` → dùng chung key `portal-pedestal-<màu>` / `portal-vortex-<màu>-<n>` với cổng về của Arena, không key mới.
+- Đăng ký Map/cổng/kết nối: ở `config/worldConfig.ts` và `world/mapBuilders.ts` (xem `docs/codemap/world.md`), không phải việc của catalog.
+- Hạn chế: mọi ảnh làng đều tĩnh; cảm giác "úa/tối" đến từ tint + lớp phủ màu (`WOODS_GROUND_WASH_*`), không phải asset riêng.
+
+## 6. Chưa có [đã kiểm: không thấy trong repo]
 - Âm thanh (không file, không gọi `sound`).
 - Spritesheet/atlas dạng file; icon skill/vật phẩm dạng file.
 - Animation VFX nhiều khung ngoài `vfx.slash.arc`.

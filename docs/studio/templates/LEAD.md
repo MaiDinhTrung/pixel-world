@@ -8,6 +8,8 @@ Khi: nhiệm vụ cần chuyên môn cơ chế/cân bằng hoặc hình ảnh/as
 Nhiệm vụ: <ID> — <tên> · Task Map: docs/studio/tasks/<ID>_<slug>.md
 Câu hỏi cần trả lời: 1) … 2) …
 Ràng buộc đã biết: (quyết định người dùng, asset không được tạo, số liệu đã chốt…)
+Reuse Analysis (bảng ở Task Map, WORKFLOW §13.4): <dòng REUSE/MODIFY đã chốt — không hỏi lại; chỉ trả lời các câu hỏi thiết kế còn mở>
+Tái dùng trước: <thành phần/asset đã tìm thấy, kèm file/key>; chỉ đề xuất mới khi nêu được lý do không tái dùng được
 Đọc: docs/codemap/<hệ thống>.md → file cụ thể <đường dẫn ~dòng>; (Visual) docs/assets/ASSET_CATALOG.md
 Không cần đọc: <tài liệu không liên quan>
 Báo cáo: mục "<Gameplay|Visual> Designer" trong docs/studio/templates/AGENT_REPORTS.md, ≤ 10 dòng. Chỉ đọc, không sửa file.
@@ -20,6 +22,7 @@ Khi: trước mọi thiết kế mới / thay đổi kiến trúc (WORKFLOW §5)
 Trạng thái: CHỜ DUYỆT · Cấp: <S/M/L/XL> · Nguồn: <Designer nào, ngày>
 ## 1. Khuyến nghị (3–6 dòng: làm gì, người chơi thấy gì)
 ## 2. Phương án bị loại (mỗi phương án 1 dòng + lý do)
+## 2b. Reuse Analysis (tóm tắt: số REUSE / MODIFY / CREATE; chỗ CREATE vì sao không tái dùng được)
 ## 3. Đánh đổi / rủi ro
 ## 4. Phạm vi dự kiến: hệ thống (codemap) · file ĐƯỢC SỬA / ĐƯỢC TẠO · KHÔNG đụng
 ## 5. Tiêu chí nghiệm thu chính (A / Q / P)

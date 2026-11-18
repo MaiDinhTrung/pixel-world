@@ -29,6 +29,7 @@ Nguồn các số bên dưới: thông báo hoàn tất của từng subagent (t
 | P4b | | QA | 88 238 | 26 | 109 s | — |
 | P4 khảo sát thiết kế | — | Gameplay Designer | 62 719 | 23 | 116 s | — |
 | P4 khảo sát thiết kế | | Visual Designer | 40 369 | 10 | 55 s | — |
+| ST-03 | Lead tự làm tài liệu | QA | 74 376 | 23 | 55 s | — |
 
 Ghi chú:
 - P2 là nhiệm vụ đầu tiên chạy theo Lean (một Feature Brief + QA Plan dùng chung, báo cáo ≤ 10 dòng); số liệu chỉ để xem xu hướng, các gói khác kích thước nên không so trực tiếp.

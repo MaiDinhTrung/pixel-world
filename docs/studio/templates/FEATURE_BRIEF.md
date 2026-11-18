@@ -20,7 +20,7 @@ Test baseline: <n> file, <m> test qua; `npx tsc --noEmit` sạch.
 2–4 dòng: làm gì, người chơi thấy gì, cái gì KHÔNG đổi.
 
 ## 2. Tham chiếu (không chép lại)
-Codebase Map: `docs/codemap/<hệ thống>.md`. File/ký hiệu cần đọc kèm vị trí gần đúng (`file.ts` `hàm` ~dòng). Tài liệu thiết kế.
+Codebase Map: `docs/codemap/<hệ thống>.md`. File/ký hiệu cần đọc kèm vị trí gần đúng (`file.ts` `hàm` ~dòng). Tài liệu thiết kế. Reuse Analysis: bảng ở Task Map (dòng REUSE/MODIFY = dùng đúng nguồn đã ghi, không tạo bản sao; dòng CREATE = chỉ tạo khi cần; từ cấp M).
 
 ## 3. Phạm vi
 File ĐƯỢC SỬA: …

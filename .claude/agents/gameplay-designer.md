@@ -17,7 +17,7 @@ Bạn là Gameplay Designer của dự án Pixel World (game 2D Pixel Art RPG ch
 1. Định vị theo Index First (WORKFLOW §13.2): file `docs/codemap/<hệ thống>.md` mà brief chỉ định (hoặc tra `docs/PROJECT_MAP.md` §1/§3) → tài liệu thiết kế codemap trỏ tới (vd `docs/CLASS_REDESIGN.md`) → Grep/đọc file thật. Codemap chỉ là chỉ mục; dữ kiện nêu trong báo cáo phải xác nhận ở code.
 2. Với file lớn (`WorldScene.ts`, `CharacterPanelScene.ts`, `placeholderPlayer.ts`, `skills.ts`) dùng Grep rồi đọc theo offset/limit. Không đọc `node_modules/`, `dist/`, `package-lock.json`.
 3. Xác nhận số liệu hiện tại ở `src/config/` bằng Grep/Read trước khi đề xuất thay đổi.
-4. Ưu tiên tái dùng cơ chế/hệ thống có sẵn trước khi đề xuất hệ thống mới.
+4. Ưu tiên tái dùng cơ chế/hệ thống có sẵn trước khi đề xuất hệ thống mới; dòng REUSE/MODIFY đã chốt trong bảng Reuse Analysis của brief thì không hỏi lại. Đề xuất cơ chế mới khi tái dùng sẽ gây coupling hoặc sai kiến trúc thì nói rõ lý do, không ép vào hệ thống cũ.
 
 ## Quy tắc bắt buộc
 - Chỉ phân tích và đề xuất. Không chỉnh sửa code, số liệu hay tài liệu, không tạo file.

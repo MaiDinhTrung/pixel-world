@@ -53,7 +53,7 @@ Yêu cầu → AI Lead: phạm vi, tra PROJECT_MAP → codemap, tạo Task Map (
 
 - **Cổng 1 (trước khi code):** AI Lead nêu phương án, khuyến nghị, đánh đổi. Người dùng: duyệt / sửa / bỏ. Chưa duyệt → không gọi Developer.
 - **Cổng 2 (trước khi chốt):** AI Lead báo kết quả QA, kết quả Playtest (§9a–§9b) và file đã đổi. Chỉ chốt sau khi người dùng đã chơi thử và nghiệm thu. Commit, push, xóa/đổi tên asset chỉ làm khi người dùng đồng ý.
-- Việc nhỏ: gộp thành một câu xác nhận.
+- Việc nhỏ: gộp thành một câu xác nhận. Thay đổi chỉ là cấu hình/tham số, không tạo quyết định thiết kế mới (kết quả Reuse Analysis §13.4): cũng một câu xác nhận, không cần Cổng 1 đầy đủ. Ngoại lệ không đổi: số liệu cân bằng chiến đấu (`combatConfig.ts`, `enemyConfig.ts`) vẫn là rủi ro cao ≥ L (§12.1) và cần Cổng 1 ngoài phản hồi playtest (§14).
 
 ## 6. Mẫu bàn giao
 
@@ -209,7 +209,7 @@ Trạng thái: **ĐÃ DUYỆT (người dùng, 2026-11-17)**. Bổ sung (không 
 | # | Bước | Mẫu / tài liệu | Cập nhật Task Map |
 |---|---|---|---|
 | 1 | Nhận yêu cầu; phân cấp S/M/L/XL (§12.1) | — | — |
-| 2 | Đọc bản đồ: `docs/PROJECT_MAP.md` (L1) → **một** `docs/codemap/<hệ thống>.md` → tài liệu thiết kế nó trỏ tới | Codebase Map | — |
+| 2 | Đọc bản đồ: `docs/PROJECT_MAP.md` (L1) → **một** `docs/codemap/<hệ thống>.md` → tài liệu thiết kế nó trỏ tới; rồi **Reuse Analysis** (§13.4) từ cấp M | Codebase Map | bảng Reuse (từ M) |
 | 3 | Tạo Task Map + hàng trong `CURRENT_TASK.md` (mọi cấp; cấp S có thể chỉ 3–4 bước) | `templates/TASK_MAP.md` | tạo |
 | 4 | Gọi Agent phù hợp (§2, §12.2) với brief đúng mẫu; Cổng 1 khi có thiết kế mới | `templates/LEAD.md`, `FEATURE_BRIEF.md` | mỗi lần gọi / nhận kết quả |
 | 5 | Theo dõi: bước xong → `DONE` + đầu ra; vướng → `BLOCKED` + lý do + chờ ai; cập nhật **ngay**, không gom cuối nhiệm vụ; `CURRENT_TASK.md` theo bước hiện tại | Task Map | liên tục |
@@ -226,6 +226,35 @@ Chỉ Lead ghi Task Map / CURRENT_TASK / TASK_HISTORY (subagent không ghi). Ti�
 - **Kích hoạt:** thêm/xoá/đổi tên/di chuyển file, đổi trách nhiệm module, thêm hệ thống, hoặc thấy bản đồ lệch.
 - **Chuỗi phát hiện:** Developer khai dòng "CẤU TRÚC ĐỔI" (`AGENT_REPORTS.md`) → QA đối chiếu file A/D/R trong `git diff --name-status` → Lead đánh dấu file codemap ở Task Map → Lead cập nhật codemap (+ PROJECT_MAP nếu đổi L1, + bảng "Tìm file…") và đổi `Xác minh: HEAD <sha>` **trước Cổng 2**, cùng commit với thay đổi code.
 - Khung một file codemap và quy tắc ghi: `docs/PROJECT_MAP.md` §6.
+
+### 13.4 Reuse Analysis (ST-03)
+Mục đích: không xây lại thứ đã có, nhưng cũng không ép tái dùng sai chỗ. Lead làm sau bước 2 của §13.1, **trước** khi gọi Designer/Developer; kết quả là một bảng trong Task Map (mục "Reuse Analysis") và được trỏ tới từ Feature Brief.
+
+| Cấp | Mức làm |
+|---|---|
+| S | Bỏ qua (Developer vẫn tuân quy tắc tra catalog khi tạo asset) |
+| M | Bảng ngắn, chỉ các thành phần có khả năng đã tồn tại |
+| L/XL | Đầy đủ; Designer nhận bảng trong brief khảo sát (`LEAD.md` §A) |
+
+**Nhãn task** (một task có thể mang nhiều nhãn): `NEW` xây mới · `REUSE` dùng nguyên thành phần có sẵn · `EXTEND` thêm vào thành phần có sẵn (không đổi hành vi cũ) · `REFACTOR` đổi cấu trúc, giữ hành vi · `HYBRID` nhiều nhãn trong một task.
+
+**Tìm trước khi quyết** (thứ tự, dừng ở nơi đã đủ): codemap liên quan → `src/config/` (số liệu/dữ liệu) → `docs/assets/ASSET_CATALOG.md` → Grep code thật. Nhóm cần tìm: hệ thống/module tương tự, Map/Zone/builder/cơ chế gameplay, Enemy/Skill/UI/Effect, asset hình ảnh/animation.
+
+**Bảng quyết định** (một dòng/thành phần):
+`Thành phần | REUSE · MODIFY · CREATE | Nguồn hiện có (file:dòng hoặc key) | Thay đổi cần thiết`
+- Quyết định là `CREATE` thì cột nguồn ghi **kết quả tìm kiếm**: "Đã Grep `<từ khóa>` tại `<nơi>`: không có". Không ghi "chưa có" khi chưa tìm; không suy đoán asset/tính năng từ tên file.
+- **Không tái dùng bằng mọi giá:** nếu tái dùng gây coupling mới (module A phải import ngược B), kéo hành vi không liên quan, hoặc làm sai kiến trúc đã duyệt thì chọn `CREATE` hoặc `REFACTOR`, ghi lý do 1 dòng. Không sao chép code/asset để tiện; trùng lặp thì trích dùng chung hoặc tái dùng nguyên bản.
+- Code thật là nguồn sự thật; catalog/codemap chỉ để điều hướng. Mâu thuẫn thì tin code và ghi vào "Codebase Map cần cập nhật".
+
+**Quyết định theo kết quả:**
+- Mọi thành phần `REUSE`/`MODIFY` bằng cấu hình/tham số, không có quyết định thiết kế mới → **không cần Cổng 1**: một câu xác nhận (§5), trừ số liệu cân bằng chiến đấu (xem §5). Chỉ chỉnh số liệu thì không cập nhật tài liệu nào ngoài chính file config (và Task Map).
+- Có `CREATE` kéo theo cơ chế/hình ảnh mới, hoặc `REFACTOR` đổi kiến trúc đã duyệt → Cổng 1 như §5. Designer chỉ gọi khi bảng còn câu hỏi thiết kế gameplay/hình ảnh.
+
+### 13.5 Knowledge Maintenance (ST-03, bổ sung §13.3)
+- **Trước khi làm:** Task Map ghi codemap sẽ đọc; đọc file thật trước khi viết brief/sửa (§13.2).
+- **Khi làm:** Developer báo "CẤU TRÚC ĐỔI" (thêm/xoá/đổi tên/di chuyển file, đổi trách nhiệm module/class, dependency, quy ước kiến trúc, asset).
+- **Sau khi làm:** Lead tự chạy `git diff --name-status` và đối chiếu code thật (không chỉ tin báo cáo), chọn đúng codemap bị ảnh hưởng; cập nhật `PROJECT_MAP.md` chỉ khi đổi L1 / bảng "Tìm file…" / cấu trúc tài liệu; đổi `ASSET_CATALOG.md` khi đổi asset. **Không** sửa codemap không bị ảnh hưởng và không đổi `Xác minh:` của file chưa kiểm lại.
+- **Trước khi đóng:** rà từng mục đã sửa với code hiện tại; chỉ ghi thành phần đang tồn tại (việc dự kiến ghi nhãn "chưa tồn tại" hoặc bỏ); ghi kết quả vào mục "Codebase Map cần cập nhật" của Task Map (file đã sửa / lý do không cần sửa).
 
 ## 14. Chế độ tự chủ (ST-02)
 

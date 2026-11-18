@@ -7,6 +7,11 @@ Quy ước commit (từ ST-02): ghi `git log --grep=<ID>` thay vì SHA, để đ
 
 Các nhiệm vụ trước khi có Task Map (ST-01) không có file `tasks/`; tóm tắt lấy từ `DECISIONS.md` và `TOKEN_LOG.md`.
 
+### ST-03 — Reuse Intelligence & Knowledge Maintenance · 2026-11-18 → 2026-11-18 · ACCEPTED
+- Kết quả: WORKFLOW §13.4 Reuse Analysis (NEW/REUSE/EXTEND/REFACTOR/HYBRID, bảng trong Task Map từ cấp M), §13.5 Knowledge Maintenance, ngoại lệ Cổng 1 cho thay đổi chỉ cấu hình; làm mới `ASSET_CATALOG.md` (sửa wood/fence/hedge, thêm mục Rừng Úa + "Tái dùng nhanh"); văn bản 4 file agent + 5 mẫu. Chỉ tài liệu; quyền/hook không đổi. QA PASS (778/778, Q1–Q8).
+- Commit: `git log --grep=ST-03` (chưa push). Task Map: `tasks/ST-03_reuse_intelligence.md`. Playtest: `playtests/ST-03_reuse_intelligence.md`. DECISIONS "ST-03".
+- Tồn đọng: script kiểm kê asset chỉ đánh giá (chưa làm); luồng §4 của process map chưa vẽ lại bước Reuse; chưa thử Reuse Analysis trên task thật (PT-10).
+
 ### FIX-01 — `npm test` lỗi khi cwd là `d:\` (chữ thường) · 2026-11-17 → 2026-11-17 · ACCEPTED
 - Kết quả: `npm test` chạy qua `scripts/run-vitest.mjs` (chuẩn hoá chữ hoa/thường ổ đĩa của cwd bằng `realpathSync.native` trước khi spawn vitest); cwd `d:\` và `D:\` đều 44/44 file, 778/778; tsc + build qua.
 - Commit: `git log --grep=FIX-01` (đã push). Task Map: `tasks/FIX-01_test_drive_case.md`.

@@ -59,6 +59,7 @@ PreloadScene → utils/* (sinh texture), vfx/vfxTextures, progression/ProgressSt
 | Ngày/đêm, ánh sáng, sương | `vfx/atmosphere.ts`, `config/atmosphereConfig.ts`, `ui/DayNightToggle.ts` |
 | Sprite runtime / load asset | `scenes/PreloadScene.ts`, `utils/*`; asset `public/assets/village/`, `config/assets.ts` |
 | Danh mục / quy chuẩn asset | `docs/assets/` (`README.md` quy trình, `ASSET_CATALOG.md`, `ASSET_NAMING.md`, `VFX_GUIDE.md`, `ANIMATION_GUIDE.md`, `COLOR_PALETTE.md`) |
+| Tìm cái đã có trước khi làm mới (Reuse Analysis) | `docs/studio/WORKFLOW.md` §13.4 → bảng ở Task Map; asset: `docs/assets/ASSET_CATALOG.md` mục "Tái dùng nhanh" |
 | Ảnh tham chiếu nghệ thuật (không phải asset) | `docs/references/visual/` |
 | Thêm/đổi scene | `config/constants.ts` (`SCENE_KEYS`), `config/gameConfig.ts` — thêm Map thì **không** thêm scene |
 | Buff / level-up chọn buff | Legacy (tắt): `progression/buff*.ts`, `BuffManager.ts`, `scenes/LevelUpScene.ts` (không đăng ký) |

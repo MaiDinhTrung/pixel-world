@@ -28,6 +28,12 @@ Chép từ dòng dưới đây:
 - KHÔNG đụng:
 - Hệ thống (codemap): `docs/codemap/<file>.md`, …
 
+## Reuse Analysis (WORKFLOW §13.4; bỏ ở cấp S)
+Nhãn task: NEW / REUSE / EXTEND / REFACTOR / HYBRID (một hoặc nhiều).
+| Thành phần | Quyết định (REUSE · MODIFY · CREATE) | Nguồn hiện có (file:dòng / key; hoặc "Đã Grep `…` tại `…`: không có") | Thay đổi cần thiết |
+|---|---|---|---|
+| | | | |
+
 ## Điều kiện hoàn thành
 - [ ] tiêu chí / ID A·Q·P trong brief
 - [ ] người dùng nghiệm thu (nếu có playtest)
@@ -53,6 +59,7 @@ Chép từ dòng dưới đây:
 
 ## Codebase Map cần cập nhật
 - [ ] `docs/codemap/<file>.md` — lý do (file thêm/xoá/đổi tên/đổi trách nhiệm; thấy lệch khi đọc code)
+- Trước khi đóng (WORKFLOW §13.5): đã đối chiếu `git diff --name-status` + code thật; codemap không đụng vì: <lý do> · không có nội dung "kế hoạch" trong bản đồ.
 
 ## Nhật ký
 - YYYY-MM-DD — sự kiện / blocker / quyết định nhỏ (1 dòng)
